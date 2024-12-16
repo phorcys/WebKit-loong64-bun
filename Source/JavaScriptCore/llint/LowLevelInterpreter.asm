@@ -1098,11 +1098,29 @@ macro copyCalleeSavesToBuffer(buffer)
         stored csfr9, 160[buffer]
         stored csfr10, 168[buffer]
         stored csfr11, 176[buffer]
+    elsif LOONGARCH64
+        storep csr0, [buffer]
+        storep csr1, 8[buffer]
+        storep csr2, 16[buffer]
+        storep csr3, 24[buffer]
+        storep csr4, 32[buffer]
+        storep csr5, 40[buffer]
+        storep csr6, 48[buffer]
+        storep csr7, 56[buffer]
+        storep csr8, 64[buffer]
+        stored csfr0, 72[buffer]
+        stored csfr1, 80[buffer]
+        stored csfr2, 88[buffer]
+        stored csfr3, 96[buffer]
+        stored csfr4, 104[buffer]
+        stored csfr5, 112[buffer]
+        stored csfr6, 120[buffer]
+        stored csfr7, 128[buffer]
     end
 end
 
 macro copyCalleeSavesToEntryFrameCalleeSavesBuffer(entryFrame)
-    if ARM64 or ARM64E or X86_64 or ARMv7 or RISCV64
+    if ARM64 or ARM64E or X86_64 or ARMv7 or RISCV64 or LOONGARCH64
         vmEntryRecord(entryFrame, entryFrame)
         leap VMEntryRecord::calleeSaveRegistersBuffer[entryFrame], entryFrame
         copyCalleeSavesToBuffer(entryFrame)
@@ -1110,7 +1128,7 @@ macro copyCalleeSavesToEntryFrameCalleeSavesBuffer(entryFrame)
 end
 
 macro copyCalleeSavesToVMEntryFrameCalleeSavesBuffer(vm, temp)
-    if ARM64 or ARM64E or X86_64 or ARMv7 or RISCV64
+    if ARM64 or ARM64E or X86_64 or ARMv7 or RISCV64 or LOONGARCH64
         loadp VM::topEntryFrame[vm], temp
         copyCalleeSavesToEntryFrameCalleeSavesBuffer(temp)
     end
@@ -1166,11 +1184,29 @@ macro restoreCalleeSavesFromBuffer(buffer)
         loadd 160[buffer], csfr9
         loadd 168[buffer], csfr10
         loadd 176[buffer], csfr11
+    elsif LOONGARCH64
+        loadq [buffer], csr0
+        loadq 8[buffer], csr1
+        loadq 16[buffer], csr2
+        loadq 24[buffer], csr3
+        loadq 32[buffer], csr4
+        loadq 40[buffer], csr5
+        loadq 48[buffer], csr6
+        loadq 56[buffer], csr7
+        loadq 64[buffer], csr8
+        loadd 72[buffer], csfr0
+        loadd 80[buffer], csfr1
+        loadd 88[buffer], csfr2
+        loadd 96[buffer], csfr3
+        loadd 104[buffer], csfr4
+        loadd 112[buffer], csfr5
+        loadd 120[buffer], csfr6
+        loadd 128[buffer], csfr7
     end
 end
 
 macro restoreCalleeSavesFromVMEntryFrameCalleeSavesBuffer(vm, temp)
-    if ARM64 or ARM64E or X86_64 or ARMv7 or RISCV64
+    if ARM64 or ARM64E or X86_64 or ARMv7 or RISCV64 or LOONGARCH64
         loadp VM::topEntryFrame[vm], temp
         vmEntryRecord(temp, temp)
         leap VMEntryRecord::calleeSaveRegistersBuffer[temp], temp
@@ -1179,7 +1215,7 @@ macro restoreCalleeSavesFromVMEntryFrameCalleeSavesBuffer(vm, temp)
 end
 
 macro preserveReturnAddressAfterCall(destinationRegister)
-    if C_LOOP or ARMv7 or ARM64 or ARM64E or RISCV64
+    if C_LOOP or ARMv7 or ARM64 or ARM64E or RISCV64 or LOONGARCH64
         # In C_LOOP case, we're only preserving the bytecode vPC.
         move lr, destinationRegister
     elsif X86_64
@@ -1193,7 +1229,7 @@ macro functionPrologue()
     tagReturnAddress sp
     if X86_64
         push cfr
-    elsif ARM64 or ARM64E or RISCV64
+    elsif ARM64 or ARM64E or RISCV64 or LOONGARCH64
         push cfr, lr
     elsif C_LOOP or ARMv7 
         push lr
@@ -1205,7 +1241,7 @@ end
 macro functionEpilogue()
     if X86_64
         pop cfr
-    elsif ARM64 or ARM64E or RISCV64
+    elsif ARM64 or ARM64E or RISCV64 or LOONGARCH64
         pop lr, cfr
     elsif C_LOOP or ARMv7
         pop cfr
@@ -2283,7 +2319,7 @@ else
             addp t4, t3, t4
             move index, t5
             storep t4, [map, t5, 4]
-        else # X86_64, ARM64, RISCV64
+        else # X86_64, ARM64, RISCV64, LOONGARCH64
             pcrtoaddr label, t3
             move index, t4
             storep t3, [map, t4, PtrSize]
