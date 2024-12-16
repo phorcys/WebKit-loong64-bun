@@ -797,6 +797,10 @@ void Options::notifyOptionsChanged()
     Options::useFTLJIT() = false;
 #endif
 
+#if CPU(LOONGARCH64)
+    Options::useRegExpJIT() = false;
+#endif
+
 #if !CPU(X86_64) && !CPU(ARM64)
     Options::useConcurrentGC() = false;
     Options::forceUnlinkedDFG() = false;
@@ -1525,6 +1529,8 @@ bool NODELETE canUseJITCage() { return false; }
 bool NODELETE canUseWasm()
 {
 #if ENABLE(WEBASSEMBLY) && !PLATFORM(WATCHOS)
+    return true;
+#elif CPU(LOONGARCH64)
     return true;
 #else
     return false;

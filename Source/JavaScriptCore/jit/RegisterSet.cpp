@@ -112,6 +112,10 @@ RegisterSet RegisterSet::macroClobberedGPRs()
 #elif CPU(ARM64) || CPU(RISCV64)
     result.add(MacroAssembler::dataTempRegister);
     result.add(MacroAssembler::memoryTempRegister);
+#elif CPU(LOONGARCH64)
+    result.add(MacroAssembler::dataTempRegister);
+    result.add(MacroAssembler::dataTempRegister2);
+    result.add(MacroAssembler::memoryTempRegister);
 #elif CPU(ARM_THUMB2)
     result.add(MacroAssembler::dataTempRegister);
     result.add(MacroAssembler::addressTempRegister);
@@ -125,6 +129,9 @@ RegisterSet RegisterSet::macroClobberedFPRs()
 #if CPU(X86_64) || CPU(ARM64) || CPU(ARM_THUMB2)
     result.add(MacroAssembler::fpTempRegister, IgnoreVectors);
 #elif CPU(RISCV64)
+    result.add(MacroAssembler::fpTempRegister, IgnoreVectors);
+    result.add(MacroAssembler::fpTempRegister2, IgnoreVectors);
+#elif CPU(LOONGARCH64)
     result.add(MacroAssembler::fpTempRegister, IgnoreVectors);
     result.add(MacroAssembler::fpTempRegister2, IgnoreVectors);
 #endif
@@ -210,6 +217,24 @@ RegisterSet RegisterSet::vmCalleeSaveRegisters()
     result.add(FPRInfo::fpRegCS9, IgnoreVectors);
     result.add(FPRInfo::fpRegCS10, IgnoreVectors);
     result.add(FPRInfo::fpRegCS11, IgnoreVectors);
+#elif CPU(LOONGARCH64)
+    result.add(GPRInfo::regCS0);
+    result.add(GPRInfo::regCS1);
+    result.add(GPRInfo::regCS2);
+    result.add(GPRInfo::regCS3);
+    result.add(GPRInfo::regCS4);
+    result.add(GPRInfo::regCS5);
+    result.add(GPRInfo::regCS6);
+    result.add(GPRInfo::regCS7);
+    result.add(GPRInfo::regCS8);
+    result.add(FPRInfo::fpRegCS0, IgnoreVectors);
+    result.add(FPRInfo::fpRegCS1, IgnoreVectors);
+    result.add(FPRInfo::fpRegCS2, IgnoreVectors);
+    result.add(FPRInfo::fpRegCS3, IgnoreVectors);
+    result.add(FPRInfo::fpRegCS4, IgnoreVectors);
+    result.add(FPRInfo::fpRegCS5, IgnoreVectors);
+    result.add(FPRInfo::fpRegCS6, IgnoreVectors);
+    result.add(FPRInfo::fpRegCS7, IgnoreVectors);
 #endif
     return result;
 }
@@ -236,6 +261,14 @@ RegisterSet RegisterSet::llintBaselineCalleeSaveRegisters()
     result.add(GPRInfo::regCS7);
     result.add(GPRInfo::regCS8);
     result.add(GPRInfo::regCS9);
+#elif CPU(LOONGARCH64)
+    result.add(GPRInfo::regCS5);
+    static_assert(GPRInfo::regCS6 == GPRInfo::jitDataRegister);
+    static_assert(GPRInfo::regCS7 == GPRInfo::numberTagRegister);
+    static_assert(GPRInfo::regCS8 == GPRInfo::notCellMaskRegister);
+    result.add(GPRInfo::regCS6);
+    result.add(GPRInfo::regCS7);
+    result.add(GPRInfo::regCS8);
 #else
     UNREACHABLE_FOR_PLATFORM();
 #endif
@@ -264,6 +297,13 @@ RegisterSet RegisterSet::dfgCalleeSaveRegisters()
     result.add(GPRInfo::regCS7);
     result.add(GPRInfo::regCS8);
     result.add(GPRInfo::regCS9);
+#elif CPU(LOONGARCH64)
+    static_assert(GPRInfo::regCS6 == GPRInfo::jitDataRegister);
+    static_assert(GPRInfo::regCS7 == GPRInfo::numberTagRegister);
+    static_assert(GPRInfo::regCS8 == GPRInfo::notCellMaskRegister);
+    result.add(GPRInfo::regCS6);
+    result.add(GPRInfo::regCS7);
+    result.add(GPRInfo::regCS8);
 #else
     UNREACHABLE_FOR_PLATFORM();
 #endif
@@ -333,6 +373,24 @@ RegisterSet RegisterSet::ftlCalleeSaveRegisters()
     result.add(FPRInfo::fpRegCS9, IgnoreVectors);
     result.add(FPRInfo::fpRegCS10, IgnoreVectors);
     result.add(FPRInfo::fpRegCS11, IgnoreVectors);
+#elif CPU(LOONGARCH64)
+    result.add(GPRInfo::regCS0);
+    result.add(GPRInfo::regCS1);
+    result.add(GPRInfo::regCS2);
+    result.add(GPRInfo::regCS3);
+    result.add(GPRInfo::regCS4);
+    result.add(GPRInfo::regCS5);
+    static_assert(GPRInfo::regCS6 == GPRInfo::jitDataRegister);
+    static_assert(GPRInfo::regCS7 == GPRInfo::numberTagRegister);
+    static_assert(GPRInfo::regCS8 == GPRInfo::notCellMaskRegister);
+    result.add(FPRInfo::fpRegCS0, IgnoreVectors);
+    result.add(FPRInfo::fpRegCS1, IgnoreVectors);
+    result.add(FPRInfo::fpRegCS2, IgnoreVectors);
+    result.add(FPRInfo::fpRegCS3, IgnoreVectors);
+    result.add(FPRInfo::fpRegCS4, IgnoreVectors);
+    result.add(FPRInfo::fpRegCS5, IgnoreVectors);
+    result.add(FPRInfo::fpRegCS6, IgnoreVectors);
+    result.add(FPRInfo::fpRegCS7, IgnoreVectors);
 #else
     UNREACHABLE_FOR_PLATFORM();
 #endif
@@ -431,6 +489,9 @@ RegisterSet RegisterSet::ipintCalleeSaveRegisters()
 #elif CPU(ARM64) || CPU(RISCV64)
     registers.add(GPRInfo::regCS6); // MC
     registers.add(GPRInfo::regCS7); // PB
+#elif CPU(LOONGARCH64)
+    registers.add(GPRInfo::regCS5); // MC
+    registers.add(GPRInfo::regCS6); // PB
 #elif CPU(ARM)
     registers.add(GPRInfo::regCS0); // MC
     registers.add(GPRInfo::regCS1); // PB
@@ -452,4 +513,3 @@ RegisterSet RegisterSet::bbqCalleeSaveRegisters()
 } // namespace JSC
 
 #endif // ENABLE(ASSEMBLER)
-

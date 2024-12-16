@@ -116,7 +116,10 @@ public:
     typedef typename AssemblerType::RegisterID RegisterID;
     typedef typename AssemblerType::SPRegisterID SPRegisterID;
     typedef typename AssemblerType::FPRegisterID FPRegisterID;
-    
+#if CPU(LOONGARCH64)
+    typedef typename AssemblerType::CFRegisterID CFRegisterID;
+#endif
+
     static constexpr RegisterID firstRegister() { return AssemblerType::firstRegister(); }
     static constexpr RegisterID lastRegister() { return AssemblerType::lastRegister(); }
     static constexpr unsigned numberOfRegisters() { return AssemblerType::numberOfRegisters(); }
@@ -131,6 +134,13 @@ public:
     static constexpr FPRegisterID lastFPRegister() { return AssemblerType::lastFPRegister(); }
     static constexpr unsigned numberOfFPRegisters() { return AssemblerType::numberOfFPRegisters(); }
     static ASCIILiteral fprName(FPRegisterID id) { return AssemblerType::fprName(id); }
+
+#if CPU(LOONGARCH64)
+    static constexpr CFRegisterID firstCFRegister() { return AssemblerType::firstCFRegister(); }
+    static constexpr CFRegisterID lastCFRegister() { return AssemblerType::lastCFRegister(); }
+    static constexpr unsigned numberOfCFRegisters() { return AssemblerType::numberOfCFRegisters(); }
+    static ASCIILiteral cfrName(CFRegisterID id) { return AssemblerType::cfrName(id); }
+#endif
 
     // Section 1: MacroAssembler operand types
     //
@@ -399,7 +409,7 @@ public:
         {
         }
 
-#if CPU(X86_64) || CPU(ARM64) || CPU(RISCV64)
+#if CPU(X86_64) || CPU(ARM64) || CPU(RISCV64) || CPU(LOONGARCH64)
         explicit constexpr TrustedImm64(TrustedImmPtr ptr)
             : m_value(ptr.asIntptr())
         {
@@ -414,7 +424,7 @@ public:
             : TrustedImm64(value)
         {
         }
-#if CPU(X86_64) || CPU(ARM64) || CPU(RISCV64)
+#if CPU(X86_64) || CPU(ARM64) || CPU(RISCV64) || CPU(LOONGARCH64)
         explicit constexpr Imm64(TrustedImmPtr ptr)
             : TrustedImm64(ptr)
         {

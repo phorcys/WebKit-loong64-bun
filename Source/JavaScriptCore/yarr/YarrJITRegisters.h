@@ -157,6 +157,28 @@ public:
 
     static constexpr GPRReg returnRegister = RISCV64Registers::x10;
     static constexpr GPRReg returnRegister2 = RISCV64Registers::x11;
+#elif CPU(LOONGARCH64)
+    // Argument registers
+    static constexpr GPRReg input = LOONGARCH64Registers::r4;
+    static constexpr GPRReg index = LOONGARCH64Registers::r5;
+    static constexpr GPRReg length = LOONGARCH64Registers::r6;
+    static constexpr GPRReg output = LOONGARCH64Registers::r7;
+    static constexpr GPRReg matchingContext = LOONGARCH64Registers::r8;
+    static constexpr GPRReg freelistRegister = LOONGARCH64Registers::r8;
+    static constexpr GPRReg freelistSizeRegister = LOONGARCH64Registers::r9;
+
+    // Scratch registers
+    static constexpr GPRReg regT0 = LOONGARCH64Registers::r10;
+    static constexpr GPRReg regT1 = LOONGARCH64Registers::r11;
+    static constexpr GPRReg regT2 = LOONGARCH64Registers::r12;
+    static constexpr GPRReg remainingMatchCount = LOONGARCH64Registers::r13;
+    static constexpr GPRReg regUnicodeInputAndTrail = LOONGARCH64Registers::r14;
+    static constexpr GPRReg unicodeAndSubpatternIdTemp = LOONGARCH64Registers::r9;
+    static constexpr GPRReg initialStart = LOONGARCH64Registers::r18;
+    static constexpr GPRReg endOfStringAddress = LOONGARCH64Registers::r20;
+
+    static constexpr GPRReg returnRegister = LOONGARCH64Registers::r4;
+    static constexpr GPRReg returnRegister2 = LOONGARCH64Registers::r5;
 #endif
 };
 
