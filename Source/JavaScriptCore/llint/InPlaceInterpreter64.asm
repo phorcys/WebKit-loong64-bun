@@ -29,10 +29,12 @@ macro saveIPIntRegisters()
     # to be observable within the same Wasm module.
     subp IPIntCalleeSaveSpaceStackAligned, sp
     if ARM64 or ARM64E
-        storepairq MC, PC, -2 * SlotSize[cfr]
-    elsif X86_64 or RISCV64
-        storep PC, -1 * SlotSize[cfr]
-        storep MC, -2 * SlotSize[cfr]
+        storepairq MC, PC, -0x10[cfr]
+        storeq wasmInstance, -0x18[cfr]
+    elsif X86_64 or RISCV64 or LOONGARCH64
+        storep PC, -0x8[cfr]
+        storep MC, -0x10[cfr]
+        storep wasmInstance, -0x18[cfr]
     end
 end
 
@@ -41,10 +43,12 @@ macro restoreIPIntRegisters()
     # and restored when entering Wasm by the JSToWasm wrapper and changes to them are meant
     # to be observable within the same Wasm module.
     if ARM64 or ARM64E
-        loadpairq -2 * SlotSize[cfr], MC, PC
-    elsif X86_64 or RISCV64
-        loadp -1 * SlotSize[cfr], PC
-        loadp -2 * SlotSize[cfr], MC
+        loadpairq -0x10[cfr], MC, PC
+        loadq -0x18[cfr], wasmInstance
+    elsif X86_64 or RISCV64 or LOONGARCH64
+        loadp -0x8[cfr], PC
+        loadp -0x10[cfr], MC
+        loadp -0x18[cfr], wasmInstance
     end
     addp IPIntCalleeSaveSpaceStackAligned, sp
 end

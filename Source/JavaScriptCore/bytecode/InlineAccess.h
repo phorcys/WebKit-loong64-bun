@@ -55,6 +55,8 @@ public:
         return 48;
 #elif CPU(RISCV64)
         return 44;
+#elif CPU(LOONGARCH64)
+        return 44;
 #else
 #error "unsupported platform"
 #endif
@@ -71,6 +73,8 @@ public:
         return 48;
 #elif CPU(RISCV64)
         return 52;
+#elif CPU(LOONGARCH64)
+        return 52;
 #else
 #error "unsupported platform"
 #endif
@@ -86,6 +90,8 @@ public:
 #elif CPU(ARM_THUMB2)
         size_t size = 30;
 #elif CPU(RISCV64)
+        size_t size = 60;
+#elif CPU(LOONGARCH64)
         size_t size = 60;
 #else
 #error "unsupported platform"
