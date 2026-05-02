@@ -107,6 +107,7 @@
 #include <wtf/MediaTime.h>
 #include <wtf/RefCountedFixedVector.h>
 #include <wtf/SIMDHelpers.h>
+#include <wtf/SetForScope.h>
 #include <wtf/TZoneMalloc.h>
 #include <wtf/TZoneMallocInlines.h>
 #include <wtf/ValidatedReinterpretCast.h>

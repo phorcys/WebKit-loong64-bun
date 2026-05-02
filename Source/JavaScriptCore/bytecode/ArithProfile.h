@@ -33,6 +33,7 @@
 namespace JSC {
 
 class CCallHelpers;
+class LLIntOffsetsExtractor;
 
 struct ObservedType {
     constexpr ObservedType(uint8_t bits = TypeEmpty)

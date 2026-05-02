@@ -28,6 +28,16 @@
 #include "DFGAbstractHeap.h"
 #include "DOMJITHeapRange.h"
 
+#if !ENABLE(DFG_JIT)
+namespace JSC::DFG {
+enum AbstractHeapKind : uint8_t {
+    InvalidAbstractHeap,
+    Heap,
+    SideState,
+};
+}
+#endif
+
 WTF_ALLOW_UNSAFE_BUFFER_USAGE_BEGIN
 
 namespace JSC {
