@@ -23,6 +23,13 @@
  */
 
 #include "config.h"
+
+#if defined(__loongarch__)
+#define SIMDUTF_IMPLEMENTATION_LASX 0
+#define SIMDUTF_IMPLEMENTATION_LSX 0
+#define SIMDUTF_IMPLEMENTATION_FALLBACK 1
+#endif
+
 #include <wtf/SIMDUTF.h>
 
 WTF_ALLOW_UNSAFE_BUFFER_USAGE_BEGIN
