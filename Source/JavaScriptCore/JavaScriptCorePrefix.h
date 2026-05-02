@@ -66,6 +66,7 @@
 #include <mutex>
 #include <string>
 #include <typeinfo>
+#include <wtf/SetForScope.h>
 #include <wtf/TZoneMalloc.h>
 #include <wtf/TZoneMallocInlines.h>
 #include <wtf/Variant.h>
