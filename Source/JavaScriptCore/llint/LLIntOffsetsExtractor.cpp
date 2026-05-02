@@ -25,6 +25,10 @@
 
 #include "config.h"
 
+namespace JSC {
+class LLIntOffsetsExtractor;
+}
+
 #include "ArithProfile.h"
 #include "ArrayProfile.h"
 #include "BytecodeIndices.h"
@@ -126,5 +130,4 @@ int main(int, char**)
     printf("%p\n", JSC::LLIntOffsetsExtractor::dummy());
     return 0;
 }
-
 
