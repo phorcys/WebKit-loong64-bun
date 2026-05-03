@@ -164,7 +164,7 @@ void initialize()
     // Step 1: fill in opcodeMaps.
     llint_entry(opcodeMap, opcodeMapWide16, opcodeMapWide32);
 
-#if ENABLE(WEBASSEMBLY)
+#if ENABLE(WEBASSEMBLY) && (CPU(ARM64) || CPU(X86_64) || CPU(LOONGARCH64))
     if (Options::useWasm())
         IPInt::initialize();
 #endif

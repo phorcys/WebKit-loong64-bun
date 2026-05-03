@@ -3889,6 +3889,127 @@ public:
         m_assembler.fenceInsn();
     }
 
+    template<typename AddressType>
+    RegisterID materializeAtomicAddress(AddressType address, RegisterID dest)
+    {
+        auto resolution = resolveAddress(address, dest);
+        if (resolution.offset) {
+            m_assembler.addi_dInsn(dest, resolution.base, Imm::I12(resolution.offset));
+            return dest;
+        }
+        return resolution.base;
+    }
+
+    template<unsigned bitSize>
+    void zeroExtendAtomicResult(RegisterID reg)
+    {
+        if constexpr (bitSize < 64)
+            m_assembler.zeroExtend<bitSize>(reg);
+    }
+
+    template<unsigned bitSize, typename AddressType, typename Emit>
+    void atomicRMW(RegisterID src, AddressType address, RegisterID dest, Emit emit)
+    {
+        static_assert(bitSize == 8 || bitSize == 16 || bitSize == 32 || bitSize == 64);
+        auto temp = temps<Data, Data2, Memory>();
+        RegisterID addr = materializeAtomicAddress(address, temp.memory());
+        RegisterID value = src;
+
+        // LoongArch AM* leaves the old memory value in rd and has undefined
+        // behavior if rd == rk, so copy the operand when the API aliases src/dest.
+        if (value == dest) {
+            value = dest == temp.data() ? temp.data2() : temp.data();
+            m_assembler.orInsn(value, src, LOONGARCH64Registers::zero);
+        }
+
+        emit(dest, value, addr);
+        zeroExtendAtomicResult<bitSize>(dest);
+    }
+
+    template<unsigned bitSize, typename AddressType, typename ComputeNewValue>
+    void atomicCASLoopRMW(RegisterID src, AddressType address, RegisterID dest, ComputeNewValue computeNewValue)
+    {
+        static_assert(bitSize == 8 || bitSize == 16);
+        auto temp = temps<Data, Data2, Memory>();
+        RELEASE_ASSERT(dest != temp.data() && dest != temp.data2());
+
+        RegisterID addr = materializeAtomicAddress(address, temp.memory());
+        Label loop = label();
+        if constexpr (bitSize == 8)
+            m_assembler.ld_buInsn(temp.data(), addr, Imm::I12(0));
+        else
+            m_assembler.ld_huInsn(temp.data(), addr, Imm::I12(0));
+
+        computeNewValue(temp.data(), src, temp.data2());
+        m_assembler.orInsn(dest, temp.data(), LOONGARCH64Registers::zero);
+        if constexpr (bitSize == 8)
+            m_assembler.amcas_db_bInsn(dest, temp.data2(), addr);
+        else
+            m_assembler.amcas_db_hInsn(dest, temp.data2(), addr);
+        zeroExtendAtomicResult<bitSize>(dest);
+        makeBranch(NotEqual, dest, temp.data()).linkTo(loop, this);
+    }
+
+    template<unsigned bitSize, typename AddressType>
+    void atomicStrongCAS(StatusCondition cond, RegisterID expectedAndResult, RegisterID newValue, AddressType address, RegisterID result)
+    {
+        static_assert(bitSize == 8 || bitSize == 16 || bitSize == 32 || bitSize == 64);
+        auto temp = temps<Data, Data2, Memory>();
+        RegisterID addr = materializeAtomicAddress(address, temp.memory());
+
+        RegisterID value = newValue;
+        if (value == expectedAndResult) {
+            value = temp.data2();
+            m_assembler.orInsn(value, newValue, LOONGARCH64Registers::zero);
+        }
+
+        zeroExtendAtomicResult<bitSize>(expectedAndResult);
+        m_assembler.orInsn(temp.data(), expectedAndResult, LOONGARCH64Registers::zero);
+
+        if constexpr (bitSize == 8)
+            m_assembler.amcas_db_bInsn(expectedAndResult, value, addr);
+        else if constexpr (bitSize == 16)
+            m_assembler.amcas_db_hInsn(expectedAndResult, value, addr);
+        else if constexpr (bitSize == 32)
+            m_assembler.amcas_db_wInsn(expectedAndResult, value, addr);
+        else
+            m_assembler.amcas_db_dInsn(expectedAndResult, value, addr);
+
+        zeroExtendAtomicResult<bitSize>(expectedAndResult);
+        m_assembler.xorInsn(result, expectedAndResult, temp.data());
+        Jump failure = makeBranch(NotEqual, result, LOONGARCH64Registers::zero);
+        move(TrustedImm32(cond == Success), result);
+        Jump done = jump();
+        failure.link(this);
+        move(TrustedImm32(cond == Failure), result);
+        done.link(this);
+    }
+
+    template<unsigned bitSize, typename AddressType>
+    void atomicStrongCAS(RegisterID expectedAndResult, RegisterID newValue, AddressType address)
+    {
+        static_assert(bitSize == 8 || bitSize == 16 || bitSize == 32 || bitSize == 64);
+        auto temp = temps<Data, Data2, Memory>();
+        RegisterID addr = materializeAtomicAddress(address, temp.memory());
+
+        RegisterID value = newValue;
+        if (value == expectedAndResult) {
+            value = temp.data();
+            m_assembler.orInsn(value, newValue, LOONGARCH64Registers::zero);
+        }
+
+        if constexpr (bitSize == 8)
+            m_assembler.amcas_db_bInsn(expectedAndResult, value, addr);
+        else if constexpr (bitSize == 16)
+            m_assembler.amcas_db_hInsn(expectedAndResult, value, addr);
+        else if constexpr (bitSize == 32)
+            m_assembler.amcas_db_wInsn(expectedAndResult, value, addr);
+        else
+            m_assembler.amcas_db_dInsn(expectedAndResult, value, addr);
+
+        zeroExtendAtomicResult<bitSize>(expectedAndResult);
+    }
+
     template<unsigned bitSize>
     JumpList branchAtomicWeakCASImpl(StatusCondition cond, RegisterID expectedAndClobbered, RegisterID newValue, BaseIndex address)
     {
@@ -3948,16 +4069,16 @@ public:
         m_assembler.orInsn(temp.data2(), expectedAndClobbered, LOONGARCH64Registers::zero);
         m_assembler.sc_wInsn(temp.data2(), temp.memory(), 0);
 
-        // On successful store, the temp register will have a zero value, and a non-zero value otherwise.
+        // On successful store, the temp register will have a non-zero value, and zero otherwise.
         // Branches are produced accordingly.
         switch (cond) {
         case Success: {
-            Jump success = makeBranch(Equal, temp.data(), LOONGARCH64Registers::zero);
+            Jump success = makeBranch(NotEqual, temp.data2(), LOONGARCH64Registers::zero);
             failure.link(this);
             return JumpList(success);
         }
         case Failure:
-            failure.append(makeBranch(NotEqual, temp.data(), LOONGARCH64Registers::zero));
+            failure.append(makeBranch(Equal, temp.data2(), LOONGARCH64Registers::zero));
             break;
         }
 
@@ -3994,12 +4115,12 @@ public:
 
         switch (cond) {
         case Success: {
-            Jump success = makeBranch(Equal, temp.data(), LOONGARCH64Registers::zero);
+            Jump success = makeBranch(NotEqual, temp.data2(), LOONGARCH64Registers::zero);
             failure.link(this);
             return JumpList(success);
         }
         case Failure:
-            failure.append(makeBranch(NotEqual, temp.data(), LOONGARCH64Registers::zero));
+            failure.append(makeBranch(Equal, temp.data2(), LOONGARCH64Registers::zero));
             break;
         }
 
@@ -4023,16 +4144,257 @@ public:
 
         switch (cond) {
         case Success: {
-            Jump success = makeBranch(Equal, temp.data(), LOONGARCH64Registers::zero);
+            Jump success = makeBranch(NotEqual, temp.data2(), LOONGARCH64Registers::zero);
             failure.link(this);
             return JumpList(success);
         }
         case Failure:
-            failure.append(makeBranch(NotEqual, temp.data(), LOONGARCH64Registers::zero));
+            failure.append(makeBranch(Equal, temp.data2(), LOONGARCH64Registers::zero));
             break;
         }
 
         return failure;
+    }
+
+    template<typename AddressType>
+    void atomicStrongCAS8(StatusCondition cond, RegisterID expectedAndResult, RegisterID newValue, AddressType address, RegisterID result)
+    {
+        atomicStrongCAS<8>(cond, expectedAndResult, newValue, address, result);
+    }
+
+    template<typename AddressType>
+    void atomicStrongCAS16(StatusCondition cond, RegisterID expectedAndResult, RegisterID newValue, AddressType address, RegisterID result)
+    {
+        atomicStrongCAS<16>(cond, expectedAndResult, newValue, address, result);
+    }
+
+    template<typename AddressType>
+    void atomicStrongCAS32(StatusCondition cond, RegisterID expectedAndResult, RegisterID newValue, AddressType address, RegisterID result)
+    {
+        atomicStrongCAS<32>(cond, expectedAndResult, newValue, address, result);
+    }
+
+    template<typename AddressType>
+    void atomicStrongCAS64(StatusCondition cond, RegisterID expectedAndResult, RegisterID newValue, AddressType address, RegisterID result)
+    {
+        atomicStrongCAS<64>(cond, expectedAndResult, newValue, address, result);
+    }
+
+    template<typename AddressType>
+    void atomicRelaxedStrongCAS8(StatusCondition cond, RegisterID expectedAndResult, RegisterID newValue, AddressType address, RegisterID result)
+    {
+        atomicStrongCAS8(cond, expectedAndResult, newValue, address, result);
+    }
+
+    template<typename AddressType>
+    void atomicRelaxedStrongCAS16(StatusCondition cond, RegisterID expectedAndResult, RegisterID newValue, AddressType address, RegisterID result)
+    {
+        atomicStrongCAS16(cond, expectedAndResult, newValue, address, result);
+    }
+
+    template<typename AddressType>
+    void atomicRelaxedStrongCAS32(StatusCondition cond, RegisterID expectedAndResult, RegisterID newValue, AddressType address, RegisterID result)
+    {
+        atomicStrongCAS32(cond, expectedAndResult, newValue, address, result);
+    }
+
+    template<typename AddressType>
+    void atomicRelaxedStrongCAS64(StatusCondition cond, RegisterID expectedAndResult, RegisterID newValue, AddressType address, RegisterID result)
+    {
+        atomicStrongCAS64(cond, expectedAndResult, newValue, address, result);
+    }
+
+    template<typename AddressType>
+    void atomicStrongCAS8(RegisterID expectedAndResult, RegisterID newValue, AddressType address)
+    {
+        atomicStrongCAS<8>(expectedAndResult, newValue, address);
+    }
+
+    template<typename AddressType>
+    void atomicStrongCAS16(RegisterID expectedAndResult, RegisterID newValue, AddressType address)
+    {
+        atomicStrongCAS<16>(expectedAndResult, newValue, address);
+    }
+
+    template<typename AddressType>
+    void atomicStrongCAS32(RegisterID expectedAndResult, RegisterID newValue, AddressType address)
+    {
+        atomicStrongCAS<32>(expectedAndResult, newValue, address);
+    }
+
+    template<typename AddressType>
+    void atomicStrongCAS64(RegisterID expectedAndResult, RegisterID newValue, AddressType address)
+    {
+        atomicStrongCAS<64>(expectedAndResult, newValue, address);
+    }
+
+    template<typename AddressType>
+    JumpList branchAtomicRelaxedWeakCAS8(StatusCondition cond, RegisterID expectedAndClobbered, RegisterID newValue, AddressType address)
+    {
+        return branchAtomicWeakCAS8(cond, expectedAndClobbered, newValue, address);
+    }
+
+    template<typename AddressType>
+    JumpList branchAtomicRelaxedWeakCAS16(StatusCondition cond, RegisterID expectedAndClobbered, RegisterID newValue, AddressType address)
+    {
+        return branchAtomicWeakCAS16(cond, expectedAndClobbered, newValue, address);
+    }
+
+    template<typename AddressType>
+    JumpList branchAtomicRelaxedWeakCAS32(StatusCondition cond, RegisterID expectedAndClobbered, RegisterID newValue, AddressType address)
+    {
+        return branchAtomicWeakCAS32(cond, expectedAndClobbered, newValue, address);
+    }
+
+    template<typename AddressType>
+    JumpList branchAtomicRelaxedWeakCAS64(StatusCondition cond, RegisterID expectedAndClobbered, RegisterID newValue, AddressType address)
+    {
+        return branchAtomicWeakCAS64(cond, expectedAndClobbered, newValue, address);
+    }
+
+    template<typename AddressType>
+    void atomicXchgAdd8(RegisterID src, AddressType address, RegisterID dest)
+    {
+        atomicRMW<8>(src, address, dest, [&] (RegisterID rd, RegisterID rk, RegisterID rj) { m_assembler.amadd_db_bInsn(rd, rk, rj); });
+    }
+
+    template<typename AddressType>
+    void atomicXchgAdd16(RegisterID src, AddressType address, RegisterID dest)
+    {
+        atomicRMW<16>(src, address, dest, [&] (RegisterID rd, RegisterID rk, RegisterID rj) { m_assembler.amadd_db_hInsn(rd, rk, rj); });
+    }
+
+    template<typename AddressType>
+    void atomicXchgAdd32(RegisterID src, AddressType address, RegisterID dest)
+    {
+        atomicRMW<32>(src, address, dest, [&] (RegisterID rd, RegisterID rk, RegisterID rj) { m_assembler.amadd_db_wInsn(rd, rk, rj); });
+    }
+
+    template<typename AddressType>
+    void atomicXchgAdd64(RegisterID src, AddressType address, RegisterID dest)
+    {
+        atomicRMW<64>(src, address, dest, [&] (RegisterID rd, RegisterID rk, RegisterID rj) { m_assembler.amadd_db_dInsn(rd, rk, rj); });
+    }
+
+    template<typename AddressType> void atomicXchgAdd8(RegisterID src, AddressType address) { atomicXchgAdd8(src, address, temps<Data>().data()); }
+    template<typename AddressType> void atomicXchgAdd16(RegisterID src, AddressType address) { atomicXchgAdd16(src, address, temps<Data>().data()); }
+    template<typename AddressType> void atomicXchgAdd32(RegisterID src, AddressType address) { atomicXchgAdd32(src, address, temps<Data>().data()); }
+    template<typename AddressType> void atomicXchgAdd64(RegisterID src, AddressType address) { atomicXchgAdd64(src, address, temps<Data>().data()); }
+
+    template<typename AddressType>
+    void atomicXchg8(RegisterID src, AddressType address, RegisterID dest)
+    {
+        atomicRMW<8>(src, address, dest, [&] (RegisterID rd, RegisterID rk, RegisterID rj) { m_assembler.amswap_db_bInsn(rd, rk, rj); });
+    }
+
+    template<typename AddressType>
+    void atomicXchg16(RegisterID src, AddressType address, RegisterID dest)
+    {
+        atomicRMW<16>(src, address, dest, [&] (RegisterID rd, RegisterID rk, RegisterID rj) { m_assembler.amswap_db_hInsn(rd, rk, rj); });
+    }
+
+    template<typename AddressType>
+    void atomicXchg32(RegisterID src, AddressType address, RegisterID dest)
+    {
+        atomicRMW<32>(src, address, dest, [&] (RegisterID rd, RegisterID rk, RegisterID rj) { m_assembler.amswap_db_wInsn(rd, rk, rj); });
+    }
+
+    template<typename AddressType>
+    void atomicXchg64(RegisterID src, AddressType address, RegisterID dest)
+    {
+        atomicRMW<64>(src, address, dest, [&] (RegisterID rd, RegisterID rk, RegisterID rj) { m_assembler.amswap_db_dInsn(rd, rk, rj); });
+    }
+
+    template<typename AddressType> void atomicXchg8(RegisterID src, AddressType address) { atomicXchg8(src, address, temps<Data>().data()); }
+    template<typename AddressType> void atomicXchg16(RegisterID src, AddressType address) { atomicXchg16(src, address, temps<Data>().data()); }
+    template<typename AddressType> void atomicXchg32(RegisterID src, AddressType address) { atomicXchg32(src, address, temps<Data>().data()); }
+    template<typename AddressType> void atomicXchg64(RegisterID src, AddressType address) { atomicXchg64(src, address, temps<Data>().data()); }
+
+    template<typename AddressType>
+    void atomicXchgOr8(RegisterID src, AddressType address, RegisterID dest)
+    {
+        atomicCASLoopRMW<8>(src, address, dest, [&] (RegisterID oldValue, RegisterID operand, RegisterID newValue) { m_assembler.orInsn(newValue, oldValue, operand); });
+    }
+
+    template<typename AddressType>
+    void atomicXchgOr16(RegisterID src, AddressType address, RegisterID dest)
+    {
+        atomicCASLoopRMW<16>(src, address, dest, [&] (RegisterID oldValue, RegisterID operand, RegisterID newValue) { m_assembler.orInsn(newValue, oldValue, operand); });
+    }
+
+    template<typename AddressType>
+    void atomicXchgOr32(RegisterID src, AddressType address, RegisterID dest)
+    {
+        atomicRMW<32>(src, address, dest, [&] (RegisterID rd, RegisterID rk, RegisterID rj) { m_assembler.amor_db_wInsn(rd, rk, rj); });
+    }
+
+    template<typename AddressType>
+    void atomicXchgOr64(RegisterID src, AddressType address, RegisterID dest)
+    {
+        atomicRMW<64>(src, address, dest, [&] (RegisterID rd, RegisterID rk, RegisterID rj) { m_assembler.amor_db_dInsn(rd, rk, rj); });
+    }
+
+    template<typename AddressType>
+    void atomicXchgXor8(RegisterID src, AddressType address, RegisterID dest)
+    {
+        atomicCASLoopRMW<8>(src, address, dest, [&] (RegisterID oldValue, RegisterID operand, RegisterID newValue) { m_assembler.xorInsn(newValue, oldValue, operand); });
+    }
+
+    template<typename AddressType>
+    void atomicXchgXor16(RegisterID src, AddressType address, RegisterID dest)
+    {
+        atomicCASLoopRMW<16>(src, address, dest, [&] (RegisterID oldValue, RegisterID operand, RegisterID newValue) { m_assembler.xorInsn(newValue, oldValue, operand); });
+    }
+
+    template<typename AddressType>
+    void atomicXchgXor32(RegisterID src, AddressType address, RegisterID dest)
+    {
+        atomicRMW<32>(src, address, dest, [&] (RegisterID rd, RegisterID rk, RegisterID rj) { m_assembler.amxor_db_wInsn(rd, rk, rj); });
+    }
+
+    template<typename AddressType>
+    void atomicXchgXor64(RegisterID src, AddressType address, RegisterID dest)
+    {
+        atomicRMW<64>(src, address, dest, [&] (RegisterID rd, RegisterID rk, RegisterID rj) { m_assembler.amxor_db_dInsn(rd, rk, rj); });
+    }
+
+    template<typename AddressType>
+    void atomicXchgClear8(RegisterID src, AddressType address, RegisterID dest)
+    {
+        atomicCASLoopRMW<8>(src, address, dest, [&] (RegisterID oldValue, RegisterID operand, RegisterID newValue) {
+            m_assembler.xoriInsn(newValue, operand, Imm::I12(0xff));
+            m_assembler.andInsn(newValue, oldValue, newValue);
+        });
+    }
+
+    template<typename AddressType>
+    void atomicXchgClear16(RegisterID src, AddressType address, RegisterID dest)
+    {
+        atomicCASLoopRMW<16>(src, address, dest, [&] (RegisterID oldValue, RegisterID operand, RegisterID newValue) {
+            loadImmediate(TrustedImm32(0xffff), newValue);
+            m_assembler.xorInsn(newValue, operand, newValue);
+            m_assembler.andInsn(newValue, oldValue, newValue);
+        });
+    }
+
+    template<typename AddressType>
+    void atomicXchgClear32(RegisterID src, AddressType address, RegisterID dest)
+    {
+        auto temp = temps<Data, Data2>();
+        m_assembler.xoriInsn(temp.data(), src, Imm::I12(0xfff));
+        loadImmediate(TrustedImm32(0xfffff000), temp.data2());
+        m_assembler.xorInsn(temp.data(), temp.data(), temp.data2());
+        atomicRMW<32>(temp.data(), address, dest, [&] (RegisterID rd, RegisterID rk, RegisterID rj) { m_assembler.amand_db_wInsn(rd, rk, rj); });
+    }
+
+    template<typename AddressType>
+    void atomicXchgClear64(RegisterID src, AddressType address, RegisterID dest)
+    {
+        auto temp = temps<Data, Data2>();
+        m_assembler.xoriInsn(temp.data(), src, Imm::I12(0xfff));
+        loadImmediate(TrustedImm64(0xfffffffffffff000ULL), temp.data2());
+        m_assembler.xorInsn(temp.data(), temp.data(), temp.data2());
+        atomicRMW<64>(temp.data(), address, dest, [&] (RegisterID rd, RegisterID rk, RegisterID rj) { m_assembler.amand_db_dInsn(rd, rk, rj); });
     }
 
     void atomicLoad32(Address address, RegisterID dest)

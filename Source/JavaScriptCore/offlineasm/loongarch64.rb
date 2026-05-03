@@ -356,14 +356,13 @@ def loongarch64LowerEmitMask(newList, node, size, source, destination)
     when :b, :h, :i
         case size
         when :b
-            shiftSize = 56
+            msbd = 7
         when :h
-            shiftSize = 48
+            msbd = 15
         when :i
-            shiftSize = 32
+            msbd = 31
         end
-        newList << Instruction.new(node.codeOrigin, "slli.d", [source, Immediate.new(node.codeOrigin, shiftSize), destination])
-        newList << Instruction.new(node.codeOrigin, "srli.d", [destination, Immediate.new(node.codeOrigin, shiftSize), destination])
+        newList << Instruction.new(node.codeOrigin, "bstrpick.d", [source, Immediate.new(node.codeOrigin, msbd), Immediate.new(node.codeOrigin, 0), destination])
     when :p, :q
     else
         raise "Invalid masking size"
@@ -409,6 +408,18 @@ def loongarch64LowerOperandIntoRegisterAndSignExtend(newList, node, operand, siz
     end
 
     loongarch64LowerEmitSignExtension(newList, node, size, source, destination)
+    destination
+end
+
+def loongarch64LowerOperandIntoRegisterAndZeroExtend(newList, node, operand, size, forcedTmp = :none)
+    source = loongarch64LowerOperandIntoRegister(newList, node, operand)
+    destination = source
+
+    if ([:b, :h, :i].include? size or forcedTmp == :forced_tmp) and not destination.is_a? Tmp
+        destination = Tmp.new(node.codeOrigin, :gpr)
+    end
+
+    loongarch64LowerEmitMask(newList, node, size, source, destination)
     destination
 end
 
@@ -1054,8 +1065,13 @@ end
 
 def loongarch64LowerCompare(list)
     def emit(newList, node, size, comparison)
-        lhs = loongarch64LowerOperandIntoRegisterAndSignExtend(newList, node, node.operands[0], size)
-        rhs = loongarch64LowerOperandIntoRegisterAndSignExtend(newList, node, node.operands[1], size)
+        if [:a, :aeq, :b, :beq].include? comparison
+            lhs = loongarch64LowerOperandIntoRegisterAndZeroExtend(newList, node, node.operands[0], size)
+            rhs = loongarch64LowerOperandIntoRegisterAndZeroExtend(newList, node, node.operands[1], size)
+        else
+            lhs = loongarch64LowerOperandIntoRegisterAndSignExtend(newList, node, node.operands[0], size)
+            rhs = loongarch64LowerOperandIntoRegisterAndSignExtend(newList, node, node.operands[1], size)
+        end
         dest = node.operands[2]
 
         case comparison
@@ -1154,8 +1170,13 @@ def loongarch64LowerBranch(list)
     end
 
     def emitGeneric(newList, node, size, condition)
-        lhs = loongarch64LowerOperandIntoRegisterAndSignExtend(newList, node, node.operands[0], size)
-        rhs = loongarch64LowerOperandIntoRegisterAndSignExtend(newList, node, node.operands[1], size)
+        if [:a, :aeq, :b, :beq].include? condition
+            lhs = loongarch64LowerOperandIntoRegisterAndZeroExtend(newList, node, node.operands[0], size)
+            rhs = loongarch64LowerOperandIntoRegisterAndZeroExtend(newList, node, node.operands[1], size)
+        else
+            lhs = loongarch64LowerOperandIntoRegisterAndSignExtend(newList, node, node.operands[0], size)
+            rhs = loongarch64LowerOperandIntoRegisterAndSignExtend(newList, node, node.operands[1], size)
+        end
         dest = node.operands[2]
 
         case condition
@@ -1898,7 +1919,13 @@ class Instruction
         when /^(bl|b)$/
             loongarch64ValidateOperands(operands, [LabelReference], [LocalLabelReference])
             $asm.puts "#{laop(opcode)} #{operands[0].asmLabel}"
-        when /^(la|la.local)$/
+        when "la.local"
+            loongarch64ValidateOperands(operands, [LabelReference, RegisterID])
+            $asm.puts ".option push"
+            $asm.puts ".option norelax"
+            $asm.puts "#{laop(opcode)} #{operands[1].loongarch64Operand}, #{operands[0].asmLabel}"
+            $asm.puts ".option pop"
+        when "la"
             loongarch64ValidateOperands(operands, [LabelReference, RegisterID])
             $asm.puts "#{laop(opcode)} #{operands[1].loongarch64Operand}, #{operands[0].asmLabel}"
         when "move"
@@ -1927,6 +1954,11 @@ class Instruction
             validationType = $2 == "w" ? :la32_shift_immediate : :la64_shift_immediate
             raise "Invalid shift-amount immediate" unless loongarch64ValidateImmediate(validationType, operands[1].value)
             $asm.puts "#{laop(opcode)} #{operands[2].loongarch64Operand}, #{operands[0].loongarch64Operand}, #{operands[1].loongarch64Operand}"
+        when "bstrpick.d"
+            loongarch64ValidateOperands(operands, [RegisterID, Immediate, Immediate, RegisterID])
+            raise "Invalid bstrpick.d msbd immediate" unless loongarch64ValidateImmediate(:la64_shift_immediate, operands[1].value)
+            raise "Invalid bstrpick.d lsbd immediate" unless loongarch64ValidateImmediate(:la64_shift_immediate, operands[2].value)
+            $asm.puts "bstrpick.d #{operands[3].loongarch64Operand}, #{operands[0].loongarch64Operand}, #{operands[1].loongarch64Operand}, #{operands[2].loongarch64Operand}"
         when /^slt|slt(u?)$/
             loongarch64ValidateOperands(operands, [RegisterID, RegisterID, RegisterID])
             $asm.puts "#{laop(opcode)} #{operands[2].loongarch64Operand}, #{operands[0].loongarch64Operand}, #{operands[1].loongarch64Operand}"
