@@ -174,6 +174,24 @@ enum class Opcode17 : unsigned {
     FCOPYSIGN_S_OP     = 0b00000001000100101,
     FCOPYSIGN_D_OP     = 0b00000001000100110,
     DBAR_OP            = 0b00111000011100100,
+    AMCAS_DB_B_OP      = 0b111000010110100,
+    AMCAS_DB_H_OP      = 0b111000010110101,
+    AMCAS_DB_W_OP      = 0b111000010110110,
+    AMCAS_DB_D_OP      = 0b111000010110111,
+    AMSWAP_DB_B_OP     = 0b111000010111100,
+    AMSWAP_DB_H_OP     = 0b111000010111101,
+    AMADD_DB_B_OP      = 0b111000010111110,
+    AMADD_DB_H_OP      = 0b111000010111111,
+    AMSWAP_DB_W_OP     = 0b111000011010010,
+    AMSWAP_DB_D_OP     = 0b111000011010011,
+    AMADD_DB_W_OP      = 0b111000011010100,
+    AMADD_DB_D_OP      = 0b111000011010101,
+    AMAND_DB_W_OP      = 0b111000011010110,
+    AMAND_DB_D_OP      = 0b111000011010111,
+    AMOR_DB_W_OP       = 0b111000011011000,
+    AMOR_DB_D_OP       = 0b111000011011001,
+    AMXOR_DB_W_OP      = 0b111000011011010,
+    AMXOR_DB_D_OP      = 0b111000011011011,
     VAND_V_OP          = 0b01110001001001100,
     VOR_V_OP           = 0b01110001001001101,
 };
@@ -1101,6 +1119,78 @@ struct BREAK : I15TypeBase<Opcode17::BREAK_OP> {
 
 struct DBAR : I15TypeBase<Opcode17::DBAR_OP> {
     static constexpr const char* name = "dbar";
+};
+
+struct AMCAS_DB_B : RRRTypeBase<Opcode17::AMCAS_DB_B_OP, RegistersBase::GGG> {
+    static constexpr const char* name = "amcas_db.b";
+};
+
+struct AMCAS_DB_H : RRRTypeBase<Opcode17::AMCAS_DB_H_OP, RegistersBase::GGG> {
+    static constexpr const char* name = "amcas_db.h";
+};
+
+struct AMCAS_DB_W : RRRTypeBase<Opcode17::AMCAS_DB_W_OP, RegistersBase::GGG> {
+    static constexpr const char* name = "amcas_db.w";
+};
+
+struct AMCAS_DB_D : RRRTypeBase<Opcode17::AMCAS_DB_D_OP, RegistersBase::GGG> {
+    static constexpr const char* name = "amcas_db.d";
+};
+
+struct AMSWAP_DB_B : RRRTypeBase<Opcode17::AMSWAP_DB_B_OP, RegistersBase::GGG> {
+    static constexpr const char* name = "amswap_db.b";
+};
+
+struct AMSWAP_DB_H : RRRTypeBase<Opcode17::AMSWAP_DB_H_OP, RegistersBase::GGG> {
+    static constexpr const char* name = "amswap_db.h";
+};
+
+struct AMSWAP_DB_W : RRRTypeBase<Opcode17::AMSWAP_DB_W_OP, RegistersBase::GGG> {
+    static constexpr const char* name = "amswap_db.w";
+};
+
+struct AMSWAP_DB_D : RRRTypeBase<Opcode17::AMSWAP_DB_D_OP, RegistersBase::GGG> {
+    static constexpr const char* name = "amswap_db.d";
+};
+
+struct AMADD_DB_B : RRRTypeBase<Opcode17::AMADD_DB_B_OP, RegistersBase::GGG> {
+    static constexpr const char* name = "amadd_db.b";
+};
+
+struct AMADD_DB_H : RRRTypeBase<Opcode17::AMADD_DB_H_OP, RegistersBase::GGG> {
+    static constexpr const char* name = "amadd_db.h";
+};
+
+struct AMADD_DB_W : RRRTypeBase<Opcode17::AMADD_DB_W_OP, RegistersBase::GGG> {
+    static constexpr const char* name = "amadd_db.w";
+};
+
+struct AMADD_DB_D : RRRTypeBase<Opcode17::AMADD_DB_D_OP, RegistersBase::GGG> {
+    static constexpr const char* name = "amadd_db.d";
+};
+
+struct AMAND_DB_W : RRRTypeBase<Opcode17::AMAND_DB_W_OP, RegistersBase::GGG> {
+    static constexpr const char* name = "amand_db.w";
+};
+
+struct AMAND_DB_D : RRRTypeBase<Opcode17::AMAND_DB_D_OP, RegistersBase::GGG> {
+    static constexpr const char* name = "amand_db.d";
+};
+
+struct AMOR_DB_W : RRRTypeBase<Opcode17::AMOR_DB_W_OP, RegistersBase::GGG> {
+    static constexpr const char* name = "amor_db.w";
+};
+
+struct AMOR_DB_D : RRRTypeBase<Opcode17::AMOR_DB_D_OP, RegistersBase::GGG> {
+    static constexpr const char* name = "amor_db.d";
+};
+
+struct AMXOR_DB_W : RRRTypeBase<Opcode17::AMXOR_DB_W_OP, RegistersBase::GGG> {
+    static constexpr const char* name = "amxor_db.w";
+};
+
+struct AMXOR_DB_D : RRRTypeBase<Opcode17::AMXOR_DB_D_OP, RegistersBase::GGG> {
+    static constexpr const char* name = "amxor_db.d";
 };
 
 struct SLLI_W : I8RRTypeBase<Opcode14::SLLI_OP, RegistersBase::GG> {
@@ -2137,6 +2227,28 @@ public:
     {
         insn(LOONGARCH64Instructions::SC_D::construct(rj, rd, I14Immediate(imm >> 2)));
     }
+
+    void amcas_db_bInsn(RegisterID rd, RegisterID rk, RegisterID rj) { insn(LOONGARCH64Instructions::AMCAS_DB_B::construct(rk, rj, rd)); }
+    void amcas_db_hInsn(RegisterID rd, RegisterID rk, RegisterID rj) { insn(LOONGARCH64Instructions::AMCAS_DB_H::construct(rk, rj, rd)); }
+    void amcas_db_wInsn(RegisterID rd, RegisterID rk, RegisterID rj) { insn(LOONGARCH64Instructions::AMCAS_DB_W::construct(rk, rj, rd)); }
+    void amcas_db_dInsn(RegisterID rd, RegisterID rk, RegisterID rj) { insn(LOONGARCH64Instructions::AMCAS_DB_D::construct(rk, rj, rd)); }
+
+    void amswap_db_bInsn(RegisterID rd, RegisterID rk, RegisterID rj) { insn(LOONGARCH64Instructions::AMSWAP_DB_B::construct(rk, rj, rd)); }
+    void amswap_db_hInsn(RegisterID rd, RegisterID rk, RegisterID rj) { insn(LOONGARCH64Instructions::AMSWAP_DB_H::construct(rk, rj, rd)); }
+    void amswap_db_wInsn(RegisterID rd, RegisterID rk, RegisterID rj) { insn(LOONGARCH64Instructions::AMSWAP_DB_W::construct(rk, rj, rd)); }
+    void amswap_db_dInsn(RegisterID rd, RegisterID rk, RegisterID rj) { insn(LOONGARCH64Instructions::AMSWAP_DB_D::construct(rk, rj, rd)); }
+
+    void amadd_db_bInsn(RegisterID rd, RegisterID rk, RegisterID rj) { insn(LOONGARCH64Instructions::AMADD_DB_B::construct(rk, rj, rd)); }
+    void amadd_db_hInsn(RegisterID rd, RegisterID rk, RegisterID rj) { insn(LOONGARCH64Instructions::AMADD_DB_H::construct(rk, rj, rd)); }
+    void amadd_db_wInsn(RegisterID rd, RegisterID rk, RegisterID rj) { insn(LOONGARCH64Instructions::AMADD_DB_W::construct(rk, rj, rd)); }
+    void amadd_db_dInsn(RegisterID rd, RegisterID rk, RegisterID rj) { insn(LOONGARCH64Instructions::AMADD_DB_D::construct(rk, rj, rd)); }
+
+    void amand_db_wInsn(RegisterID rd, RegisterID rk, RegisterID rj) { insn(LOONGARCH64Instructions::AMAND_DB_W::construct(rk, rj, rd)); }
+    void amand_db_dInsn(RegisterID rd, RegisterID rk, RegisterID rj) { insn(LOONGARCH64Instructions::AMAND_DB_D::construct(rk, rj, rd)); }
+    void amor_db_wInsn(RegisterID rd, RegisterID rk, RegisterID rj) { insn(LOONGARCH64Instructions::AMOR_DB_W::construct(rk, rj, rd)); }
+    void amor_db_dInsn(RegisterID rd, RegisterID rk, RegisterID rj) { insn(LOONGARCH64Instructions::AMOR_DB_D::construct(rk, rj, rd)); }
+    void amxor_db_wInsn(RegisterID rd, RegisterID rk, RegisterID rj) { insn(LOONGARCH64Instructions::AMXOR_DB_W::construct(rk, rj, rd)); }
+    void amxor_db_dInsn(RegisterID rd, RegisterID rk, RegisterID rj) { insn(LOONGARCH64Instructions::AMXOR_DB_D::construct(rk, rj, rd)); }
 
     void vand_vInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(LOONGARCH64Instructions::VAND_V::construct(vk, vj, vd)); }
 

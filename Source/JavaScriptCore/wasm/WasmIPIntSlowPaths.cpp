@@ -1216,7 +1216,7 @@ WASM_IPINT_EXTERN_CPP_DECL(set_global_64, unsigned index, uint64_t value)
 
 WASM_IPINT_EXTERN_CPP_DECL(get_global_64, unsigned index)
 {
-#if CPU(ARM64) || CPU(X86_64)
+#if CPU(ARM64) || CPU(X86_64) || CPU(LOONGARCH64)
     WASM_RETURN_TWO(std::bit_cast<void*>(instance->loadI64Global(index)), 0);
 #else
     UNUSED_PARAM(instance);
@@ -1227,7 +1227,7 @@ WASM_IPINT_EXTERN_CPP_DECL(get_global_64, unsigned index)
 
 WASM_IPINT_EXTERN_CPP_DECL(memory_atomic_wait32, IPIntStackEntry* args)
 {
-#if CPU(ARM64) || CPU(X86_64)
+#if CPU(ARM64) || CPU(X86_64) || CPU(LOONGARCH64)
     uint8_t memoryIndex = args[0].i32;
     uint64_t timeout = args[1].i64;
     uint32_t value = args[2].i32;
@@ -1243,7 +1243,7 @@ WASM_IPINT_EXTERN_CPP_DECL(memory_atomic_wait32, IPIntStackEntry* args)
 
 WASM_IPINT_EXTERN_CPP_DECL(memory_atomic_wait64, IPIntStackEntry* args)
 {
-#if CPU(ARM64) || CPU(X86_64)
+#if CPU(ARM64) || CPU(X86_64) || CPU(LOONGARCH64)
     uint8_t memoryIndex = args[0].i32;
     uint64_t timeout = args[1].i64;
     uint64_t value = args[2].i64;
@@ -1259,7 +1259,7 @@ WASM_IPINT_EXTERN_CPP_DECL(memory_atomic_wait64, IPIntStackEntry* args)
 
 WASM_IPINT_EXTERN_CPP_DECL(memory_atomic_notify, IPIntStackEntry* args)
 {
-#if CPU(ARM64) || CPU(X86_64)
+#if CPU(ARM64) || CPU(X86_64) || CPU(LOONGARCH64)
     unsigned offset = args[0].i32;
     uint8_t memoryIndex = args[1].i32;
     int32_t count = args[2].i32;

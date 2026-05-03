@@ -115,8 +115,8 @@ elsif LOONGARCH64
 
     const sc0 = ws0
     const sc1 = ws1
-    const sc2 = csr1
-    const sc3 = csr2
+    const sc2 = ws2
+    const sc3 = ws3
 elsif ARMv7
     const PC = csr1
     const MC = t6
@@ -172,7 +172,7 @@ else
     const boundsCheckingSize = invalidGPR
 end
 
-const UnboxedWasmCalleeStackSlot = CallerFrame - constexpr Wasm::numberOfIPIntCalleeSaveRegisters * SlotSize - MachineRegisterSize
+const UnboxedWasmCalleeStackSlot = CallerFrame - (constexpr Wasm::numberOfIPIntCalleeSaveRegisters + 1) * SlotSize - MachineRegisterSize
 const WasmToJSScratchSpaceSize = constexpr Wasm::WasmToJSScratchSpaceSize
 const WasmToJSCallableFunctionSlot = constexpr Wasm::WasmToJSCallableFunctionSlot
 const WasmToJSIPIntReturnPCSlot = constexpr Wasm::WasmToJSIPIntReturnPCSlot
@@ -187,9 +187,12 @@ const IPIntLocalsBaseOffset = IPIntCalleeSaveSpaceStackAligned + LocalSize
 if X86_64
     const NumberOfWasmArgumentGPRs = 6
     const NumberOfVolatileGPRs = NumberOfWasmArgumentGPRs + 2 // +2 for ws0 and ws1
-elsif ARM64 or ARM64E or RISCV64 or LOONGARCH64
+elsif ARM64 or ARM64E or RISCV64
     const NumberOfWasmArgumentGPRs = 8
     const NumberOfVolatileGPRs = NumberOfWasmArgumentGPRs
+elsif LOONGARCH64
+    const NumberOfWasmArgumentGPRs = 8
+    const NumberOfVolatileGPRs = NumberOfWasmArgumentGPRs + 4 // +4 for ws0, ws1, ws2, and ws3
 elsif ARMv7
     # These 4 GPR holds only 2 JSValues in 2 pairs.
     const NumberOfWasmArgumentGPRs = 4
@@ -374,6 +377,9 @@ end
 if X86_64
         # On x86_64, callee parameter (ws0) gets clobbered by saveCallSiteIndex(). Reload from stack.
         loadp UnboxedWasmCalleeStackSlot[cfr], a2
+elsif LOONGARCH64
+        # On loongarch64, ws0 is caller-save and can be clobbered by saveCallSiteIndex(). Reload from stack.
+        loadp UnboxedWasmCalleeStackSlot[cfr], a2
 else
         move callee, a2
 end
@@ -442,6 +448,9 @@ end
 macro ipintReloadMemory()
     if ARM64 or ARM64E
         loadpairq constexpr (JSWebAssemblyInstance::offsetOfCachedMemoryBaseSizePair(0))[wasmInstance], memoryBase, boundsCheckingSize
+    elsif RISCV64 or LOONGARCH64
+        loadp constexpr (JSWebAssemblyInstance::offsetOfCachedMemoryBaseSizePair(0))[wasmInstance], memoryBase
+        loadp constexpr (JSWebAssemblyInstance::offsetOfCachedMemoryBaseSizePair(0) + 8)[wasmInstance], boundsCheckingSize
     elsif X86_64
         loadp constexpr (JSWebAssemblyInstance::offsetOfCachedMemoryBaseSizePair(0))[wasmInstance], memoryBase
         loadp constexpr (JSWebAssemblyInstance::offsetOfCachedMemoryBaseSizePair(0) + 8)[wasmInstance], boundsCheckingSize
@@ -455,6 +464,8 @@ end
 
 macro saveCallSiteIndex()
 if X86_64
+    loadp UnboxedWasmCalleeStackSlot[cfr], ws0
+elsif LOONGARCH64
     loadp UnboxedWasmCalleeStackSlot[cfr], ws0
 end
     loadp Wasm::IPIntCallee::m_bytecode[ws0], t0
@@ -503,6 +514,8 @@ macro operationCallMayThrowImpl(fn, sizeOfExtraRegistersPreserved)
         operationCall(macro() cCall3(_ipint_extern_handle_debugger_trap_if_needed) end)
         addp sizeOfExtraRegistersPreserved + (4 * MachineRegisterSize), sp
     elsif X86_64
+        addp sizeOfExtraRegistersPreserved + (2 * MachineRegisterSize), sp
+    elsif LOONGARCH64
         addp sizeOfExtraRegistersPreserved + (2 * MachineRegisterSize), sp
     end
     jmp _wasm_throw_from_slow_path_trampoline
@@ -645,7 +658,7 @@ end
 
 # On JSVALUE64, each 64-bit argument GPR holds one whole Wasm value.
 macro forEachWasmArgumentGPR(fn)
-    if ARM64 or ARM64E
+    if ARM64 or ARM64E or RISCV64 or LOONGARCH64
         fn(0, wa0, wa1)
         fn(2, wa2, wa3)
         fn(4, wa4, wa5)
@@ -739,6 +752,11 @@ macro preserveWasmVolatileRegisters()
 if X86_64
     storeq ws0, (NumberOfWasmArgumentGPRs + 0) * MachineRegisterSize[sp]
     storeq ws1, (NumberOfWasmArgumentGPRs + 1) * MachineRegisterSize[sp]
+elsif LOONGARCH64
+    storeq ws0, (NumberOfWasmArgumentGPRs + 0) * MachineRegisterSize[sp]
+    storeq ws1, (NumberOfWasmArgumentGPRs + 1) * MachineRegisterSize[sp]
+    storeq ws2, (NumberOfWasmArgumentGPRs + 2) * MachineRegisterSize[sp]
+    storeq ws3, (NumberOfWasmArgumentGPRs + 3) * MachineRegisterSize[sp]
 end
     preserveWasmFPRArgumentRegistersImpl(gprStorageSize)
 end
@@ -760,6 +778,11 @@ macro restoreWasmVolatileRegisters()
 if X86_64
     loadq (NumberOfWasmArgumentGPRs + 0) * MachineRegisterSize[sp], ws0
     loadq (NumberOfWasmArgumentGPRs + 1) * MachineRegisterSize[sp], ws1
+elsif LOONGARCH64
+    loadq (NumberOfWasmArgumentGPRs + 0) * MachineRegisterSize[sp], ws0
+    loadq (NumberOfWasmArgumentGPRs + 1) * MachineRegisterSize[sp], ws1
+    loadq (NumberOfWasmArgumentGPRs + 2) * MachineRegisterSize[sp], ws2
+    loadq (NumberOfWasmArgumentGPRs + 3) * MachineRegisterSize[sp], ws3
 end
     restoreWasmFPRArgumentRegistersImpl(gprStorageSize)
     addp gprStorageSize + fprStorageSize, sp
@@ -859,6 +882,11 @@ op(js_to_wasm_wrapper_entry, macro ()
         if ARM64 or ARM64E
             storepairq memoryBase, boundsCheckingSize, -2 * SlotSize[cfr]
             storep wasmInstance, -3 * SlotSize[cfr]
+        elsif RISCV64 or LOONGARCH64
+            # These must match the wasmToJS thunk, since the unwinder won't be able to tell who made this frame.
+            storep memoryBase, -2 * SlotSize[cfr]
+            storep boundsCheckingSize, -1 * SlotSize[cfr]
+            storep wasmInstance, -3 * SlotSize[cfr]
         elsif X86_64
             # These must match the wasmToJS thunk, since the unwinder won't be able to tell who made this frame.
             storep boundsCheckingSize, -1 * SlotSize[cfr]
@@ -872,6 +900,10 @@ op(js_to_wasm_wrapper_entry, macro ()
     macro restoreJSToWasmRegisters()
         if ARM64 or ARM64E
             loadpairq -2 * SlotSize[cfr], memoryBase, boundsCheckingSize
+            loadp -3 * SlotSize[cfr], wasmInstance
+        elsif RISCV64 or LOONGARCH64
+            loadp -2 * SlotSize[cfr], memoryBase
+            loadp -1 * SlotSize[cfr], boundsCheckingSize
             loadp -3 * SlotSize[cfr], wasmInstance
         elsif X86_64
             loadp -1 * SlotSize[cfr], boundsCheckingSize
@@ -966,6 +998,9 @@ end
     # Memory
     if ARM64 or ARM64E
         loadpairq constexpr (JSWebAssemblyInstance::offsetOfCachedMemoryBaseSizePair(0))[wasmInstance], memoryBase, boundsCheckingSize
+    elsif RISCV64 or LOONGARCH64
+        loadp constexpr (JSWebAssemblyInstance::offsetOfCachedMemoryBaseSizePair(0))[wasmInstance], memoryBase
+        loadp constexpr (JSWebAssemblyInstance::offsetOfCachedMemoryBaseSizePair(0) + 8)[wasmInstance], boundsCheckingSize
     elsif X86_64
         loadp constexpr (JSWebAssemblyInstance::offsetOfCachedMemoryBaseSizePair(0))[wasmInstance], memoryBase
         loadp constexpr (JSWebAssemblyInstance::offsetOfCachedMemoryBaseSizePair(0) + 8)[wasmInstance], boundsCheckingSize
@@ -1451,6 +1486,8 @@ else
 end
 
 if X86_64
+    loadp UnboxedWasmCalleeStackSlot[cfr], ws0
+elsif LOONGARCH64
     loadp UnboxedWasmCalleeStackSlot[cfr], ws0
 end
 end
