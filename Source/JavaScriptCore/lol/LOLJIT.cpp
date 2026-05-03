@@ -2912,7 +2912,7 @@ void LOLJIT::emit_op_mod(const JSInstruction* currentInstruction)
     m_fastAllocator.releaseScratches(allocations);
 }
 
-#elif CPU(ARM64)
+#elif CPU(ARM64) || CPU(LOONGARCH64)
 
 void LOLJIT::emit_op_mod(const JSInstruction* currentInstruction)
 {
@@ -2927,13 +2927,16 @@ void LOLJIT::emit_op_mod(const JSInstruction* currentInstruction)
     GPRReg dividendGPR = lhsRegs.payloadGPR();
     GPRReg divisorGPR = rhsRegs.payloadGPR();
     GPRReg quotientThenRemainderGPR = s_scratch;
-    // GPRReg multiplyAnswerGPR = s_scratch;
     addSlowCase(branchTest32(Zero, divisorGPR));
 
+#if CPU(LOONGARCH64)
+    mod32(dividendGPR, divisorGPR, quotientThenRemainderGPR);
+#else
     // This is doing: x - ((x / y) * y)
     div32(dividendGPR, divisorGPR, quotientThenRemainderGPR);
     // This should only overflow for INT32_MIN % -1 but that will end up with quotientThenRemainderGPR == 0 and finally yield -0.0 as expected.
     multiplySub32(quotientThenRemainderGPR, divisorGPR, dividendGPR, quotientThenRemainderGPR);
+#endif
 
     // Make sure we're not accidentally producing a positive zero when it should be a negative zero.
     Jump numeratorPositive = branch32(GreaterThanOrEqual, dividendGPR, TrustedImm32(0));
@@ -3955,4 +3958,3 @@ MacroAssemblerCodeRef<JITThunkPtrTag> LOLJIT::slow_op_resolve_scopeGenerator(VM&
 WTF_ALLOW_UNSAFE_BUFFER_USAGE_END
 
 #endif // ENABLE(JIT) && USE(JSVALUE64)
-

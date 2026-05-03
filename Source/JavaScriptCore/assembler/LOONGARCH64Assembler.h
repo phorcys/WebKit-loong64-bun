@@ -32,6 +32,7 @@
 #include "AssemblerCommon.h"
 #include "LOONGARCH64Registers.h"
 #include <tuple>
+#include <wtf/Assertions.h>
 
 namespace JSC {
 
@@ -1580,7 +1581,7 @@ public:
     AssemblerLabel label()
     {
         AssemblerLabel result = m_buffer.label();
-        while (UNLIKELY(static_cast<int>(result.offset()) < m_indexOfTailOfLastWatchpoint)) {
+        while (static_cast<int>(result.offset()) < m_indexOfTailOfLastWatchpoint) [[unlikely]] {
             nop();
             result = m_buffer.label();
         }
@@ -1695,7 +1696,7 @@ public:
         splitSimm38(offset, si18, si20);
 
         location[0] = LOONGARCH64Instructions::PCADDU18I::construct(LOONGARCH64Registers::r19,
-                                                                    I20Immediate::v<I20Immediate>(si20 >> 18));
+                                                                    I20Immediate::v<I20Immediate>(si20));
         location[1] = LOONGARCH64Instructions::JIRL::construct(LOONGARCH64Registers::r19,
                                                                LOONGARCH64Registers::zero,
                                                                I16Immediate(si18 >> 2));
@@ -1704,7 +1705,7 @@ public:
 
     static void replaceWithNops(void* from, size_t memoryToFillWithNopsInBytes)
     {
-        fillNops<MachineCodeCopyMode::Memcpy>(from, memoryToFillWithNopsInBytes);
+        fillNops(from, memoryToFillWithNopsInBytes);
         cacheFlush(from, memoryToFillWithNopsInBytes);
     }
 
@@ -1729,7 +1730,6 @@ public:
         __builtin___clear_cache(reinterpret_cast<char*>(code), reinterpret_cast<char*>(end));
     }
 
-    template<MachineCodeCopyMode copy>
     static void fillNops(void* base, size_t size)
     {
         uint32_t* ptr = reinterpret_cast<uint32_t*>(base);
@@ -1740,7 +1740,7 @@ public:
                                                                 LOONGARCH64Registers::zero,
                                                                 I12Immediate::v<I12Immediate, 0>());
         for (size_t i = 0, n = size / sizeof(uint32_t); i < n; ++i)
-            machineCodeCopy<copy>(&ptr[i], &nop, sizeof(uint32_t));
+            machineCodeCopy<memcpyRepatch>(&ptr[i], &nop, sizeof(uint32_t));
     }
 
     typedef enum {
@@ -2415,7 +2415,7 @@ protected:
             splitSimm38(offset, si18, si20);
 
             location[0] = LOONGARCH64Instructions::PCADDU18I::construct(LOONGARCH64Registers::r19,
-                                                                        I20Immediate::v<I20Immediate>(si20 >> 18));
+                                                                        I20Immediate::v<I20Immediate>(si20));
             location[1] = LOONGARCH64Instructions::JIRL::construct(LOONGARCH64Registers::r19,
                                                                    destination,
                                                                    I16Immediate(si18 >> 2));
@@ -2544,7 +2544,7 @@ protected:
             splitSimm38(offset, si18, si20);
 
             location[1] = LOONGARCH64Instructions::PCADDU18I::construct(LOONGARCH64Registers::r19,
-                                                                        I20Immediate::v<I20Immediate>(si20 >> 18));
+                                                                        I20Immediate::v<I20Immediate>(si20));
             location[2] = LOONGARCH64Instructions::JIRL::construct(LOONGARCH64Registers::r19,
                                                                    LOONGARCH64Registers::zero,
                                                                    I16Immediate(si18 >> 2));

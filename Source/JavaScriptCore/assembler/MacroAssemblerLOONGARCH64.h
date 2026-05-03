@@ -271,6 +271,15 @@ public:
         m_assembler.add_dInsn(dest, op1, op2);
     }
 
+    void add64(FPRegisterID op1, FPRegisterID op2, FPRegisterID dest)
+    {
+        auto temp = temps<Data, Data2>();
+        m_assembler.movfr2grInsn<64>(temp.data(), op1);
+        m_assembler.movfr2grInsn<64>(temp.data2(), op2);
+        m_assembler.add_dInsn(temp.data(), temp.data(), temp.data2());
+        m_assembler.movgr2fr_dInsn(dest, temp.data());
+    }
+
     void add64(TrustedImm32 imm, RegisterID dest)
     {
         add64(imm, dest, dest);
@@ -446,6 +455,15 @@ public:
         m_assembler.sub_dInsn(dest, op1, op2);
     }
 
+    void sub64(FPRegisterID op1, FPRegisterID op2, FPRegisterID dest)
+    {
+        auto temp = temps<Data, Data2>();
+        m_assembler.movfr2grInsn<64>(temp.data(), op1);
+        m_assembler.movfr2grInsn<64>(temp.data2(), op2);
+        m_assembler.sub_dInsn(temp.data(), temp.data(), temp.data2());
+        m_assembler.movgr2fr_dInsn(dest, temp.data());
+    }
+
     void sub64(TrustedImm32 imm, RegisterID dest)
     {
         sub64(dest, imm, dest);
@@ -482,6 +500,12 @@ public:
         auto temp = temps<Data>();
         loadImmediate(imm, temp.data());
         m_assembler.mul_wInsn(dest, temp.data(), rhs);
+        m_assembler.maskRegister<32>(dest);
+    }
+
+    void mod32(RegisterID lhs, RegisterID rhs, RegisterID dest)
+    {
+        m_assembler.mod_wInsn(dest, lhs, rhs);
         m_assembler.maskRegister<32>(dest);
     }
 
@@ -708,7 +732,7 @@ public:
 
     void lshift64(RegisterID src, TrustedImm32 imm, RegisterID dest)
     {
-        if (UNLIKELY(!imm.m_value))
+        if (!imm.m_value) [[unlikely]]
             return move(src, dest);
         m_assembler.slli_dInsn(dest, src, imm.m_value & 0x3f);
     }
@@ -749,6 +773,13 @@ public:
         m_assembler.maskRegister<32>(dest);
     }
 
+    void rshift32(TrustedImm32 imm, RegisterID shiftAmount, RegisterID dest)
+    {
+        auto temp = temps<Data>();
+        loadImmediate(imm, temp.data());
+        rshift32(temp.data(), shiftAmount, dest);
+    }
+
     void rshift64(RegisterID shiftAmount, RegisterID dest)
     {
         rshift64(dest, shiftAmount, dest);
@@ -766,7 +797,7 @@ public:
 
     void rshift64(RegisterID src, TrustedImm32 imm, RegisterID dest)
     {
-        if (UNLIKELY(!imm.m_value))
+        if (!imm.m_value) [[unlikely]]
             return move(src, dest);
         m_assembler.srai_dInsn(dest, src, imm.m_value & 0x3f);
     }
@@ -793,6 +824,13 @@ public:
         m_assembler.maskRegister<32>(dest);
     }
 
+    void urshift32(TrustedImm32 imm, RegisterID shiftAmount, RegisterID dest)
+    {
+        auto temp = temps<Data>();
+        loadImmediate(imm, temp.data());
+        urshift32(temp.data(), shiftAmount, dest);
+    }
+
     void addUnsignedRightShift32(RegisterID src1, RegisterID src2, TrustedImm32 amount, RegisterID dest)
     {
         // dest = src1 + (src2 >> amount)
@@ -817,7 +855,7 @@ public:
 
     void urshift64(RegisterID src, TrustedImm32 imm, RegisterID dest)
     {
-        if (UNLIKELY(!imm.m_value))
+        if (!imm.m_value) [[unlikely]]
             return move(src, dest);
         m_assembler.srli_dInsn(dest, src, imm.m_value & 0x3f);
     }
@@ -3114,10 +3152,7 @@ public:
 
     Jump branchFloatWithZero(DoubleCondition cond, FPRegisterID left)
     {
-        UNUSED_PARAM(cond);
-        UNUSED_PARAM(left);
-        UNREACHABLE_FOR_PLATFORM();
-        return { };
+        return branchFPWithZero<32>(cond, left);
     }
 
     Jump branchDouble(DoubleCondition cond, FPRegisterID lhs, FPRegisterID rhs)
@@ -3127,10 +3162,7 @@ public:
 
     Jump branchDoubleWithZero(DoubleCondition cond, FPRegisterID left)
     {
-        UNUSED_PARAM(cond);
-        UNUSED_PARAM(left);
-        UNREACHABLE_FOR_PLATFORM();
-        return { };
+        return branchFPWithZero<64>(cond, left);
     }
 
     Jump branchDoubleNonZero(FPRegisterID reg, FPRegisterID)
@@ -3477,6 +3509,16 @@ public:
             roundFP<64, LOONGARCH64Assembler::FPRoundingMode::RZ>(src, dest);
     }
 
+    void truncFloat(FPRegisterID src, FPRegisterID dest)
+    {
+        roundTowardZeroFloat(src, dest);
+    }
+
+    void truncDouble(FPRegisterID src, FPRegisterID dest)
+    {
+        roundTowardZeroDouble(src, dest);
+    }
+
     void andFloat(FPRegisterID op1, FPRegisterID op2, FPRegisterID dest)
     {
         if (supportsLSX())
@@ -3551,18 +3593,12 @@ public:
 
     void compareDoubleWithZero(DoubleCondition cond, FPRegisterID left, RegisterID dest)
     {
-        UNUSED_PARAM(cond);
-        UNUSED_PARAM(left);
-        UNUSED_PARAM(dest);
-        UNREACHABLE_FOR_PLATFORM();
+        compareFPWithZero<64>(cond, left, dest);
     }
 
     void compareFloatWithZero(DoubleCondition cond, FPRegisterID left, RegisterID dest)
     {
-        UNUSED_PARAM(cond);
-        UNUSED_PARAM(left);
-        UNUSED_PARAM(dest);
-        UNREACHABLE_FOR_PLATFORM();
+        compareFPWithZero<32>(cond, left, dest);
     }
 
     void convertInt32ToFloat(RegisterID src, FPRegisterID dest)
@@ -3582,6 +3618,15 @@ public:
         auto temp = temps<Data>();
         loadImmediate(imm, temp.data());
         convertInt32ToDouble(temp.data(), dest);
+    }
+
+    void convertUInt32ToDouble(RegisterID src, FPRegisterID dest)
+    {
+        auto temp = temps<Data>();
+        RELEASE_ASSERT(src != temp.data());
+        m_assembler.slli_dInsn(temp.data(), src, 32);
+        m_assembler.srli_dInsn(temp.data(), temp.data(), 32);
+        convertInt64ToDouble(temp.data(), dest);
     }
 
     void convertInt64ToFloat(RegisterID src, FPRegisterID dest)
@@ -3726,27 +3771,9 @@ public:
 
     void truncateDoubleToUint32(FPRegisterID src, RegisterID dest)
     {
-        auto temp = temps<Data>();
-        RELEASE_ASSERT(src != fpTempRegister && src != fpTempRegister2 && dest != temp.data());
-        m_assembler.addi_dInsn(LOONGARCH64Registers::sp, LOONGARCH64Registers::sp, Imm::I12<-4>());
-        m_assembler.lu52i_dInsn(temp.data(), LOONGARCH64Registers::zero, Imm::I12<1054>());
-        m_assembler.st_dInsn(temp.data(), LOONGARCH64Registers::sp, Imm::I12<0>());
-        // fpTempRegister2 = 0x41e0000000000000 = 2147483648.0
-        m_assembler.fld_dInsn(fpTempRegister2, LOONGARCH64Registers::sp, Imm::I12<0>());
-        m_assembler.fcmp_sleInsn<64>(fcc0, fpTempRegister2, src);
-        m_assembler.bcnezInsn(fcc0, 16 /* DON'T forget to modify 16 if changed the context below */);
-        {
-            m_assembler.ftintrz_wInsn<64>(fpTempRegister, src);
-            m_assembler.movfr2grInsn<32>(dest, fpTempRegister);
-            m_assembler.bInsn(28 /* DON'T forget to modify 28 if changed the context below */);
-        }
-        m_assembler.fmovInsn<64>(fpTempRegister, src); // keep src
-        m_assembler.fsubInsn<64>(fpTempRegister, fpTempRegister, fpTempRegister2);
-        m_assembler.ftintrz_wInsn<64>(fpTempRegister, fpTempRegister);
-        m_assembler.movfr2grInsn<32>(dest, fpTempRegister);
-        m_assembler.lu12i_wInsn(temp.data(), Imm::I20<-524288>()); // temp.data() = 0xffffffff80000000
-        m_assembler.orInsn(dest, dest, temp.data());
-        m_assembler.addi_dInsn(LOONGARCH64Registers::sp, LOONGARCH64Registers::sp, Imm::I12<4>());
+        m_assembler.ftintrz_lInsn<64>(fpTempRegister, src);
+        m_assembler.movfr2grInsn<64>(dest, fpTempRegister);
+        m_assembler.maskRegister<32>(dest);
     }
 
     void truncateDoubleToInt64(FPRegisterID src, RegisterID dest)
@@ -4117,21 +4144,19 @@ public:
 
     void moveConditionallyFloatWithZero(DoubleCondition cond, FPRegisterID left, RegisterID src, RegisterID dest)
     {
-        UNUSED_PARAM(cond);
-        UNUSED_PARAM(left);
-        UNUSED_PARAM(src);
-        UNUSED_PARAM(dest);
-        UNREACHABLE_FOR_PLATFORM();
+        Jump invcondBranch = branchFPWithZero<32, true>(cond, left);
+        m_assembler.addi_dInsn(dest, src, Imm::I12<0>());
+        invcondBranch.link(this);
     }
 
     void moveConditionallyFloatWithZero(DoubleCondition cond, FPRegisterID left, RegisterID thenCase, RegisterID elseCase, RegisterID dest)
     {
-        UNUSED_PARAM(cond);
-        UNUSED_PARAM(left);
-        UNUSED_PARAM(thenCase);
-        UNUSED_PARAM(elseCase);
-        UNUSED_PARAM(dest);
-        UNREACHABLE_FOR_PLATFORM();
+        Jump invcondBranch = branchFPWithZero<32, true>(cond, left);
+        m_assembler.addi_dInsn(dest, thenCase, Imm::I12<0>());
+        Jump end = jump();
+        invcondBranch.link(this);
+        m_assembler.addi_dInsn(dest, elseCase, Imm::I12<0>());
+        end.link(this);
     }
 
     void moveConditionallyDouble(DoubleCondition cond, FPRegisterID lhs, FPRegisterID rhs, RegisterID src, RegisterID dest)
@@ -4153,21 +4178,19 @@ public:
 
     void moveConditionallyDoubleWithZero(DoubleCondition cond, FPRegisterID left, RegisterID src, RegisterID dest)
     {
-        UNUSED_PARAM(cond);
-        UNUSED_PARAM(left);
-        UNUSED_PARAM(src);
-        UNUSED_PARAM(dest);
-        UNREACHABLE_FOR_PLATFORM();
+        Jump invcondBranch = branchFPWithZero<64, true>(cond, left);
+        m_assembler.addi_dInsn(dest, src, Imm::I12<0>());
+        invcondBranch.link(this);
     }
 
     void moveConditionallyDoubleWithZero(DoubleCondition cond, FPRegisterID left, RegisterID thenCase, RegisterID elseCase, RegisterID dest)
     {
-        UNUSED_PARAM(cond);
-        UNUSED_PARAM(left);
-        UNUSED_PARAM(thenCase);
-        UNUSED_PARAM(elseCase);
-        UNUSED_PARAM(dest);
-        UNREACHABLE_FOR_PLATFORM();
+        Jump invcondBranch = branchFPWithZero<64, true>(cond, left);
+        m_assembler.addi_dInsn(dest, thenCase, Imm::I12<0>());
+        Jump end = jump();
+        invcondBranch.link(this);
+        m_assembler.addi_dInsn(dest, elseCase, Imm::I12<0>());
+        end.link(this);
     }
 
     void moveConditionallyTest32(ResultCondition cond, RegisterID value, RegisterID mask, RegisterID src, RegisterID dest)
@@ -4308,22 +4331,23 @@ public:
 
     void moveDoubleConditionallyFloatWithZero(DoubleCondition cond, FPRegisterID left, FPRegisterID thenCase, FPRegisterID elseCase, FPRegisterID dest)
     {
-        UNUSED_PARAM(cond);
-        UNUSED_PARAM(left);
-        UNUSED_PARAM(thenCase);
-        UNUSED_PARAM(elseCase);
-        UNUSED_PARAM(dest);
-        UNREACHABLE_FOR_PLATFORM();
+        Jump invcondBranch = branchFPWithZero<32, true>(cond, left);
+        m_assembler.fcopysignInsn<64>(dest, thenCase, thenCase);
+        Jump end = jump();
+        invcondBranch.link(this);
+        m_assembler.fcopysignInsn<64>(dest, elseCase, elseCase);
+        end.link(this);
     }
 
     void moveDoubleConditionallyDoubleWithZero(DoubleCondition cond, FPRegisterID left, FPRegisterID thenCase, FPRegisterID elseCase, FPRegisterID dest)
     {
-        UNUSED_PARAM(cond);
-        UNUSED_PARAM(left);
-        UNUSED_PARAM(thenCase);
-        UNUSED_PARAM(elseCase);
-        UNUSED_PARAM(dest);
-        UNREACHABLE_FOR_PLATFORM();
+        Jump invcondBranch = branchFPWithZero<64, true>(cond, left);
+        m_assembler.fcopysignInsn<64>(dest, thenCase, thenCase);
+        Jump end = jump();
+        invcondBranch.link(this);
+        m_assembler.dbarInsn(0x0);
+        m_assembler.fcopysignInsn<64>(dest, elseCase, elseCase);
+        end.link(this);
     }
 
     void moveDoubleConditionallyTest32(ResultCondition cond, RegisterID value, RegisterID mask, FPRegisterID trueSrc, FPRegisterID falseSrc, FPRegisterID dest)
@@ -4896,6 +4920,84 @@ private:
         return makeBranch(invert ? Equal : NotEqual, temp.data(), LOONGARCH64Registers::zero);
     }
 
+    template<unsigned fpSize, bool invert = false>
+    Jump branchFPWithZero(DoubleCondition cond, FPRegisterID lhs)
+    {
+        static_assert(fpSize == 32 || fpSize == 64);
+        auto temp = temps<Data>();
+        FPRegisterID zero = lhs == fpTempRegister2 ? fpTempRegister : fpTempRegister2;
+        JumpList unorderedJump;
+
+        m_assembler.fclassInsn<fpSize>(zero, lhs);
+        m_assembler.movfr2grInsn<fpSize>(temp.data(), zero);
+        m_assembler.andiInsn(temp.data(), temp.data(), Imm::I12<0b0000000011>());
+        unorderedJump.append(makeBranch(NotEqual, temp.data(), LOONGARCH64Registers::zero));
+
+        if constexpr (fpSize == 32)
+            moveZeroToFloat(zero);
+        else
+            moveZeroToDouble(zero);
+
+        switch (cond) {
+        case DoubleEqualAndOrdered:
+        case DoubleEqualOrUnordered:
+            m_assembler.fcmp_ceqInsn<fpSize>(fcc0, lhs, zero);
+            m_assembler.movcf2grInsn(temp.data(), fcc0);
+            break;
+        case DoubleNotEqualAndOrdered:
+        case DoubleNotEqualOrUnordered:
+            m_assembler.fcmp_ceqInsn<fpSize>(fcc0, lhs, zero);
+            m_assembler.movcf2grInsn(temp.data(), fcc0);
+            m_assembler.xoriInsn(temp.data(), temp.data(), Imm::I12<1>());
+            break;
+        case DoubleGreaterThanAndOrdered:
+        case DoubleGreaterThanOrUnordered:
+            m_assembler.fcmp_cltInsn<fpSize>(fcc0, zero, lhs);
+            m_assembler.movcf2grInsn(temp.data(), fcc0);
+            break;
+        case DoubleGreaterThanOrEqualAndOrdered:
+        case DoubleGreaterThanOrEqualOrUnordered:
+            m_assembler.fcmp_cleInsn<fpSize>(fcc0, zero, lhs);
+            m_assembler.movcf2grInsn(temp.data(), fcc0);
+            break;
+        case DoubleLessThanAndOrdered:
+        case DoubleLessThanOrUnordered:
+            m_assembler.fcmp_cltInsn<fpSize>(fcc0, lhs, zero);
+            m_assembler.movcf2grInsn(temp.data(), fcc0);
+            break;
+        case DoubleLessThanOrEqualAndOrdered:
+        case DoubleLessThanOrEqualOrUnordered:
+            m_assembler.fcmp_cleInsn<fpSize>(fcc0, lhs, zero);
+            m_assembler.movcf2grInsn(temp.data(), fcc0);
+            break;
+        }
+
+        Jump end = jump();
+        unorderedJump.link(this);
+
+        switch (cond) {
+        case DoubleEqualAndOrdered:
+        case DoubleNotEqualAndOrdered:
+        case DoubleGreaterThanAndOrdered:
+        case DoubleGreaterThanOrEqualAndOrdered:
+        case DoubleLessThanAndOrdered:
+        case DoubleLessThanOrEqualAndOrdered:
+            m_assembler.addi_dInsn(temp.data(), LOONGARCH64Registers::zero, Imm::I12<0>());
+            break;
+        case DoubleEqualOrUnordered:
+        case DoubleNotEqualOrUnordered:
+        case DoubleGreaterThanOrUnordered:
+        case DoubleGreaterThanOrEqualOrUnordered:
+        case DoubleLessThanOrUnordered:
+        case DoubleLessThanOrEqualOrUnordered:
+            m_assembler.addi_dInsn(temp.data(), LOONGARCH64Registers::zero, Imm::I12<1>());
+            break;
+        }
+
+        end.link(this);
+        return makeBranch(invert ? Equal : NotEqual, temp.data(), LOONGARCH64Registers::zero);
+    }
+
     template<unsigned fpSize, LOONGARCH64Assembler::FPRoundingMode RM>
     void roundFP(FPRegisterID src, FPRegisterID dest)
     {
@@ -5040,6 +5142,83 @@ private:
         case DoubleLessThanOrEqualAndOrdered:
         case DoubleLessThanOrEqualOrUnordered:
             m_assembler.fcmp_cleInsn<fpSize>(fcc0, lhs, rhs);
+            m_assembler.movcf2grInsn(dest, fcc0);
+            break;
+        }
+
+        Jump end = jump();
+        unorderedJump.link(this);
+
+        switch (cond) {
+        case DoubleEqualAndOrdered:
+        case DoubleNotEqualAndOrdered:
+        case DoubleGreaterThanAndOrdered:
+        case DoubleGreaterThanOrEqualAndOrdered:
+        case DoubleLessThanAndOrdered:
+        case DoubleLessThanOrEqualAndOrdered:
+            m_assembler.addi_dInsn(dest, LOONGARCH64Registers::zero, Imm::I12<0>());
+            break;
+        case DoubleEqualOrUnordered:
+        case DoubleNotEqualOrUnordered:
+        case DoubleGreaterThanOrUnordered:
+        case DoubleGreaterThanOrEqualOrUnordered:
+        case DoubleLessThanOrUnordered:
+        case DoubleLessThanOrEqualOrUnordered:
+            m_assembler.addi_dInsn(dest, LOONGARCH64Registers::zero, Imm::I12<1>());
+            break;
+        }
+
+        end.link(this);
+    }
+
+    template<unsigned fpSize>
+    void compareFPWithZero(DoubleCondition cond, FPRegisterID lhs, RegisterID dest)
+    {
+        static_assert(fpSize == 32 || fpSize == 64);
+        auto temp = temps<Data>();
+        FPRegisterID zero = lhs == fpTempRegister2 ? fpTempRegister : fpTempRegister2;
+        JumpList unorderedJump;
+
+        m_assembler.fclassInsn<fpSize>(zero, lhs);
+        m_assembler.movfr2grInsn<fpSize>(temp.data(), zero);
+        m_assembler.andiInsn(temp.data(), temp.data(), Imm::I12<0b0000000011>());
+        unorderedJump.append(makeBranch(NotEqual, temp.data(), LOONGARCH64Registers::zero));
+
+        if constexpr (fpSize == 32)
+            moveZeroToFloat(zero);
+        else
+            moveZeroToDouble(zero);
+
+        switch (cond) {
+        case DoubleEqualAndOrdered:
+        case DoubleEqualOrUnordered:
+            m_assembler.fcmp_ceqInsn<fpSize>(fcc0, lhs, zero);
+            m_assembler.movcf2grInsn(dest, fcc0);
+            break;
+        case DoubleNotEqualAndOrdered:
+        case DoubleNotEqualOrUnordered:
+            m_assembler.fcmp_ceqInsn<fpSize>(fcc0, lhs, zero);
+            m_assembler.movcf2grInsn(dest, fcc0);
+            m_assembler.xoriInsn(dest, dest, Imm::I12<1>());
+            break;
+        case DoubleGreaterThanAndOrdered:
+        case DoubleGreaterThanOrUnordered:
+            m_assembler.fcmp_cltInsn<fpSize>(fcc0, zero, lhs);
+            m_assembler.movcf2grInsn(dest, fcc0);
+            break;
+        case DoubleGreaterThanOrEqualAndOrdered:
+        case DoubleGreaterThanOrEqualOrUnordered:
+            m_assembler.fcmp_cleInsn<fpSize>(fcc0, zero, lhs);
+            m_assembler.movcf2grInsn(dest, fcc0);
+            break;
+        case DoubleLessThanAndOrdered:
+        case DoubleLessThanOrUnordered:
+            m_assembler.fcmp_cltInsn<fpSize>(fcc0, lhs, zero);
+            m_assembler.movcf2grInsn(dest, fcc0);
+            break;
+        case DoubleLessThanOrEqualAndOrdered:
+        case DoubleLessThanOrEqualOrUnordered:
+            m_assembler.fcmp_cleInsn<fpSize>(fcc0, lhs, zero);
             m_assembler.movcf2grInsn(dest, fcc0);
             break;
         }

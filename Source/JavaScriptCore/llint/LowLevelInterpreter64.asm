@@ -2732,7 +2732,7 @@ macro nativeCallTrampoline(executableOffsetToFunction)
     loadp JSCallee::m_scope[a0], a0
     loadp JSGlobalObject::m_vm[a0], a1
     storep cfr, VM::topCallFrame[a1]
-    if ARM64 or ARM64E or C_LOOP
+    if ARM64 or ARM64E or C_LOOP or LOONGARCH64
         storep lr, ReturnPC[cfr]
     end
     move cfr, a1
@@ -2764,7 +2764,7 @@ macro internalFunctionCallTrampoline(offsetOfFunction)
     loadp InternalFunction::m_globalObject[a2], a0
     loadp JSGlobalObject::m_vm[a0], a1
     storep cfr, VM::topCallFrame[a1]
-    if ARM64 or ARM64E or C_LOOP
+    if ARM64 or ARM64E or C_LOOP or LOONGARCH64
         storep lr, ReturnPC[cfr]
     end
     move cfr, a1

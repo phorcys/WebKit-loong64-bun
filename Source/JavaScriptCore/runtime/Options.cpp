@@ -799,13 +799,17 @@ void Options::notifyOptionsChanged()
 
 #if CPU(LOONGARCH64)
     Options::useRegExpJIT() = false;
+    Options::useDFGJIT() = false;
+    Options::useFTLJIT() = false;
 #endif
 
 #if !CPU(X86_64) && !CPU(ARM64)
     Options::useConcurrentGC() = false;
     Options::forceUnlinkedDFG() = false;
     Options::useWasmSIMD() = false;
+#if !CPU(LOONGARCH64)
     Options::useWasmIPInt() = false;
+#endif
 #if !CPU(ARM_THUMB2)
     Options::useBBQJIT() = false;
 #endif

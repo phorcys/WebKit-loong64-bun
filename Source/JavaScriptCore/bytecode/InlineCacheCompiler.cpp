@@ -1342,18 +1342,6 @@ ScratchRegisterAllocator InlineCacheCompiler::makeDefaultScratchAllocator(GPRReg
     return allocator;
 }
 
-#if ASSERT_ENABLED
-#if CPU(X86_64)
-static constexpr size_t prologueSizeInBytesDataIC = 1;
-#elif CPU(ARM64E)
-static constexpr size_t prologueSizeInBytesDataIC = 8;
-#elif CPU(ARM64)
-static constexpr size_t prologueSizeInBytesDataIC = 4;
-#else
-static constexpr size_t prologueSizeInBytesDataIC = 0;
-#endif
-#endif
-
 void InlineCacheCompiler::emitDataICPrologue(CCallHelpers& jit)
 {
     // Important difference from the normal emitPrologue is that DataIC handler does not change callFrameRegister.

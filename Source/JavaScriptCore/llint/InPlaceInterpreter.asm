@@ -104,6 +104,19 @@ elsif RISCV64
     const sc1 = ws1
     const sc2 = csr9
     const sc3 = csr10
+elsif LOONGARCH64
+    const PC = csr6
+    const MC = csr5
+
+    # Wasm Pinned Registers
+    const WI = csr0
+    const MB = csr3
+    const BC = csr4
+
+    const sc0 = ws0
+    const sc1 = ws1
+    const sc2 = csr1
+    const sc3 = csr2
 elsif ARMv7
     const PC = csr1
     const MC = t6
@@ -174,7 +187,7 @@ const IPIntLocalsBaseOffset = IPIntCalleeSaveSpaceStackAligned + LocalSize
 if X86_64
     const NumberOfWasmArgumentGPRs = 6
     const NumberOfVolatileGPRs = NumberOfWasmArgumentGPRs + 2 // +2 for ws0 and ws1
-elsif ARM64 or ARM64E or RISCV64
+elsif ARM64 or ARM64E or RISCV64 or LOONGARCH64
     const NumberOfWasmArgumentGPRs = 8
     const NumberOfVolatileGPRs = NumberOfWasmArgumentGPRs
 elsif ARMv7
@@ -1341,7 +1354,7 @@ op(wasm_throw_from_fault_handler_trampoline_reg_instance, macro ()
 end)
 
 op(ipint_entry, macro()
-if WEBASSEMBLY and (ARM64 or ARM64E or X86_64 or ARMv7)
+if WEBASSEMBLY and (ARM64 or ARM64E or X86_64 or ARMv7 or LOONGARCH64)
     preserveCallerPCAndCFR()
     saveIPIntRegisters()
     storep wasmInstance, CodeBlock[cfr]
@@ -1355,7 +1368,7 @@ else
 end
 end)
 
-if WEBASSEMBLY and (ARM64 or ARM64E or X86_64 or ARMv7)
+if WEBASSEMBLY and (ARM64 or ARM64E or X86_64 or ARMv7 or LOONGARCH64)
 .ipint_entry_end_local:
     loadp UnboxedWasmCalleeStackSlot[cfr], MC
     loadp Wasm::IPIntCallee::m_localInitBytecode + VectorBufferOffset[MC], MC
@@ -1478,7 +1491,7 @@ end
 end)
 
 op(ipint_table_catch_entry, macro()
-if WEBASSEMBLY and (ARM64 or ARM64E or X86_64 or ARMv7)
+if WEBASSEMBLY and (ARM64 or ARM64E or X86_64 or ARMv7 or LOONGARCH64)
     ipintCatchCommon()
 
     # push arguments but no ref: sp in a2, call normal operation
@@ -1496,7 +1509,7 @@ end
 end)
 
 op(ipint_table_catch_ref_entry, macro()
-if WEBASSEMBLY and (ARM64 or ARM64E or X86_64 or ARMv7)
+if WEBASSEMBLY and (ARM64 or ARM64E or X86_64 or ARMv7 or LOONGARCH64)
     ipintCatchCommon()
 
     # push both arguments and ref
@@ -1514,7 +1527,7 @@ end
 end)
 
 op(ipint_table_catch_all_entry, macro()
-if WEBASSEMBLY and (ARM64 or ARM64E or X86_64 or ARMv7)
+if WEBASSEMBLY and (ARM64 or ARM64E or X86_64 or ARMv7 or LOONGARCH64)
     ipintCatchCommon()
 
     # do nothing: 0 in sp for no arguments, call normal operation
@@ -1532,7 +1545,7 @@ end
 end)
 
 op(ipint_table_catch_allref_entry, macro()
-if WEBASSEMBLY and (ARM64 or ARM64E or X86_64 or ARMv7)
+if WEBASSEMBLY and (ARM64 or ARM64E or X86_64 or ARMv7 or LOONGARCH64)
     ipintCatchCommon()
 
     # push only the ref
@@ -2085,7 +2098,7 @@ _pinballHandlerRejectFunction:
 # 5. Instruction implementation #
 #################################
 
-if JSVALUE64 and (ARM64 or ARM64E or X86_64)
+if JSVALUE64 and (ARM64 or ARM64E or X86_64 or LOONGARCH64)
     include InPlaceInterpreter64
 else
 # For unimplemented architectures: make sure that the assertions can still find the labels

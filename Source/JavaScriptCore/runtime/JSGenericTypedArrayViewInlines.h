@@ -272,9 +272,7 @@ bool JSGenericTypedArrayView<Adaptor>::setWithSpecificType(
         Vector<typename Adaptor::Type, 32> buffer(length);
         transfer(buffer);
     } else {
-        Checked<size_t> sizeToAllocate = length;
-        sizeToAllocate *= sizeof(typename Adaptor::Type);
-        UniqueArray<typename Adaptor::Type> buffer = makeUniqueArray<typename Adaptor::Type>(sizeToAllocate);
+        UniqueArray<typename Adaptor::Type> buffer = makeUniqueArray<typename Adaptor::Type>(length);
         transfer(buffer);
     }
 
