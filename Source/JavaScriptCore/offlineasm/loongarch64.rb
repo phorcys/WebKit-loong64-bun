@@ -547,6 +547,194 @@ def loongarch64LowerImmediateSubtraction(list)
     newList
 end
 
+def loongarch64LowerAtomic(list)
+    def emitAtomicAddress(newList, node, address)
+        raise "Invalid atomic address" unless address.is_a? Address
+        return address.base if address.offset.value == 0
+
+        addressRegister = Tmp.new(node.codeOrigin, :gpr)
+        if address.offset.loongarch64RequiresLoad
+            offsetRegister = Tmp.new(node.codeOrigin, :gpr)
+            newList << Instruction.new(node.codeOrigin, "li.d", [address.offset, offsetRegister])
+            newList << Instruction.new(node.codeOrigin, "add.d", [address.base, offsetRegister, addressRegister])
+        else
+            newList << Instruction.new(node.codeOrigin, "addi.d", [address.base, address.offset, addressRegister])
+        end
+        addressRegister
+    end
+
+    def emitAtomicZeroExtend(newList, node, size, register)
+        case size
+        when :b
+            loongarch64LowerEmitMask(newList, node, :b, register, register)
+        when :h
+            loongarch64LowerEmitMask(newList, node, :h, register, register)
+        when :i
+            loongarch64LowerEmitMask(newList, node, :i, register, register)
+        when :q
+        else
+            raise "Invalid atomic size #{size}"
+        end
+    end
+
+    def emitAtomicLoad(newList, node, size)
+        loongarch64ValidateOperands(node.operands, [Address, RegisterID])
+        newList << Instruction.new(node.codeOrigin, "dbar", [])
+        case size
+        when :b
+            newList << Instruction.new(node.codeOrigin, "loadb", node.operands)
+        when :h
+            newList << Instruction.new(node.codeOrigin, "loadh", node.operands)
+        when :i
+            newList << Instruction.new(node.codeOrigin, "loadi", node.operands)
+        when :q
+            newList << Instruction.new(node.codeOrigin, "loadq", node.operands)
+        else
+            raise "Invalid atomic load size #{size}"
+        end
+        emitAtomicZeroExtend(newList, node, size, node.operands[1])
+        newList << Instruction.new(node.codeOrigin, "dbar", [])
+    end
+
+    def emitAtomicAM(newList, node, size, operation, src, address, dest)
+        addr = emitAtomicAddress(newList, node, address)
+        value = src
+        result = dest
+
+        if value == result
+            value = Tmp.new(node.codeOrigin, :gpr)
+            newList << Instruction.new(node.codeOrigin, "move", [src, value])
+        end
+
+        if result == addr
+            result = Tmp.new(node.codeOrigin, :gpr)
+        end
+
+        suffix = { :b => "b", :h => "h", :i => "w", :q => "d" }[size]
+        raise "Invalid atomic AM size #{size}" unless suffix
+        newList << Instruction.new(node.codeOrigin, "#{operation}_db.#{suffix}", [result, value, addr])
+        emitAtomicZeroExtend(newList, node, size, result)
+        newList << Instruction.new(node.codeOrigin, "move", [result, dest]) if result != dest
+    end
+
+    def emitAtomicAMFromOperands(newList, node, size, operation)
+        case loongarch64OperandTypes(node.operands)
+        when [RegisterID, Address, RegisterID]
+            emitAtomicAM(newList, node, size, operation, node.operands[0], node.operands[1], node.operands[2])
+        when [RegisterID, Address]
+            emitAtomicAM(newList, node, size, operation, node.operands[0], node.operands[1], node.operands[0])
+        else
+            loongarch64RaiseMismatchedOperands(node.operands)
+        end
+    end
+
+    def emitAtomicCAS(newList, node, size, expectedAndResult, newValue, address)
+        addr = emitAtomicAddress(newList, node, address)
+        value = newValue
+        result = expectedAndResult
+
+        if value == result
+            value = Tmp.new(node.codeOrigin, :gpr)
+            newList << Instruction.new(node.codeOrigin, "move", [newValue, value])
+        end
+
+        if result == addr
+            result = Tmp.new(node.codeOrigin, :gpr)
+            newList << Instruction.new(node.codeOrigin, "move", [expectedAndResult, result])
+        end
+
+        suffix = { :b => "b", :h => "h", :i => "w", :q => "d" }[size]
+        raise "Invalid atomic CAS size #{size}" unless suffix
+        newList << Instruction.new(node.codeOrigin, "amcas_db.#{suffix}", [result, value, addr])
+        emitAtomicZeroExtend(newList, node, size, result)
+        newList << Instruction.new(node.codeOrigin, "move", [result, expectedAndResult]) if result != expectedAndResult
+    end
+
+    def emitAtomicCASLoop(newList, node, size, src, address, dest, operation)
+        addr = emitAtomicAddress(newList, node, address)
+        oldValue = Tmp.new(node.codeOrigin, :gpr)
+        newValue = Tmp.new(node.codeOrigin, :gpr)
+        result = dest == addr ? Tmp.new(node.codeOrigin, :gpr) : dest
+        loop = LocalLabel.unique(node.codeOrigin, "loongarch64_atomic_loop")
+
+        newList << loop
+        case size
+        when :b
+            newList << Instruction.new(node.codeOrigin, "loadb", [Address.new(node.codeOrigin, addr, Immediate.new(node.codeOrigin, 0)), oldValue])
+        when :h
+            newList << Instruction.new(node.codeOrigin, "loadh", [Address.new(node.codeOrigin, addr, Immediate.new(node.codeOrigin, 0)), oldValue])
+        else
+            raise "CAS loop is only needed for byte/halfword atomics"
+        end
+
+        case operation
+        when :or
+            newList << Instruction.new(node.codeOrigin, "or", [oldValue, src, newValue])
+        when :xor
+            newList << Instruction.new(node.codeOrigin, "xor", [oldValue, src, newValue])
+        when :clear
+            if size == :b
+                newList << Instruction.new(node.codeOrigin, "xori", [src, Immediate.new(node.codeOrigin, 0xff), newValue])
+            else
+                newList << Instruction.new(node.codeOrigin, "li.d", [Immediate.new(node.codeOrigin, 0xffff), newValue])
+                newList << Instruction.new(node.codeOrigin, "xor", [src, newValue, newValue])
+            end
+            newList << Instruction.new(node.codeOrigin, "and", [oldValue, newValue, newValue])
+        else
+            raise "Invalid atomic CAS loop operation #{operation}"
+        end
+
+        newList << Instruction.new(node.codeOrigin, "move", [oldValue, result])
+        emitAtomicCAS(newList, node, size, result, newValue, Address.new(node.codeOrigin, addr, Immediate.new(node.codeOrigin, 0)))
+        newList << Instruction.new(node.codeOrigin, "bne", [result, oldValue, LocalLabelReference.new(node.codeOrigin, loop)])
+        newList << Instruction.new(node.codeOrigin, "move", [result, dest]) if result != dest
+    end
+
+    newList = []
+    list.each {
+        | node |
+        if node.is_a? Instruction
+            case node.opcode
+            when /^atomicload(b|h|i|q)$/
+                emitAtomicLoad(newList, node, $1.to_sym)
+            when /^atomicxchgadd(b|h|i|q)$/
+                emitAtomicAMFromOperands(newList, node, $1.to_sym, "amadd")
+            when /^atomicxchg(b|h|i|q)$/
+                emitAtomicAMFromOperands(newList, node, $1.to_sym, "amswap")
+            when /^atomicxchgor(b|h)$/
+                loongarch64ValidateOperands(node.operands, [RegisterID, Address, RegisterID])
+                emitAtomicCASLoop(newList, node, $1.to_sym, node.operands[0], node.operands[1], node.operands[2], :or)
+            when /^atomicxchgor(i|q)$/
+                loongarch64ValidateOperands(node.operands, [RegisterID, Address, RegisterID])
+                emitAtomicAM(newList, node, $1.to_sym, "amor", node.operands[0], node.operands[1], node.operands[2])
+            when /^atomicxchgxor(b|h)$/
+                loongarch64ValidateOperands(node.operands, [RegisterID, Address, RegisterID])
+                emitAtomicCASLoop(newList, node, $1.to_sym, node.operands[0], node.operands[1], node.operands[2], :xor)
+            when /^atomicxchgxor(i|q)$/
+                loongarch64ValidateOperands(node.operands, [RegisterID, Address, RegisterID])
+                emitAtomicAM(newList, node, $1.to_sym, "amxor", node.operands[0], node.operands[1], node.operands[2])
+            when /^atomicxchgclear(b|h)$/
+                loongarch64ValidateOperands(node.operands, [RegisterID, Address, RegisterID])
+                emitAtomicCASLoop(newList, node, $1.to_sym, node.operands[0], node.operands[1], node.operands[2], :clear)
+            when /^atomicxchgclear(i|q)$/
+                loongarch64ValidateOperands(node.operands, [RegisterID, Address, RegisterID])
+                inverted = Tmp.new(node.codeOrigin, :gpr)
+                newList << Instruction.new(node.codeOrigin, "li.d", [Immediate.new(node.codeOrigin, -1), inverted])
+                newList << Instruction.new(node.codeOrigin, "xor", [node.operands[0], inverted, inverted])
+                emitAtomicAM(newList, node, $1.to_sym, "amand", inverted, node.operands[1], node.operands[2])
+            when /^atomicweakcas(b|h|i|q)$/
+                loongarch64ValidateOperands(node.operands, [RegisterID, RegisterID, Address])
+                emitAtomicCAS(newList, node, $1.to_sym, node.operands[0], node.operands[1], node.operands[2])
+            else
+                newList << node
+            end
+        else
+            newList << node
+        end
+    }
+    newList
+end
+
 def loongarch64LowerOperation(list)
     def emitLoadOperation(newList, node, size)
         loongarch64ValidateOperands(node.operands, [Address, RegisterID])
@@ -1867,6 +2055,7 @@ class Sequence
         result = riscLowerMalformedImmediates(result, -0x800..0x7ff, -0x800..0x7ff)
         result = loongarch64LowerImmediateSubtraction(result)
 
+        result = loongarch64LowerAtomic(result)
         result = loongarch64LowerOperation(result)
         result = loongarch64LowerTest(result)
         result = loongarch64LowerCompare(result)
@@ -2014,6 +2203,12 @@ class Instruction
             $asm.puts "#{laop(opcode)} 0x5"
         when "dbar"
             $asm.puts "#{laop(opcode)} 0x0"
+        when /^(amcas_db|amswap_db|amadd_db)\.(b|h|w|d)$/
+            loongarch64ValidateOperands(operands, [RegisterID, RegisterID, RegisterID])
+            $asm.puts "#{laop(opcode)} #{operands[0].loongarch64Operand}, #{operands[1].loongarch64Operand}, #{operands[2].loongarch64Operand}"
+        when /^(amand_db|amor_db|amxor_db)\.(w|d)$/
+            loongarch64ValidateOperands(operands, [RegisterID, RegisterID, RegisterID])
+            $asm.puts "#{laop(opcode)} #{operands[0].loongarch64Operand}, #{operands[1].loongarch64Operand}, #{operands[2].loongarch64Operand}"
         when /^fld.(s|d)$/
             loongarch64ValidateOperands(operands, [Address, FPRegisterID])
             $asm.puts "#{laop(opcode)} #{operands[1].loongarch64Operand}, #{operands[0].loongarch64Operand}"
