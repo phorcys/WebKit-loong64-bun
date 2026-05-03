@@ -783,11 +783,13 @@ extern "C" void SYSV_ABI ipint_entry();
     m(0x11, uint_stack_vector) \
     m(0x12, uint_ret) \
 
-#if !ENABLE(C_LOOP) && (CPU(ADDRESS64) && (CPU(ARM64) || CPU(X86_64)))
+#if !ENABLE(C_LOOP) && (CPU(ADDRESS64) && (CPU(ARM64) || CPU(X86_64) || CPU(LOONGARCH64)))
 FOR_EACH_IPINT_OPCODE(IPINT_VALIDATE_DEFINE_FUNCTION);
 FOR_EACH_IPINT_GC_OPCODE(IPINT_VALIDATE_DEFINE_FUNCTION);
 FOR_EACH_IPINT_CONVERSION_OPCODE(IPINT_VALIDATE_DEFINE_FUNCTION);
+#if CPU(ARM64) || CPU(X86_64)
 FOR_EACH_IPINT_SIMD_OPCODE(IPINT_VALIDATE_DEFINE_FUNCTION);
+#endif
 FOR_EACH_IPINT_ATOMIC_OPCODE(IPINT_ATOMIC_VALIDATE_DEFINE_FUNCTION);
 FOR_EACH_IPINT_ARGUMINT_OPCODE(IPINT_VALIDATE_DEFINE_FUNCTION);
 FOR_EACH_IPINT_MINT_CALL_OPCODE(IPINT_VALIDATE_DEFINE_FUNCTION);
@@ -797,7 +799,7 @@ FOR_EACH_IPINT_UINT_OPCODE(IPINT_VALIDATE_DEFINE_FUNCTION);
 
 namespace JSC { namespace IPInt {
 
-#if LLINT_TRACING
+#if LLINT_TRACING || CPU(LOONGARCH64)
 // When LLINT_TRACING is enabled, each ipintOp handler has a trace prologue injected,
 // which can push the largest handlers past 256 bytes. Double the slot size in tracing
 // builds so the dispatch table stays valid.
@@ -807,9 +809,18 @@ constexpr uint64_t alignIPInt = 256;
 #endif
 // FIXME: adding an adds instruction to offlineasm could shrink atomic handlers back to 256 bytes
 constexpr uint64_t alignAtomicIPInt = 2 * alignIPInt;
+#if CPU(LOONGARCH64)
+constexpr uint64_t alignArgumInt = 128;
+constexpr uint64_t alignUInt = 128;
+#else
 constexpr uint64_t alignArgumInt = 64;
 constexpr uint64_t alignUInt = 64;
+#endif
+#if CPU(LOONGARCH64)
+constexpr uint64_t alignMInt = 128;
+#else
 constexpr uint64_t alignMInt = 64;
+#endif
 
 
 void initialize();

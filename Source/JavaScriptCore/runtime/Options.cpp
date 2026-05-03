@@ -809,6 +809,8 @@ void Options::notifyOptionsChanged()
     Options::useWasmSIMD() = false;
 #if !CPU(LOONGARCH64)
     Options::useWasmIPInt() = false;
+#else
+    Options::useWasmIPIntSIMD() = false;
 #endif
 #if !CPU(ARM_THUMB2)
     Options::useBBQJIT() = false;

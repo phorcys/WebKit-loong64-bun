@@ -31,6 +31,7 @@
 #if ENABLE(WEBASSEMBLY)
 
 #include "ButterflyInlines.h"
+#include "CallFrameInlines.h"
 #include "FrameTracers.h"
 #include "IteratorOperations.h"
 #include "JITExceptions.h"
@@ -55,6 +56,7 @@
 #include "WasmOSREntryPlan.h"
 #include "WasmOperationsInlines.h"
 #include "WasmWorklist.h"
+#include "WebAssemblyModuleRecord.h"
 #include <bit>
 #include <wtf/DataLog.h>
 #include <wtf/Locker.h>
@@ -69,6 +71,35 @@ namespace Wasm {
 
 namespace WasmOperationsInternal {
 static constexpr bool verbose = false;
+
+static inline JSGlobalObject* globalObjectForNativeCalleeFrame(CallFrame* callFrame)
+{
+    while (callFrame->callee().isNativeCallee()) {
+        auto* nativeCallee = callFrame->callee().asNativeCallee();
+        switch (nativeCallee->category()) {
+        case NativeCallee::Category::Wasm:
+            return callFrame->wasmInstance()->realm();
+        case NativeCallee::Category::InlineCache:
+            callFrame = callFrame->callerFrame();
+            RELEASE_ASSERT(callFrame);
+            break;
+        }
+    }
+    return callFrame->jsCallee()->realm();
+}
+
+static inline JSGlobalObject* globalObjectForWasmConversion(CallFrame* callFrame, JSWebAssemblyInstance* instance)
+{
+    if (JSGlobalObject* globalObject = instance->globalObject())
+        return globalObject;
+    if (WebAssemblyModuleRecord* moduleRecord = instance->moduleRecord()) {
+        if (JSGlobalObject* globalObject = moduleRecord->globalObject())
+            return globalObject;
+    }
+    JSGlobalObject* globalObject = globalObjectForNativeCalleeFrame(callFrame);
+    RELEASE_ASSERT(globalObject);
+    return globalObject;
+}
 }
 
 JSC_DEFINE_JIT_OPERATION(operationJSToWasmEntryWrapperBuildFrame, JSToWasmCallee*, (void* sp, CallFrame* callFrame, WebAssemblyFunction* function))
@@ -1283,8 +1314,8 @@ JSC_DEFINE_JIT_OPERATION(operationConvertToF64, double, (JSWebAssemblyInstance* 
 {
     CallFrame* callFrame = DECLARE_WASM_CALL_FRAME(instance);
     assertCalleeIsReferenced(callFrame, instance);
-    VM& vm = instance->vm();
-    JSGlobalObject* globalObject = instance->realm();
+    JSGlobalObject* globalObject = WasmOperationsInternal::globalObjectForWasmConversion(callFrame, instance);
+    VM& vm = globalObject->vm();
     WasmOperationPrologueCallFrameTracer tracer(vm, callFrame, OUR_RETURN_ADDRESS);
     auto scope = DECLARE_THROW_SCOPE(vm);
     OPERATION_RETURN(scope, JSValue::decode(v).toNumber(globalObject));
@@ -1364,8 +1395,8 @@ JSC_DEFINE_JIT_OPERATION(operationConvertToBigInt, EncodedJSValue, (JSWebAssembl
 {
     CallFrame* callFrame = DECLARE_WASM_CALL_FRAME(instance);
     assertCalleeIsReferenced(callFrame, instance);
-    VM& vm = instance->vm();
-    JSGlobalObject* globalObject = instance->realm();
+    JSGlobalObject* globalObject = WasmOperationsInternal::globalObjectForWasmConversion(callFrame, instance);
+    VM& vm = globalObject->vm();
     WasmOperationPrologueCallFrameTracer tracer(vm, callFrame, OUR_RETURN_ADDRESS);
     auto scope = DECLARE_THROW_SCOPE(vm);
     OPERATION_RETURN(scope, JSValue::encode(JSBigInt::makeHeapBigIntOrBigInt32(globalObject, value)));

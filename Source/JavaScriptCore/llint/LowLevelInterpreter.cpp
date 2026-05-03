@@ -514,6 +514,8 @@ WTF_ALLOW_UNSAFE_BUFFER_USAGE_END
 #define OFFLINE_ASM_BEGIN_SPACER "brk #" STRINGIZE_VALUE_OF(WTF_FATAL_CRASH_CODE) "\n"
 #elif CPU(X86_64)
 #define OFFLINE_ASM_BEGIN_SPACER "int3\n"
+#elif CPU(LOONGARCH64)
+#define OFFLINE_ASM_BEGIN_SPACER "break 0x5\n"
 #else
 #define OFFLINE_ASM_BEGIN_SPACER ".int 0xbadbeef0\n"
 #endif
@@ -613,7 +615,7 @@ WTF_ALLOW_UNSAFE_BUFFER_USAGE_END
 #elif CPU(X86_64)
 #define OFFLINE_ASM_ALIGN_TRAP(align) OFFLINE_ASM_BEGIN_SPACER "\n .balign " #align ", 0xcc\n" // pad with int 3 instructions
 #elif CPU(LOONGARCH64)
-#define OFFLINE_ASM_ALIGN_TRAP(align) OFFLINE_ASM_BEGIN_SPACER "\n .balign " #align ", 0x2a0005\n" // pad with break 0x5 instructions
+#define OFFLINE_ASM_ALIGN_TRAP(align) OFFLINE_ASM_BEGIN_SPACER "\n .balignl " #align ", 0x002a0005\n" // pad with break 0x5 instructions
 #elif CPU(ARM)
 #define OFFLINE_ASM_ALIGN_TRAP(align) OFFLINE_ASM_BEGIN_SPACER "\n .balignw " #align ", 0xde00\n" // pad with udf instructions
 #elif CPU(RISCV64)

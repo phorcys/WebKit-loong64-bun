@@ -31,7 +31,11 @@ macro saveIPIntRegisters()
     if ARM64 or ARM64E
         storepairq MC, PC, -0x10[cfr]
         storeq wasmInstance, -0x18[cfr]
-    elsif X86_64 or RISCV64 or LOONGARCH64
+    elsif RISCV64 or LOONGARCH64
+        storep PC, -0x8[cfr]
+        storep MC, -0x10[cfr]
+        storep wasmInstance, -0x18[cfr]
+    elsif X86_64
         storep PC, -0x8[cfr]
         storep MC, -0x10[cfr]
         storep wasmInstance, -0x18[cfr]
@@ -45,7 +49,11 @@ macro restoreIPIntRegisters()
     if ARM64 or ARM64E
         loadpairq -0x10[cfr], MC, PC
         loadq -0x18[cfr], wasmInstance
-    elsif X86_64 or RISCV64 or LOONGARCH64
+    elsif RISCV64 or LOONGARCH64
+        loadp -0x8[cfr], PC
+        loadp -0x10[cfr], MC
+        loadp -0x18[cfr], wasmInstance
+    elsif X86_64
         loadp -0x8[cfr], PC
         loadp -0x10[cfr], MC
         loadp -0x18[cfr], wasmInstance
@@ -55,7 +63,7 @@ end
 
 # Dispatch target bases
 
-if ARM64 or ARM64E or X86_64 or LOONGARCH64
+if ARM64 or ARM64E or RISCV64 or LOONGARCH64 or X86_64
 const ipint_dispatch_base = _ipint_unreachable
 end
 
@@ -94,7 +102,7 @@ end
 # Every value on the stack is always 16 bytes! This makes life easy.
 
 macro pushQuad(reg)
-    if ARM64 or ARM64E
+    if ARM64 or ARM64E or RISCV64 or LOONGARCH64
         push reg, reg
     elsif X86_64
         push reg, reg
@@ -111,6 +119,9 @@ macro popQuad(reg)
     # FIXME: emit post-increment in offlineasm
     if ARM64 or ARM64E
         loadqinc [sp], reg, V128ISize
+    elsif RISCV64 or LOONGARCH64
+        loadq [sp], reg
+        addq V128ISize, sp
     elsif X86_64
         loadq [sp], reg
         addq V128ISize, sp
@@ -217,7 +228,7 @@ macro argumINTDispatch()
     addp 1, MC
     bbgteq argumINTTmp, (constexpr IPInt::ArgumINTBytecode::NumOpcodes), _ipint_argument_dispatch_err
     lshiftp (constexpr (WTF::fastLog2(JSC::IPInt::alignArgumInt))), argumINTTmp
-if ARM64 or ARM64E or X86_64 or LOONGARCH64
+if ARM64 or ARM64E or RISCV64 or LOONGARCH64 or X86_64
     pcrtoaddr _argumINT_begin, argumINTDsp
     addp argumINTTmp, argumINTDsp
     jmp argumINTDsp
@@ -236,7 +247,7 @@ macro argumINTInitializeDefaultLocals()
 if ARM64 or ARM64E
     # offlineasm doesn't have xzr so emit it
     emit "stp x19, xzr, [x9]"
-elsif X86_64
+elsif X86_64 or LOONGARCH64
     storep argumINTTmp, [argumINTDst]
     storep 0, 8[argumINTDst]
 end
@@ -407,6 +418,8 @@ ipintOp(_end, macro()
     validateOpcodeConfig(t1)
 if X86_64
     loadp UnboxedWasmCalleeStackSlot[cfr], ws0
+elsif LOONGARCH64
+    loadp UnboxedWasmCalleeStackSlot[cfr], ws0
 end
     loadp Wasm::IPIntCallee::m_bytecodeEnd[ws0], t1
     bqeq PC, t1, .ipint_end_ret
@@ -418,6 +431,8 @@ end)
 .ipint_end_ret:
     ipintEpilogueOSR(10)
 if X86_64
+    loadp UnboxedWasmCalleeStackSlot[cfr], ws0
+elsif LOONGARCH64
     loadp UnboxedWasmCalleeStackSlot[cfr], ws0
 end
     # uINT buffer lives on the signature RTT. The stack-return FP offset is
@@ -509,6 +524,8 @@ ipintOp(_return, macro()
     # ret
 
 if X86_64
+    loadp UnboxedWasmCalleeStackSlot[cfr], ws0
+elsif LOONGARCH64
     loadp UnboxedWasmCalleeStackSlot[cfr], ws0
 end
 
@@ -3089,6 +3106,10 @@ ipintOp(_gc_prefix, macro()
     if ARM64 or ARM64E
         addlshiftp t1, t0, (constexpr (WTF::fastLog2(JSC::IPInt::alignIPInt))), t0
         jmp t0
+    elsif LOONGARCH64
+        lshiftq (constexpr (WTF::fastLog2(JSC::IPInt::alignIPInt))), t0
+        addq t1, t0
+        jmp t0
     elsif X86_64
         lshiftq (constexpr (WTF::fastLog2(JSC::IPInt::alignIPInt))), t0
         addq t1, t0
@@ -3108,6 +3129,10 @@ ipintOp(_conversion_prefix, macro()
     loadp JSC::LLInt::OpcodeConfig::ipint_conversion_dispatch_base[t1], t1
     if ARM64 or ARM64E
         addlshiftp t1, t0, (constexpr (WTF::fastLog2(JSC::IPInt::alignIPInt))), t0
+        jmp t0
+    elsif LOONGARCH64
+        lshiftq (constexpr (WTF::fastLog2(JSC::IPInt::alignIPInt))), t0
+        addq t1, t0
         jmp t0
     elsif X86_64
         lshiftq (constexpr (WTF::fastLog2(JSC::IPInt::alignIPInt))), t0
@@ -3129,6 +3154,10 @@ ipintOp(_simd_prefix, macro()
     if ARM64 or ARM64E
         addlshiftp t1, t0, (constexpr (WTF::fastLog2(JSC::IPInt::alignIPInt))), t0
         jmp t0
+    elsif LOONGARCH64
+        lshiftq (constexpr (WTF::fastLog2(JSC::IPInt::alignIPInt))), t0
+        addq t1, t0
+        jmp t0
     elsif X86_64
         lshiftq (constexpr (WTF::fastLog2(JSC::IPInt::alignIPInt))), t0
         addq t1, t0
@@ -3148,6 +3177,10 @@ ipintOp(_atomic_prefix, macro()
     loadp JSC::LLInt::OpcodeConfig::ipint_atomic_dispatch_base[t1], t1
     if ARM64 or ARM64E
         addlshiftp t1, t0, (constexpr (WTF::fastLog2(JSC::IPInt::alignAtomicIPInt))), t0
+        jmp t0
+    elsif LOONGARCH64
+        lshiftq (constexpr (WTF::fastLog2(JSC::IPInt::alignAtomicIPInt))), t0
+        addq t1, t0
         jmp t0
     elsif X86_64
         lshiftq (constexpr (WTF::fastLog2(JSC::IPInt::alignAtomicIPInt))), t0
@@ -11816,7 +11849,7 @@ macro mintArgDispatch()
     addq 1, MC
     bigteq sc0, (constexpr IPInt::CallArgumentBytecode::NumOpcodes), _ipint_mint_arg_dispatch_err
     lshiftq (constexpr (WTF::fastLog2(JSC::IPInt::alignMInt))), sc0
-if ARM64 or ARM64E
+if ARM64 or ARM64E or LOONGARCH64
     pcrtoaddr _mint_begin, csr4
     addq sc0, csr4
     jmp csr4
@@ -11832,7 +11865,7 @@ macro mintRetDispatch()
     addq 1, MC
     bigteq sc0, (constexpr IPInt::CallResultBytecode::NumOpcodes), _ipint_mint_ret_dispatch_err
     lshiftq (constexpr (WTF::fastLog2(JSC::IPInt::alignMInt))), sc0
-if ARM64 or ARM64E
+if ARM64 or ARM64E or LOONGARCH64
     pcrtoaddr _mint_begin_return, csr4
     addq sc0, csr4
     jmp csr4
@@ -12110,7 +12143,10 @@ end
 
     if ARM64 or ARM64E
         loadpairq -0x10[cfr], t0, t1
-    elsif X86_64 or RISCV64 or LOONGARCH64
+    elsif RISCV64 or LOONGARCH64
+        loadp -0x8[cfr], t1
+        loadp -0x10[cfr], t0
+    elsif X86_64
         loadp -0x8[cfr], t1
         loadp -0x10[cfr], t0
     end
@@ -12160,7 +12196,7 @@ mintAlign(_a1)
     mintArgDispatch()
 
 mintAlign(_a2)
-if ARM64 or ARM64E or X86_64
+if ARM64 or ARM64E or RISCV64 or LOONGARCH64 or X86_64
     mintPop(a2)
     mintArgDispatch()
 else
@@ -12168,7 +12204,7 @@ else
 end
 
 mintAlign(_a3)
-if ARM64 or ARM64E or X86_64
+if ARM64 or ARM64E or RISCV64 or LOONGARCH64 or X86_64
     mintPop(a3)
     mintArgDispatch()
 else
@@ -12176,7 +12212,7 @@ else
 end
 
 mintAlign(_a4)
-if ARM64 or ARM64E or X86_64
+if ARM64 or ARM64E or RISCV64 or LOONGARCH64 or X86_64
     mintPop(a4)
     mintArgDispatch()
 else
@@ -12184,7 +12220,7 @@ else
 end
 
 mintAlign(_a5)
-if ARM64 or ARM64E or X86_64
+if ARM64 or ARM64E or RISCV64 or LOONGARCH64 or X86_64
     mintPop(a5)
     mintArgDispatch()
 else
@@ -12192,7 +12228,7 @@ else
 end
 
 mintAlign(_a6)
-if ARM64 or ARM64E
+if ARM64 or ARM64E or RISCV64 or LOONGARCH64
     mintPop(a6)
     mintArgDispatch()
 else
@@ -12200,7 +12236,7 @@ else
 end
 
 mintAlign(_a7)
-if ARM64 or ARM64E
+if ARM64 or ARM64E or RISCV64 or LOONGARCH64
     mintPop(a7)
     mintArgDispatch()
 else
@@ -12371,7 +12407,7 @@ _wasm_ipint_call_return_location_wide32:
     leap [sp, mintRetSrc], mintRetSrc
 
     # load (first_non_arg_addr - cfr) from the stack and make it absolute
-if ARM64 or ARM64E
+if ARM64 or ARM64E or LOONGARCH64
     loadp (2 * SlotSize)[sc3], mintRetDst
 elsif X86_64
     loadp (3 * SlotSize)[sc3], mintRetDst
@@ -12394,7 +12430,7 @@ mintAlign(_r1)
     mintRetDispatch()
 
 mintAlign(_r2)
-if ARM64 or ARM64E or X86_64
+if ARM64 or ARM64E or RISCV64 or LOONGARCH64 or X86_64
     subp StackValueSize, mintRetDst
     storeq wa2, [mintRetDst]
     mintRetDispatch()
@@ -12403,7 +12439,7 @@ else
 end
 
 mintAlign(_r3)
-if ARM64 or ARM64E or X86_64
+if ARM64 or ARM64E or RISCV64 or LOONGARCH64 or X86_64
     subp StackValueSize, mintRetDst
     storeq wa3, [mintRetDst]
     mintRetDispatch()
@@ -12412,7 +12448,7 @@ else
 end
 
 mintAlign(_r4)
-if ARM64 or ARM64E or X86_64
+if ARM64 or ARM64E or RISCV64 or LOONGARCH64 or X86_64
     subp StackValueSize, mintRetDst
     storeq wa4, [mintRetDst]
     mintRetDispatch()
@@ -12421,7 +12457,7 @@ else
 end
 
 mintAlign(_r5)
-if ARM64 or ARM64E or X86_64
+if ARM64 or ARM64E or RISCV64 or LOONGARCH64 or X86_64
     subp StackValueSize, mintRetDst
     storeq wa5, [mintRetDst]
     mintRetDispatch()
@@ -12430,7 +12466,7 @@ else
 end
 
 mintAlign(_r6)
-if ARM64 or ARM64E
+if ARM64 or ARM64E or RISCV64 or LOONGARCH64
     subp StackValueSize, mintRetDst
     storeq wa6, [mintRetDst]
     mintRetDispatch()
@@ -12439,7 +12475,7 @@ else
 end
 
 mintAlign(_r7)
-if ARM64 or ARM64E
+if ARM64 or ARM64E or RISCV64 or LOONGARCH64
     subp StackValueSize, mintRetDst
     storeq wa7, [mintRetDst]
     mintRetDispatch()
@@ -12523,6 +12559,9 @@ mintAlign(_end)
 
 if ARM64 or ARM64E
     loadpairq [sc3], MC, wasmInstance
+elsif LOONGARCH64
+    loadq [sc3], MC
+    loadq 8[sc3], wasmInstance
 elsif X86_64
     loadq [sc3], wasmInstance
     loadq 8[sc3], MC
@@ -12738,7 +12777,7 @@ uintAlign(_r5)
     uintDispatch()
 
 uintAlign(_r6)
-if ARM64 or ARM64E
+if ARM64 or ARM64E or RISCV64 or LOONGARCH64
     popQuad(wa6)
     uintDispatch()
 else
@@ -12746,7 +12785,7 @@ else
 end
 
 uintAlign(_r7)
-if ARM64 or ARM64E
+if ARM64 or ARM64E or RISCV64 or LOONGARCH64
     popQuad(wa7)
     uintDispatch()
 else
@@ -12827,7 +12866,7 @@ argumINTAlign(_a1)
     argumINTDispatch()
 
 argumINTAlign(_a2)
-if ARM64 or ARM64E or X86_64
+if ARM64 or ARM64E or RISCV64 or LOONGARCH64 or X86_64
     storeq wa2, [argumINTDst]
     subp LocalSize, argumINTDst
     argumINTDispatch()
@@ -12837,7 +12876,7 @@ end
 
 
 argumINTAlign(_a3)
-if ARM64 or ARM64E or X86_64
+if ARM64 or ARM64E or RISCV64 or LOONGARCH64 or X86_64
     storeq wa3, [argumINTDst]
     subp LocalSize, argumINTDst
     argumINTDispatch()
@@ -12846,7 +12885,7 @@ else
 end
 
 argumINTAlign(_a4)
-if ARM64 or ARM64E or X86_64
+if ARM64 or ARM64E or RISCV64 or LOONGARCH64 or X86_64
     storeq wa4, [argumINTDst]
     subp LocalSize, argumINTDst
     argumINTDispatch()
@@ -12855,7 +12894,7 @@ else
 end
 
 argumINTAlign(_a5)
-if ARM64 or ARM64E or X86_64
+if ARM64 or ARM64E or RISCV64 or LOONGARCH64 or X86_64
     storeq wa5, [argumINTDst]
     subp LocalSize, argumINTDst
     argumINTDispatch()
@@ -12864,7 +12903,7 @@ else
 end
 
 argumINTAlign(_a6)
-if ARM64 or ARM64E
+if ARM64 or ARM64E or RISCV64 or LOONGARCH64
     storeq wa6, [argumINTDst]
     subp LocalSize, argumINTDst
     argumINTDispatch()
@@ -12873,7 +12912,7 @@ else
 end
 
 argumINTAlign(_a7)
-if ARM64 or ARM64E
+if ARM64 or ARM64E or RISCV64 or LOONGARCH64
     storeq wa7, [argumINTDst]
     subp LocalSize, argumINTDst
     argumINTDispatch()
