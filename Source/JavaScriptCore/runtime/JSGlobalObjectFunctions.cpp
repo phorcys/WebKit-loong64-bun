@@ -821,7 +821,7 @@ JSC_DEFINE_HOST_FUNCTION(globalFuncImportModule, (JSGlobalObject* globalObject, 
         auto result = importPromise->result();
         promise->fulfill(vm, globalObject, result);
     } else {
-        promise->resolve(globalObject, vm, importPromise);
+        promise->pipeFrom(vm, importPromise);
     }
 
     return JSValue::encode(promise);

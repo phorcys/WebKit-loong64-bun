@@ -863,6 +863,7 @@ public:
     typedef GPRReg RegisterType;
     static constexpr unsigned numberOfRegisters = 14;
     static constexpr unsigned numberOfArgumentRegisters = NUMBER_OF_ARGUMENT_REGISTERS;
+    static constexpr unsigned numberOfCalleeSaveRegisters = 9;
 
     // These registers match the baseline JIT.
     static constexpr GPRReg callFrameRegister = LOONGARCH64Registers::r22;
@@ -920,6 +921,7 @@ public:
 
     static constexpr GPRReg wasmScratchGPR0 = LOONGARCH64Registers::r13; // regT9
     static constexpr GPRReg wasmScratchGPR1 = LOONGARCH64Registers::r14; // regT10
+    static constexpr GPRReg wasmIPIntPCRegister = regCS6;
     static constexpr GPRReg wasmContextInstancePointer = regCS0;
     static constexpr GPRReg wasmBaseMemoryPointer = regCS3;
     static constexpr GPRReg wasmBoundsCheckingSizeRegister = regCS4;

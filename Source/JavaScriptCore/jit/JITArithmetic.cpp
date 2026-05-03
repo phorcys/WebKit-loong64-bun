@@ -571,6 +571,56 @@ void JIT::emitSlow_op_mod(const JSInstruction*, Vector<SlowCaseEntry>::iterator&
     slowPathCall.call();
 }
 
+#elif CPU(LOONGARCH64)
+
+void JIT::emit_op_mod(const JSInstruction* currentInstruction)
+{
+    auto bytecode = currentInstruction->as<OpMod>();
+    VirtualRegister result = bytecode.m_dst;
+    VirtualRegister op1 = bytecode.m_lhs;
+    VirtualRegister op2 = bytecode.m_rhs;
+
+    emitGetVirtualRegister(op1, jsRegT10);
+    emitGetVirtualRegister(op2, jsRegT32);
+
+    addSlowCase(branchIfNotInt32(jsRegT10));
+    addSlowCase(branchIfNotInt32(jsRegT32));
+
+    GPRReg dividendGPR = jsRegT10.payloadGPR();
+    GPRReg divisorGPR = jsRegT32.payloadGPR();
+    GPRReg remainderGPR = regT4;
+
+    addSlowCase(branchTest32(Zero, divisorGPR));
+
+    Jump divisorNotNeg1 = branch32(NotEqual, divisorGPR, TrustedImm32(-1));
+    addSlowCase(branch32(Equal, dividendGPR, TrustedImm32(INT32_MIN)));
+    divisorNotNeg1.link(this);
+
+    mod32(dividendGPR, divisorGPR, remainderGPR);
+
+    // Preserve JavaScript's -0.0 result for negative dividends with zero remainder.
+    Jump numeratorPositive = branch32(GreaterThanOrEqual, dividendGPR, TrustedImm32(0));
+    Jump nonZeroRemainder = branchTest32(NonZero, remainderGPR);
+    moveValue(jsDoubleNumber(-0.0), jsRegT10);
+    Jump done = jump();
+
+    numeratorPositive.link(this);
+    nonZeroRemainder.link(this);
+
+    boxInt32(remainderGPR, jsRegT10);
+    done.link(this);
+
+    emitPutVirtualRegister(result, jsRegT10);
+}
+
+void JIT::emitSlow_op_mod(const JSInstruction*, Vector<SlowCaseEntry>::iterator& iter)
+{
+    linkAllSlowCases(iter);
+
+    JITSlowPathCall slowPathCall(this, slow_path_mod);
+    slowPathCall.call();
+}
+
 #else // CPU(X86_64) || CPU(ARM64)
 
 void JIT::emit_op_mod(const JSInstruction*)

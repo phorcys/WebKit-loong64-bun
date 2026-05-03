@@ -71,10 +71,7 @@ struct IntegralTypedArrayAdaptor {
 #if HAVE(FJCVTZS_INSTRUCTION)
         return static_cast<Type>(toInt32(value));
 #else
-        int32_t result = static_cast<int32_t>(value);
-        if (static_cast<double>(result) != value)
-            result = toInt32(value);
-        return static_cast<Type>(result);
+        return static_cast<Type>(toInt32(value));
 #endif
     }
 
@@ -108,14 +105,14 @@ struct IntegralTypedArrayAdaptor {
 
     static std::optional<Type> toNativeFromDoubleWithoutCoercion(double value)
     {
+        if (std::isnan(value) || value < static_cast<double>(minValue) || value > static_cast<double>(maxValue))
+            return std::nullopt;
+
         Type integer = static_cast<Type>(value);
         if (static_cast<double>(integer) != value)
             return std::nullopt;
 
-        if (value < 0)
-            return toNativeFromInt32WithoutCoercion(static_cast<int32_t>(value));
-        
-        return toNativeFromUint32WithoutCoercion(static_cast<uint32_t>(value));
+        return integer;
     }
 };
 

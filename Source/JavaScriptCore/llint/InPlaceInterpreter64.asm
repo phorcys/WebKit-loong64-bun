@@ -55,7 +55,7 @@ end
 
 # Dispatch target bases
 
-if ARM64 or ARM64E or X86_64
+if ARM64 or ARM64E or X86_64 or LOONGARCH64
 const ipint_dispatch_base = _ipint_unreachable
 end
 
@@ -75,14 +75,19 @@ if ARM64 or ARM64E
     pcrtoaddr ipint_dispatch_base, t7
     addlshiftp t7, t0, (constexpr (WTF::fastLog2(JSC::IPInt::alignIPInt))), t0
     jmp t0
-elsif X86_64
-    pcrtoaddr ipint_dispatch_base, t1
-    lshiftq (constexpr (WTF::fastLog2(JSC::IPInt::alignIPInt))), t0
-    addq t1, t0
-    jmp t0
-else
-    error
-end
+    elsif X86_64
+        pcrtoaddr ipint_dispatch_base, t1
+        lshiftq (constexpr (WTF::fastLog2(JSC::IPInt::alignIPInt))), t0
+        addq t1, t0
+        jmp t0
+    elsif LOONGARCH64
+        pcrtoaddr ipint_dispatch_base, t1
+        lshiftp (constexpr (WTF::fastLog2(JSC::IPInt::alignIPInt))), t0
+        addp t1, t0
+        jmp t0
+    else
+        error
+    end
 end
 
 # Stack operations
@@ -210,7 +215,7 @@ macro argumINTDispatch()
     addp 1, MC
     bbgteq argumINTTmp, (constexpr IPInt::ArgumINTBytecode::NumOpcodes), _ipint_argument_dispatch_err
     lshiftp (constexpr (WTF::fastLog2(JSC::IPInt::alignArgumInt))), argumINTTmp
-if ARM64 or ARM64E or X86_64
+if ARM64 or ARM64E or X86_64 or LOONGARCH64
     pcrtoaddr _argumINT_begin, argumINTDsp
     addp argumINTTmp, argumINTDsp
     jmp argumINTDsp
@@ -505,7 +510,7 @@ end
     jmp .ipint_end_ret
 end)
 
-if ARM64 or ARM64E
+if ARM64 or ARM64E or LOONGARCH64
     const IPIntCallCallee = sc1
     const IPIntCallFunctionSlot = sc0
 elsif X86_64
@@ -1758,7 +1763,7 @@ ipintOp(_i32_div_s, macro()
         # https://bugs.webkit.org/show_bug.cgi?id=203692
         cdqi
         idivi t1
-    elsif ARM64 or ARM64E or RISCV64
+    elsif ARM64 or ARM64E or RISCV64 or LOONGARCH64
         divis t1, t0
     else
         error
@@ -1777,7 +1782,7 @@ ipintOp(_i32_div_u, macro()
     if X86_64
         xori t2, t2
         udivi t1
-    elsif ARM64 or ARM64E or RISCV64
+    elsif ARM64 or ARM64E or RISCV64 or LOONGARCH64
         divi t1, t0
     else
         error
@@ -1810,7 +1815,7 @@ ipintOp(_i32_rem_s, macro()
         divis t1, t0, t2
         muli t1, t2
         subi t0, t2, t2
-    elsif RISCV64
+    elsif RISCV64 or LOONGARCH64
         remis t0, t1, t2
     else
         error
@@ -1835,7 +1840,7 @@ ipintOp(_i32_rem_u, macro()
         divi t1, t0, t2
         muli t1, t2
         subi t0, t2, t2
-    elsif RISCV64
+    elsif RISCV64 or LOONGARCH64
         remi t0, t1, t2
     else
         error
@@ -2015,7 +2020,7 @@ ipintOp(_i64_div_s, macro()
         # https://bugs.webkit.org/show_bug.cgi?id=203692
         cqoq
         idivq t1
-    elsif ARM64 or ARM64E or RISCV64
+    elsif ARM64 or ARM64E or RISCV64 or LOONGARCH64
         divqs t1, t0
     else
         error
@@ -2034,7 +2039,7 @@ ipintOp(_i64_div_u, macro()
     if X86_64
         xorq t2, t2
         udivq t1
-    elsif ARM64 or ARM64E or RISCV64
+    elsif ARM64 or ARM64E or RISCV64 or LOONGARCH64
         divq t1, t0
     else
         error
@@ -2067,7 +2072,7 @@ ipintOp(_i64_rem_s, macro()
         divqs t1, t0, t2
         mulq t1, t2
         subq t0, t2, t2
-    elsif RISCV64
+    elsif RISCV64 or LOONGARCH64
         remqs t0, t1, t2
     else
         error
@@ -2092,7 +2097,7 @@ ipintOp(_i64_rem_u, macro()
         divq t1, t0, t2
         mulq t1, t2
         subq t0, t2, t2
-    elsif RISCV64
+    elsif RISCV64 or LOONGARCH64
         remq t0, t1, t2
     else
         error
@@ -4039,6 +4044,8 @@ end)
     #######################
     ## SIMD Instructions ##
     #######################
+
+if ARM64 or ARM64E or X86_64
 
 const ImmLaneIdxOffset = 0 # Offset from t4 (points past the decoded SIMD opcode)
 const ImmLaneIdx16Mask = 0xf
@@ -8932,6 +8939,8 @@ ipintOp(_simd_i32x4_relaxed_dot_i8x16_i7x16_add_s, macro()
     nextIPIntInstruction()
 end)
 
+end # SIMD-capable offlineasm backends
+
     #########################
     ## Atomic instructions ##
     #########################
@@ -9023,6 +9032,8 @@ macro doI32AtomicLoad(mem, dst)
     checkAlignment4(mem, _ipint_throw_UnalignedMemoryAccess)
     if ARM64 or ARM64E or X86_64
         atomicloadi [mem], dst
+    elsif LOONGARCH64
+        loadlinkacqi [mem], dst
     else
         error
     end
@@ -9032,6 +9043,8 @@ macro doI64AtomicLoad(mem, dst)
     checkAlignment8(mem, _ipint_throw_UnalignedMemoryAccess)
     if ARM64 or ARM64E or X86_64
         atomicloadq [mem], dst
+    elsif LOONGARCH64
+        loadlinkacqq [mem], dst
     else
         error
     end
@@ -9041,6 +9054,8 @@ macro doI32AtomicLoad8(mem, dst)
     noAlignmentCheck(mem, _ipint_throw_UnalignedMemoryAccess)
     if ARM64 or ARM64E or X86_64
         atomicloadb [mem], dst
+    elsif LOONGARCH64
+        loadlinkacqb [mem], dst
     else
         error
     end
@@ -9050,6 +9065,8 @@ macro doI32AtomicLoad16(mem, dst)
     checkAlignment2(mem, _ipint_throw_UnalignedMemoryAccess)
     if ARM64 or ARM64E or X86_64
         atomicloadh [mem], dst
+    elsif LOONGARCH64
+        loadlinkacqh [mem], dst
     else
         error
     end
@@ -9059,6 +9076,8 @@ macro doI64AtomicLoad8(mem, dst)
     noAlignmentCheck(mem, _ipint_throw_UnalignedMemoryAccess)
     if ARM64 or ARM64E or X86_64
         atomicloadb [mem], dst
+    elsif LOONGARCH64
+        loadlinkacqb [mem], dst
     else
         error
     end
@@ -9068,6 +9087,8 @@ macro doI64AtomicLoad16(mem, dst)
     checkAlignment2(mem, _ipint_throw_UnalignedMemoryAccess)
     if ARM64 or ARM64E or X86_64
         atomicloadh [mem], dst
+    elsif LOONGARCH64
+        loadlinkacqh [mem], dst
     else
         error
     end
@@ -9077,6 +9098,8 @@ macro doI64AtomicLoad32(mem, dst)
     checkAlignment4(mem, _ipint_throw_UnalignedMemoryAccess)
     if ARM64 or ARM64E or X86_64
         atomicloadi [mem], dst
+    elsif LOONGARCH64
+        loadlinkacqi [mem], dst
     else
         error
     end
@@ -9089,7 +9112,7 @@ macro doI32AtomicStore(mem, val, memCopy, scratch)
         atomicxchgi val, [memCopy], val
     elsif X86_64
         atomicxchgi val, [memCopy]
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopInt(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             move value, newValue
         end)
@@ -9105,7 +9128,7 @@ macro doI64AtomicStore(mem, val, memCopy, scratch)
         atomicxchgq val, [memCopy], val
     elsif X86_64
         atomicxchgq val, [memCopy]
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopQuad(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             move value, newValue
         end)
@@ -9121,7 +9144,7 @@ macro doI32AtomicStore8(mem, val, memCopy, scratch)
         atomicxchgb val, [memCopy], val
     elsif X86_64
         atomicxchgb val, [memCopy]
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopByte(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             move value, newValue
         end)
@@ -9137,7 +9160,7 @@ macro doI32AtomicStore16(mem, val, memCopy, scratch)
         atomicxchgh val, [memCopy], val
     elsif X86_64
         atomicxchgh val, [memCopy]
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopHalf(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             move value, newValue
         end)
@@ -9153,7 +9176,7 @@ macro doI64AtomicStore8(mem, val, memCopy, scratch)
         atomicxchgb val, [memCopy], val
     elsif X86_64
         atomicxchgb val, [memCopy]
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopByte(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             move value, newValue
         end)
@@ -9169,7 +9192,7 @@ macro doI64AtomicStore16(mem, val, memCopy, scratch)
         atomicxchgh val, [memCopy], val
     elsif X86_64
         atomicxchgh val, [memCopy]
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopHalf(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             move value, newValue
         end)
@@ -9185,7 +9208,7 @@ macro doI64AtomicStore32(mem, val, memCopy, scratch)
         atomicxchgi val, [memCopy], val
     elsif X86_64
         atomicxchgi val, [memCopy]
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopInt(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             move value, newValue
         end)
@@ -9202,7 +9225,7 @@ macro doI32AtomicRmwAdd(mem, val, memCopy, scratch)
     elsif X86_64
         atomicxchgaddi val, [memCopy]
         move val, mem
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopInt(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             addi value, oldValue, newValue
         end)
@@ -9219,7 +9242,7 @@ macro doI64AtomicRmwAdd(mem, val, memCopy, scratch)
     elsif X86_64
         atomicxchgaddq val, [memCopy]
         move val, mem
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopQuad(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             addq value, oldValue, newValue
         end)
@@ -9237,7 +9260,7 @@ macro doI32AtomicRmwAdd8(mem, val, memCopy, scratch)
         atomicxchgaddb val, [memCopy]
         move val, mem
         andi 0xff, mem
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopByte(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             addi value, oldValue, newValue
         end)
@@ -9255,7 +9278,7 @@ macro doI32AtomicRmwAdd16(mem, val, memCopy, scratch)
         atomicxchgaddh val, [memCopy]
         move val, mem
         andi 0xffff, mem
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopHalf(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             addi value, oldValue, newValue
         end)
@@ -9273,7 +9296,7 @@ macro doI64AtomicRmwAdd8(mem, val, memCopy, scratch)
         atomicxchgaddb val, [memCopy]
         move val, mem
         andi 0xff, mem
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopByte(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             addi value, oldValue, newValue
         end)
@@ -9291,7 +9314,7 @@ macro doI64AtomicRmwAdd16(mem, val, memCopy, scratch)
         atomicxchgaddh val, [memCopy]
         move val, mem
         andi 0xffff, mem
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopHalf(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             addi value, oldValue, newValue
         end)
@@ -9309,7 +9332,7 @@ macro doI64AtomicRmwAdd32(mem, val, memCopy, scratch)
         atomicxchgaddi val, [memCopy]
         move val, mem
         ori 0, mem
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopInt(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             addi value, oldValue, newValue
         end)
@@ -9328,7 +9351,7 @@ macro doI32AtomicRmwSub(mem, val, memCopy, scratch)
         negi val
         atomicxchgaddi val, [memCopy]
         move val, mem
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopInt(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             subi oldValue, value, newValue
         end)
@@ -9347,7 +9370,7 @@ macro doI64AtomicRmwSub(mem, val, memCopy, scratch)
         negq val
         atomicxchgaddq val, [memCopy]
         move val, mem
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopQuad(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             subq oldValue, value, newValue
         end)
@@ -9367,7 +9390,7 @@ macro doI32AtomicRmwSub8(mem, val, memCopy, scratch)
         atomicxchgaddb val, [memCopy]
         move val, mem
         andi 0xff, mem
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopByte(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             subi oldValue, value, newValue
         end)
@@ -9387,7 +9410,7 @@ macro doI32AtomicRmwSub16(mem, val, memCopy, scratch)
         atomicxchgaddh val, [memCopy]
         move val, mem
         andi 0xffff, mem
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopHalf(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             subi oldValue, value, newValue
         end)
@@ -9407,7 +9430,7 @@ macro doI64AtomicRmwSub8(mem, val, memCopy, scratch)
         atomicxchgaddb val, [memCopy]
         move val, mem
         andi 0xff, mem
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopByte(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             subi oldValue, value, newValue
         end)
@@ -9427,7 +9450,7 @@ macro doI64AtomicRmwSub16(mem, val, memCopy, scratch)
         atomicxchgaddh val, [memCopy]
         move val, mem
         andi 0xffff, mem
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopHalf(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             subi oldValue, value, newValue
         end)
@@ -9447,7 +9470,7 @@ macro doI64AtomicRmwSub32(mem, val, memCopy, scratch)
         atomicxchgaddi val, [memCopy]
         move val, mem
         ori 0, mem
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopInt(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             subi oldValue, value, newValue
         end)
@@ -9466,7 +9489,7 @@ macro doI32AtomicRmwAnd(mem, val, memCopy, scratch)
         weakCASLoopInt(memCopy, val, mem, scratch, macro (value, dst)
             andq value, dst
         end)
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopInt(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             andi value, oldValue, newValue
         end)
@@ -9485,7 +9508,7 @@ macro doI64AtomicRmwAnd(mem, val, memCopy, scratch)
         weakCASLoopQuad(memCopy, val, mem, scratch, macro (value, dst)
             andq value, dst
         end)
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopQuad(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             andq value, oldValue, newValue
         end)
@@ -9504,7 +9527,7 @@ macro doI32AtomicRmwAnd8(mem, val, memCopy, scratch)
         weakCASLoopByte(memCopy, val, mem, scratch, macro (value, dst)
             andq value, dst
         end)
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopByte(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             andi value, oldValue, newValue
         end)
@@ -9523,7 +9546,7 @@ macro doI32AtomicRmwAnd16(mem, val, memCopy, scratch)
         weakCASLoopHalf(memCopy, val, mem, scratch, macro (value, dst)
             andq value, dst
         end)
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopHalf(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             andi value, oldValue, newValue
         end)
@@ -9542,7 +9565,7 @@ macro doI64AtomicRmwAnd8(mem, val, memCopy, scratch)
         weakCASLoopByte(memCopy, val, mem, scratch, macro (value, dst)
             andq value, dst
         end)
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopByte(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             andi value, oldValue, newValue
         end)
@@ -9561,7 +9584,7 @@ macro doI64AtomicRmwAnd16(mem, val, memCopy, scratch)
         weakCASLoopHalf(memCopy, val, mem, scratch, macro (value, dst)
             andq value, dst
         end)
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopHalf(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             andi value, oldValue, newValue
         end)
@@ -9580,7 +9603,7 @@ macro doI64AtomicRmwAnd32(mem, val, memCopy, scratch)
         weakCASLoopInt(memCopy, val, mem, scratch, macro (value, dst)
             andq value, dst
         end)
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopInt(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             andi value, oldValue, newValue
         end)
@@ -9598,7 +9621,7 @@ macro doI32AtomicRmwOr(mem, val, memCopy, scratch)
         weakCASLoopInt(memCopy, val, mem, scratch, macro (value, dst)
             ori value, dst
         end)
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopInt(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             ori value, oldValue, newValue
         end)
@@ -9616,7 +9639,7 @@ macro doI64AtomicRmwOr(mem, val, memCopy, scratch)
         weakCASLoopQuad(memCopy, val, mem, scratch, macro (value, dst)
             orq value, dst
         end)
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopQuad(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             orq value, oldValue, newValue
         end)
@@ -9634,7 +9657,7 @@ macro doI32AtomicRmwOr8(mem, val, memCopy, scratch)
         weakCASLoopByte(memCopy, val, mem, scratch, macro (value, dst)
             orq value, dst
         end)
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopByte(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             ori value, oldValue, newValue
         end)
@@ -9652,7 +9675,7 @@ macro doI32AtomicRmwOr16(mem, val, memCopy, scratch)
         weakCASLoopHalf(memCopy, val, mem, scratch, macro (value, dst)
             orq value, dst
         end)
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopHalf(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             ori value, oldValue, newValue
         end)
@@ -9670,7 +9693,7 @@ macro doI64AtomicRmwOr8(mem, val, memCopy, scratch)
         weakCASLoopByte(memCopy, val, mem, scratch, macro (value, dst)
             orq value, dst
         end)
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopByte(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             ori value, oldValue, newValue
         end)
@@ -9688,7 +9711,7 @@ macro doI64AtomicRmwOr16(mem, val, memCopy, scratch)
         weakCASLoopHalf(memCopy, val, mem, scratch, macro (value, dst)
             orq value, dst
         end)
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopHalf(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             ori value, oldValue, newValue
         end)
@@ -9706,7 +9729,7 @@ macro doI64AtomicRmwOr32(mem, val, memCopy, scratch)
         weakCASLoopInt(memCopy, val, mem, scratch, macro (value, dst)
             orq value, dst
         end)
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopInt(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             ori value, oldValue, newValue
         end)
@@ -9724,7 +9747,7 @@ macro doI32AtomicRmwXor(mem, val, memCopy, scratch)
         weakCASLoopInt(memCopy, val, mem, scratch, macro (value, dst)
             xorq value, dst
         end)
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopInt(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             xori value, oldValue, newValue
         end)
@@ -9742,7 +9765,7 @@ macro doI64AtomicRmwXor(mem, val, memCopy, scratch)
         weakCASLoopQuad(memCopy, val, mem, scratch, macro (value, dst)
             xorq value, dst
         end)
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopQuad(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             xorq value, oldValue, newValue
         end)
@@ -9760,7 +9783,7 @@ macro doI32AtomicRmwXor8(mem, val, memCopy, scratch)
         weakCASLoopByte(memCopy, val, mem, scratch, macro (value, dst)
             xorq value, dst
         end)
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopByte(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             xori value, oldValue, newValue
         end)
@@ -9778,7 +9801,7 @@ macro doI32AtomicRmwXor16(mem, val, memCopy, scratch)
         weakCASLoopHalf(memCopy, val, mem, scratch, macro (value, dst)
             xorq value, dst
         end)
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopHalf(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             xori value, oldValue, newValue
         end)
@@ -9796,7 +9819,7 @@ macro doI64AtomicRmwXor8(mem, val, memCopy, scratch)
         weakCASLoopByte(memCopy, val, mem, scratch, macro (value, dst)
             xorq value, dst
         end)
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopByte(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             xori value, oldValue, newValue
         end)
@@ -9814,7 +9837,7 @@ macro doI64AtomicRmwXor16(mem, val, memCopy, scratch)
         weakCASLoopHalf(memCopy, val, mem, scratch, macro (value, dst)
             xorq value, dst
         end)
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopHalf(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             xori value, oldValue, newValue
         end)
@@ -9832,7 +9855,7 @@ macro doI64AtomicRmwXor32(mem, val, memCopy, scratch)
         weakCASLoopInt(memCopy, val, mem, scratch, macro (value, dst)
             xorq value, dst
         end)
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopInt(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             xori value, oldValue, newValue
         end)
@@ -9850,7 +9873,7 @@ macro doI32AtomicRmwXchg(mem, val, memCopy, scratch)
         weakCASLoopInt(memCopy, val, mem, scratch, macro (value, dst)
             move value, dst
         end)
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopInt(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             move value, newValue
         end)
@@ -9868,7 +9891,7 @@ macro doI64AtomicRmwXchg(mem, val, memCopy, scratch)
         weakCASLoopQuad(memCopy, val, mem, scratch, macro (value, dst)
             move value, dst
         end)
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopQuad(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             move value, newValue
         end)
@@ -9886,7 +9909,7 @@ macro doI32AtomicRmwXchg8(mem, val, memCopy, scratch)
         weakCASLoopByte(memCopy, val, mem, scratch, macro (value, dst)
             move value, dst
         end)
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopByte(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             move value, newValue
         end)
@@ -9904,7 +9927,7 @@ macro doI32AtomicRmwXchg16(mem, val, memCopy, scratch)
         weakCASLoopHalf(memCopy, val, mem, scratch, macro (value, dst)
             move value, dst
         end)
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopHalf(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             move value, newValue
         end)
@@ -9922,7 +9945,7 @@ macro doI64AtomicRmwXchg8(mem, val, memCopy, scratch)
         weakCASLoopByte(memCopy, val, mem, scratch, macro (value, dst)
             move value, dst
         end)
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopByte(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             move value, newValue
         end)
@@ -9940,7 +9963,7 @@ macro doI64AtomicRmwXchg16(mem, val, memCopy, scratch)
         weakCASLoopHalf(memCopy, val, mem, scratch, macro (value, dst)
             move value, dst
         end)
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopHalf(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             move value, newValue
         end)
@@ -9958,7 +9981,7 @@ macro doI64AtomicRmwXchg32(mem, val, memCopy, scratch)
         weakCASLoopInt(memCopy, val, mem, scratch, macro (value, dst)
             move value, dst
         end)
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASLoopInt(memCopy, val, mem, scratch, macro(value, oldValue, newValue)
             move value, newValue
         end)
@@ -9974,7 +9997,7 @@ macro doI32AtomicCmpxchg(mem, expected, newVal, memCopy, scratch)
     andq 0xffffffff, mem
     if ARM64E or X86_64
         atomicweakcasi mem, newVal, [memCopy]
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASExchangeInt(memCopy, newVal, mem, scratch, expected)
     else
         error
@@ -9987,7 +10010,7 @@ macro doI64AtomicCmpxchg(mem, expected, newVal, memCopy, scratch)
     move expected, mem
     if ARM64E or X86_64
         atomicweakcasq mem, newVal, [memCopy]
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASExchangeQuad(memCopy, newVal, mem, scratch, expected)
     else
         error
@@ -10001,7 +10024,7 @@ macro doI32AtomicCmpxchg8(mem, expected, newVal, memCopy, scratch)
     andq 0xff, mem
     if ARM64E or X86_64
         atomicweakcasb mem, newVal, [memCopy]
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASExchangeByte(memCopy, newVal, mem, scratch, expected)
     else
         error
@@ -10015,7 +10038,7 @@ macro doI32AtomicCmpxchg16(mem, expected, newVal, memCopy, scratch)
     andq 0xffff, mem
     if ARM64E or X86_64
         atomicweakcash mem, newVal, [memCopy]
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASExchangeHalf(memCopy, newVal, mem, scratch, expected)
     else
         error
@@ -10029,7 +10052,7 @@ macro doI64AtomicCmpxchg8(mem, expected, newVal, memCopy, scratch)
     andq 0xff, mem
     if ARM64E or X86_64
         atomicweakcasb mem, newVal, [memCopy]
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASExchangeByte(memCopy, newVal, mem, scratch, expected)
     else
         error
@@ -10043,7 +10066,7 @@ macro doI64AtomicCmpxchg16(mem, expected, newVal, memCopy, scratch)
     andq 0xffff, mem
     if ARM64E or X86_64
         atomicweakcash mem, newVal, [memCopy]
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASExchangeHalf(memCopy, newVal, mem, scratch, expected)
     else
         error
@@ -10057,7 +10080,7 @@ macro doI64AtomicCmpxchg32(mem, expected, newVal, memCopy, scratch)
     andq 0xffffffff, mem
     if ARM64E or X86_64
         atomicweakcasi mem, newVal, [memCopy]
-    elsif ARM64
+    elsif ARM64 or LOONGARCH64
         weakCASExchangeInt(memCopy, newVal, mem, scratch, expected)
     else
         error
@@ -10697,7 +10720,7 @@ ipintAtomicOp(_i64_atomic_rmw32_xchg_u, macro()
 end)
 
 macro weakCASExchangeByte(mem, value, expected, scratch, scratch2)
-    if ARM64
+    if ARM64 or LOONGARCH64
     validateOpcodeConfig(scratch2)
     .loop:
         loadlinkacqb [mem], scratch2
@@ -10717,7 +10740,7 @@ macro weakCASExchangeByte(mem, value, expected, scratch, scratch2)
 end
 
 macro weakCASExchangeHalf(mem, value, expected, scratch, scratch2)
-    if ARM64
+    if ARM64 or LOONGARCH64
     validateOpcodeConfig(scratch2)
     .loop:
         loadlinkacqh [mem], scratch2
@@ -10737,7 +10760,7 @@ macro weakCASExchangeHalf(mem, value, expected, scratch, scratch2)
 end
 
 macro weakCASExchangeInt(mem, value, expected, scratch, scratch2)
-    if ARM64
+    if ARM64 or LOONGARCH64
     validateOpcodeConfig(scratch2)
     .loop:
         loadlinkacqi [mem], scratch2
@@ -10757,7 +10780,7 @@ macro weakCASExchangeInt(mem, value, expected, scratch, scratch2)
 end
 
 macro weakCASExchangeQuad(mem, value, expected, scratch, scratch2)
-    if ARM64
+    if ARM64 or LOONGARCH64
     validateOpcodeConfig(scratch2)
     .loop:
         loadlinkacqq [mem], scratch2
@@ -11088,6 +11111,8 @@ end)
 ## Out-of-line slow paths for SIMD memory access ##
 ###################################################
 
+if ARM64 or ARM64E or X86_64
+
 # t0 = wasm address (from popMemoryIndex before branching).
 # t4 = cursor pointing to start of memarg (past SIMD opcode, set by simd_prefix).
 # After loadStoreMakePointerSlow, t4 points past the memarg.
@@ -11283,6 +11308,8 @@ end)
     storeq t1, [t0]
     leap 1[t4], PC
     nextIPIntInstruction()
+
+end # SIMD-capable offlineasm backends
 
 #########################################################
 ## Out-of-line slow paths for atomic memory operations ##
@@ -11949,7 +11976,7 @@ end
 
     if ARM64 or ARM64E
         loadpairq -0x10[cfr], t0, t1
-    elsif X86_64 or RISCV64
+    elsif X86_64 or RISCV64 or LOONGARCH64
         loadp -0x8[cfr], t1
         loadp -0x10[cfr], t0
     end
@@ -12440,7 +12467,7 @@ end
 if X86_64
     pop sc1, sc0
     storep sc0, ReturnPC[sc2]
-elsif ARM64 or ARM64E or ARMv7 or RISCV64
+elsif ARM64 or ARM64E or ARMv7 or RISCV64 or LOONGARCH64
     pop sc1, lr
 end
 

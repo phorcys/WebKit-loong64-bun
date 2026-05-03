@@ -503,7 +503,7 @@ asm(
 
     "jr $r1" "\n");
 
-void MacroAssembler::probe(Probe::Function function, void* arg, SavedFPWidth)
+void MacroAssembler::probe(Probe::Function function, void* arg)
 {
     sub64(TrustedImm32(sizeof(IncomingProbeRecord)), sp);
     store64(ra, Address(sp, offsetof(IncomingProbeRecord, r1)));
