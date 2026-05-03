@@ -45,14 +45,16 @@ public:
     AddressType() = default;
     AddressType(TypeKind);
     AddressType(AddressType::Kind);
-#if !PLATFORM(PLAYSTATION)
+#if !PLATFORM(PLAYSTATION) && (ENABLE(B3_JIT) || ENABLE(WEBASSEMBLY_BBQJIT))
     AddressType(B3::Type);
 #endif
     explicit AddressType(bool is64bit);
 
     AddressType::Kind type() const { return m_type; }
     TypeKind NODELETE asWasmTypeKind() const;
+#if ENABLE(B3_JIT) || ENABLE(WEBASSEMBLY_BBQJIT)
     B3::TypeKind NODELETE asB3TypeKind() const;
+#endif
 
     friend bool NODELETE operator==(const AddressType& lhs, const AddressType& rhs);
     friend bool operator!=(const AddressType& lhs, const AddressType& rhs);

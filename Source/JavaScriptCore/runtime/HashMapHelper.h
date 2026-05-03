@@ -61,11 +61,13 @@ ALWAYS_INLINE JSValue normalizeMapKey(JSValue key)
     if (std::isnan(d))
         return jsNaN();
 
-    int i = static_cast<int>(d);
-    if (i == d) {
+    if (!d)
+        return jsNumber(0);
+
+    if (auto i = tryConvertToStrictInt32(d)) {
         // When a key is -0, we convert it to positive zero.
         // When a key is the double representation for an integer, we convert it to an integer.
-        return jsNumber(i);
+        return jsNumber(i.value());
     }
     // This means key is definitely not negative zero, and it's definitely not a double representation of an integer.
     return key;

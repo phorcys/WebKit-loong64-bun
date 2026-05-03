@@ -85,7 +85,7 @@ bool hasCapacityToUseLargeGigacage();
     v(Bool, useLLInt,  true, Normal, "allows the LLINT to be used if true"_s) \
     v(Bool, useJIT, jitEnabledByDefault(), Normal, "allows the executable pages to be allocated for JIT and thunks if true"_s) \
     v(Bool, useBaselineJIT, true, Normal, "allows the baseline JIT to be used if true"_s) \
-    v(Bool, useDFGJIT, is64Bit(), Normal, "allows the DFG JIT to be used if true"_s) \
+    v(Bool, useDFGJIT, is64Bit() && !isLOONGARCH64(), Normal, "allows the DFG JIT to be used if true"_s) \
     v(Bool, useRegExpJIT, jitEnabledByDefault() && is64Bit(), Normal, "allows the RegExp JIT to be used if true"_s) \
     v(Bool, useDOMJIT, is64Bit(), Normal, "allows the DOMJIT to be used if true"_s) \
     \

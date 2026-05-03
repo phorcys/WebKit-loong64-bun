@@ -175,10 +175,18 @@ class RegisterID
             '$r10'
         when 't7', 'a7', 'wa7'
             '$r11'
-        when 'ws0'
+        when 't8'
             '$r12'
-        when 'ws1'
+        when 't9', 'ws0'
             '$r13'
+        when 't10', 'ws1'
+            '$r14'
+        when 't11', 'ws2'
+            '$r15'
+        when 't12', 'ws3'
+            '$r16'
+        when 't13'
+            '$r17'
         when 'cfr'
             '$r22'
         when 'csr0'
@@ -236,6 +244,38 @@ class FPRegisterID
             '$f12'
         when 'ft5'
             '$f13'
+        when 'ft6'
+            '$f14'
+        when 'ft7'
+            '$f15'
+        when 'ft8'
+            '$f16'
+        when 'ft9'
+            '$f17'
+        when 'ft10'
+            '$f18'
+        when 'ft11'
+            '$f19'
+        when 'ft12'
+            '$f20'
+        when 'ft13'
+            '$f21'
+        when 'ft14'
+            '$f22'
+        when 'ft15'
+            '$f23'
+        when 'ft16'
+            '$f24'
+        when 'ft17'
+            '$f25'
+        when 'ft18'
+            '$f26'
+        when 'ft19'
+            '$f27'
+        when 'ft20'
+            '$f28'
+        when 'ft21'
+            '$f29'
         when 'csfr0'
             '$f24'
         when 'csfr1'
@@ -254,6 +294,31 @@ class FPRegisterID
             '$f31'
         else
             raise "Bad register name #{@name} at #{codeOriginString}"
+        end
+    end
+end
+
+class VecRegisterID
+    def loongarch64Operands
+        case @name
+        when 'v0', 'v0_b', 'v0_h', 'v0_i', 'v0_q'
+            ['$r16', '$r17']
+        when 'v1', 'v1_b', 'v1_h', 'v1_i', 'v1_q'
+            ['$r18', '$r19']
+        when 'v2', 'v2_b', 'v2_h', 'v2_i', 'v2_q'
+            ['$r20', '$r21']
+        when 'v3', 'v3_b', 'v3_h', 'v3_i', 'v3_q'
+            ['$r8', '$r9']
+        when 'v4', 'v4_b', 'v4_h', 'v4_i', 'v4_q'
+            ['$r10', '$r11']
+        when 'v5', 'v5_b', 'v5_h', 'v5_i', 'v5_q'
+            ['$r12', '$r13']
+        when 'v6', 'v6_b', 'v6_h', 'v6_i', 'v6_q'
+            ['$r14', '$r15']
+        when 'v7', 'v7_b', 'v7_h', 'v7_i', 'v7_q'
+            ['$r6', '$r7']
+        else
+            raise "Bad vector register name #{@name} at #{codeOriginString}"
         end
     end
 end
@@ -523,6 +588,32 @@ def loongarch64LowerOperation(list)
         newList << Instruction.new(node.codeOrigin, "st.#{suffix}", node.operands)
     end
 
+    def emitLoadVectorOperation(newList, node)
+        case loongarch64OperandTypes(node.operands)
+        when [Address, VecRegisterID]
+            low, high = node.operands[1].loongarch64Operands.map { |name| SpecialRegister.new(name) }
+            newList << Instruction.new(node.codeOrigin, "ld.d", [node.operands[0], low])
+            newList << Instruction.new(node.codeOrigin, "ld.d", [node.operands[0].withOffset(8), high])
+        when [Address, FPRegisterID]
+            newList << Instruction.new(node.codeOrigin, "fld.d", node.operands)
+        else
+            loongarch64RaiseMismatchedOperands(node.operands)
+        end
+    end
+
+    def emitStoreVectorOperation(newList, node)
+        case loongarch64OperandTypes(node.operands)
+        when [VecRegisterID, Address]
+            low, high = node.operands[0].loongarch64Operands.map { |name| SpecialRegister.new(name) }
+            newList << Instruction.new(node.codeOrigin, "st.d", [low, node.operands[1]])
+            newList << Instruction.new(node.codeOrigin, "st.d", [high, node.operands[1].withOffset(8)])
+        when [FPRegisterID, Address]
+            newList << Instruction.new(node.codeOrigin, "fst.d", node.operands)
+        else
+            loongarch64RaiseMismatchedOperands(node.operands)
+        end
+    end
+
     def emitMove(newList, node)
         case loongarch64OperandTypes(node.operands)
         when [RegisterID, RegisterID]
@@ -534,6 +625,13 @@ def loongarch64LowerOperation(list)
         end
 
         newList << Instruction.new(node.codeOrigin, "#{moveOpcode}", node.operands)
+    end
+
+    def emitTransferOperation(newList, node, size)
+        loongarch64ValidateOperands(node.operands, [Address, Address])
+        tmp = Tmp.new(node.codeOrigin, :gpr)
+        emitLoadOperation(newList, Instruction.new(node.codeOrigin, "load#{size}", [node.operands[0], tmp]), size)
+        emitStoreOperation(newList, Instruction.new(node.codeOrigin, "store#{size}", [tmp, node.operands[1]]), size)
     end
 
     def emitJump(newList, node)
@@ -553,7 +651,7 @@ def loongarch64LowerOperation(list)
         case loongarch64OperandTypes(node.operands)
         when [RegisterID]
             callOpcode = "jalr"
-        when [LabelReference]
+        when [LabelReference], [LocalLabelReference]
             callOpcode = "bl"
         else
             loongarch64RaiseMismatchedOperands(node.operands)
@@ -764,18 +862,18 @@ def loongarch64LowerOperation(list)
             newList << Instruction.new(node.codeOrigin, "slli.d", [source, Immediate.new(node.codeOrigin, 56), dest])
             newList << Instruction.new(node.codeOrigin, "srai.d", [dest, Immediate.new(node.codeOrigin, 24), dest])
             newList << Instruction.new(node.codeOrigin, "srli.d", [dest, Immediate.new(node.codeOrigin, 32), dest])
-        when [:b, :q]
+        when [:b, :p], [:b, :q]
             newList << Instruction.new(node.codeOrigin, "slli.d", [source, Immediate.new(node.codeOrigin, 56), dest])
             newList << Instruction.new(node.codeOrigin, "srai.d", [dest, Immediate.new(node.codeOrigin, 56), dest])
         when [:h, :i]
             newList << Instruction.new(node.codeOrigin, "slli.d", [source, Immediate.new(node.codeOrigin, 48), dest])
             newList << Instruction.new(node.codeOrigin, "srai.d", [dest, Immediate.new(node.codeOrigin, 16), dest])
             newList << Instruction.new(node.codeOrigin, "srli.d", [dest, Immediate.new(node.codeOrigin, 32), dest])
-        when [:h, :q]
+        when [:h, :p], [:h, :q]
             newList << Instruction.new(node.codeOrigin, "slli.d", [source, Immediate.new(node.codeOrigin, 48), dest])
             newList << Instruction.new(node.codeOrigin, "srai.d", [dest, Immediate.new(node.codeOrigin, 48), dest])
         else
-            raise "Invalid bit-extension combination"
+            raise "Invalid bit-extension combination #{extension} #{fromSize} #{toSize} for #{node.opcode} at #{node.codeOriginString}"
         end
     end
 
@@ -798,12 +896,12 @@ def loongarch64LowerOperation(list)
         newList << Instruction.new(node.codeOrigin, "xor", [count, count, count])
         tmp = Tmp.new(node.codeOrigin, :gpr)
         newList << Instruction.new(node.codeOrigin, "li.d", [Immediate.new(node.codeOrigin, side == :t ? bits : bits - 1), tmp])
-        loopLabel = LocalLabel.unique("begin_count_loop")
+        loopLabel = LocalLabel.unique(node.codeOrigin, "begin_count_loop")
         newList << loopLabel
         check = Tmp.new(node.codeOrigin, :gpr)
         newList << Instruction.new(node.codeOrigin, "srl.#{suffix}", [from, side == :t ? count : tmp, check])
         newList << Instruction.new(node.codeOrigin, "andi", [check, Immediate.new(node.codeOrigin, 1), check])
-        returnLabel = LocalLabel.unique("return_count")
+        returnLabel = LocalLabel.unique(node.codeOrigin, "return_count")
         newList << Instruction.new(node.codeOrigin, "bgtz", [check, LocalLabelReference.new(node.codeOrigin, returnLabel)])
         newList << Instruction.new(node.codeOrigin, "addi.#{suffix}", [count, Immediate.new(node.codeOrigin, 1), count])
         case side
@@ -826,6 +924,8 @@ def loongarch64LowerOperation(list)
                 emitLoadOperation(newList, node, $1.to_sym)
             when /^store(b|h|i|p|q)$/
                 emitStoreOperation(newList, node, $1.to_sym)
+            when /^transfer(i|p|q)$/
+                emitTransferOperation(newList, node, $1.to_sym)
             when "move"
                 emitMove(newList, node)
             when "jmp"
@@ -1313,7 +1413,7 @@ def loongarch64LowerFPOperation(list)
         newList << Instruction.new(node.codeOrigin, "movfr2gr.#{fpSuffix}", [fscratch, tmp])
         # NaN and infinity
         newList << Instruction.new(node.codeOrigin, "andi", [tmp, Immediate.new(node.codeOrigin, 0x4e), tmp])
-        returnLabel = LocalLabel.unique("return_exotic_float")
+        returnLabel = LocalLabel.unique(node.codeOrigin, "return_exotic_float")
         newList << Instruction.new(node.codeOrigin, "bnez", [tmp, LocalLabelReference.new(node.codeOrigin, returnLabel)])
         newList << Instruction.new(node.codeOrigin, "#{roundOpcode}.#{intSuffix}.#{fpSuffix}", [from, to])
         newList << Instruction.new(node.codeOrigin, "ffint.#{fpSuffix}.#{intSuffix}", [to, to])
@@ -1390,8 +1490,8 @@ def loongarch64LowerFPOperation(list)
                 newList << Instruction.new(node.codeOrigin, fcvtOpcode, [node.operands[1], node.operands[1]])
             else
                 # UInt64 to Float or Double
-                belowZeroLabel = LocalLabel.unique("uint64_to_float_or_double_below_zero")
-                doneLabel = LocalLabel.unique("uint64_to_float_or_double_done")
+                belowZeroLabel = LocalLabel.unique(node.codeOrigin, "uint64_to_float_or_double_below_zero")
+                doneLabel = LocalLabel.unique(node.codeOrigin, "uint64_to_float_or_double_done")
                 newList << Instruction.new(node.codeOrigin, "blt", [node.operands[0], zero, LocalLabelReference.new(node.codeOrigin, belowZeroLabel)])
                 newList << Instruction.new(node.codeOrigin, "movgr2fr.#{gr2frSuffix(sourceType)}", [node.operands[0], node.operands[1]])
                 newList << Instruction.new(node.codeOrigin, fcvtOpcode, [node.operands[1], node.operands[1]])
@@ -1421,8 +1521,8 @@ def loongarch64LowerFPOperation(list)
                     case destinationType
                     when :i
                         # Float to Uint32
-                        notEqualZeroLabel = LocalLabel.unique("float_to_uint32_not_equal_zero")
-                        doneLabel = LocalLabel.unique("float_to_uint32_done")
+                        notEqualZeroLabel = LocalLabel.unique(node.codeOrigin, "float_to_uint32_not_equal_zero")
+                        doneLabel = LocalLabel.unique(node.codeOrigin, "float_to_uint32_done")
                         newList << Instruction.new(node.codeOrigin, "addi.d", [sp, Immediate.new(node.codeOrigin, -4), sp])
                         newList << Instruction.new(node.codeOrigin, "li.d", [Immediate.new(node.codeOrigin, 0x3b031b014f000000), rscratch])
                         newList << Instruction.new(node.codeOrigin, "st.d", [rscratch, Address.new(node.codeOrigin, sp, Immediate.new(node.codeOrigin, 0))])
@@ -1445,8 +1545,8 @@ def loongarch64LowerFPOperation(list)
 
                     when :q
                         # Float to Uint64
-                        notEqualZeroLabel = LocalLabel.unique("float_to_uint64_not_equal_zero")
-                        doneLabel = LocalLabel.unique("float_to_uint64_done")
+                        notEqualZeroLabel = LocalLabel.unique(node.codeOrigin, "float_to_uint64_not_equal_zero")
+                        doneLabel = LocalLabel.unique(node.codeOrigin, "float_to_uint64_done")
                         newList << Instruction.new(node.codeOrigin, "addi.d", [sp, Immediate.new(node.codeOrigin, -4), sp])
                         newList << Instruction.new(node.codeOrigin, "li.d", [Immediate.new(node.codeOrigin, 0x3b031b015f000000), rscratch])
                         newList << Instruction.new(node.codeOrigin, "st.d", [rscratch, Address.new(node.codeOrigin, sp, Immediate.new(node.codeOrigin, 0))])
@@ -1474,8 +1574,8 @@ def loongarch64LowerFPOperation(list)
                     case destinationType
                     when :i
                         # Double to Uint32
-                        notEqualZeroLabel = LocalLabel.unique("double_to_uint32_not_equal_zero")
-                        doneLabel = LocalLabel.unique("double_to_uint32_done")
+                        notEqualZeroLabel = LocalLabel.unique(node.codeOrigin, "double_to_uint32_not_equal_zero")
+                        doneLabel = LocalLabel.unique(node.codeOrigin, "double_to_uint32_done")
                         newList << Instruction.new(node.codeOrigin, "addi.d", [sp, Immediate.new(node.codeOrigin, -4), sp])
                         newList << Instruction.new(node.codeOrigin, "li.d", [Immediate.new(node.codeOrigin, 0x41e0000000000000), rscratch])
                         newList << Instruction.new(node.codeOrigin, "st.d", [rscratch, Address.new(node.codeOrigin, sp, Immediate.new(node.codeOrigin, 0))])
@@ -1498,8 +1598,8 @@ def loongarch64LowerFPOperation(list)
 
                     when :q
                         # Double to Uint64
-                        notEqualZeroLabel = LocalLabel.unique("double_to_uint64_not_equal_zero")
-                        doneLabel = LocalLabel.unique("double_to_uint64_done")
+                        notEqualZeroLabel = LocalLabel.unique(node.codeOrigin, "double_to_uint64_not_equal_zero")
+                        doneLabel = LocalLabel.unique(node.codeOrigin, "double_to_uint64_done")
                         newList << Instruction.new(node.codeOrigin, "addi.d", [sp, Immediate.new(node.codeOrigin, -4), sp])
                         newList << Instruction.new(node.codeOrigin, "li.d", [Immediate.new(node.codeOrigin, 0x43e0000000000000), rscratch])
                         newList << Instruction.new(node.codeOrigin, "st.d", [rscratch, Address.new(node.codeOrigin, sp, Immediate.new(node.codeOrigin, 0))])
@@ -1660,7 +1760,7 @@ def loongarch64LowerFPBranch(list)
     end
 
     def emit(newList, node, precision, condition)
-        loongarch64ValidateOperands(node.operands, [FPRegisterID, FPRegisterID, LocalLabelReference])
+        loongarch64ValidateOperands(node.operands, [FPRegisterID, FPRegisterID, LocalLabelReference], [FPRegisterID, FPRegisterID, LabelReference])
         operands = node.operands
 
         if [:equn, :nequn, :gtun, :gtequn, :ltun, :ltequn].include? condition
@@ -1692,6 +1792,10 @@ def loongarch64LowerFPBranch(list)
             case node.opcode
             when /^b(f|d)(eq|neq|gt|gteq|lt|lteq|equn|nequn|gtun|gtequn|ltun|ltequn)$/
                 emit(newList, node, $1.to_sym, $2.to_sym)
+            when "loadv"
+                emitLoadVectorOperation(newList, node)
+            when "storev"
+                emitStoreVectorOperation(newList, node)
             else
                 newList << node
             end
@@ -1709,8 +1813,7 @@ def loongarch64GenerateWASMPlaceholders(list)
         if node.is_a? Instruction
             case node.opcode
             when "loadlinkacqb", "loadlinkacqh", "loadlinkacqi", "loadlinkacqq",
-                 "storecondrelb", "storecondrelh", "storecondreli", "storecondrelq",
-                 "loadv", "storev"
+                 "storecondrelb", "storecondrelh", "storecondreli", "storecondrelq"
                 newList << Instruction.new(node.codeOrigin, "break", [], "WebAssembly placeholder for opcode #{node.opcode}")
             else
                 newList << node
@@ -1763,6 +1866,25 @@ end
 class Instruction
     def laop(opcode)
         opcode[/^(.+)/, 1]
+    end
+
+    def loongarch64InvertBranchOpcode(opcode)
+        case opcode
+        when "beq"
+            "bne"
+        when "bne"
+            "beq"
+        when "bge"
+            "blt"
+        when "bgeu"
+            "bltu"
+        when "blt"
+            "bge"
+        when "bltu"
+            "bgeu"
+        else
+            raise "Invalid branch opcode #{opcode}"
+        end
     end
 
     def lowerLOONGARCH64
@@ -1822,7 +1944,10 @@ class Instruction
             $asm.puts "slt #{operands[1].loongarch64Operand}, $r0, #{operands[0].loongarch64Operand}"
         when /^b(eq|ne|ge|geu|lt|ltu)$/
             loongarch64ValidateOperands(operands, [RegisterID, RegisterID, LocalLabelReference], [RegisterID, RegisterID, LabelReference])
-            $asm.puts "#{laop(opcode)} #{operands[0].loongarch64Operand}, #{operands[1].loongarch64Operand}, #{operands[2].asmLabel}"
+            skip = LocalLabel.unique(codeOrigin, "skip_far_branch")
+            $asm.puts "#{loongarch64InvertBranchOpcode(laop(opcode))} #{operands[0].loongarch64Operand}, #{operands[1].loongarch64Operand}, #{LocalLabelReference.new(codeOrigin, skip).asmLabel}"
+            $asm.puts "b #{operands[2].asmLabel}"
+            $asm.putsLocalLabel(skip.labelString)
         when /^b(eqz|nez|lez|ltz|gez|gtz)$/
             loongarch64ValidateOperands(operands, [RegisterID, LocalLabelReference], [RegisterID, LabelReference])
             $asm.puts "#{laop(opcode)} #{operands[0].loongarch64Operand}, #{operands[1].asmLabel}"
@@ -1833,6 +1958,26 @@ class Instruction
             $asm.puts "#{laop(opcode)}"
         when "ret"
             $asm.puts "jr $r1"
+        when "pushv"
+            loongarch64ValidateOperands(operands, [FPRegisterID], [VecRegisterID])
+            $asm.puts "addi.d $r3, $r3, -16"
+            if operands[0].is_a? VecRegisterID
+                low, high = operands[0].loongarch64Operands
+                $asm.puts "st.d #{low}, $r3, 0"
+                $asm.puts "st.d #{high}, $r3, 8"
+            else
+                $asm.puts "fst.d #{operands[0].loongarch64Operand}, $r3, 0"
+            end
+        when "popv"
+            loongarch64ValidateOperands(operands, [FPRegisterID], [VecRegisterID])
+            if operands[0].is_a? VecRegisterID
+                low, high = operands[0].loongarch64Operands
+                $asm.puts "ld.d #{low}, $r3, 0"
+                $asm.puts "ld.d #{high}, $r3, 8"
+            else
+                $asm.puts "fld.d #{operands[0].loongarch64Operand}, $r3, 0"
+            end
+            $asm.puts "addi.d $r3, $r3, 16"
         when "break"
             $asm.puts "#{laop(opcode)} 0x5"
         when "dbar"

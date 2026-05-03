@@ -720,6 +720,8 @@ inline void* wasmInstancePointer(const mcontext_t& machineContext)
     return reinterpret_cast<void*>((uintptr_t) machineContext.regs[19]);
 #elif CPU(RISCV64)
     return reinterpret_cast<void*>((uintptr_t) machineContext.__gregs[9]);
+#elif CPU(LOONGARCH64)
+    return reinterpret_cast<void*>((uintptr_t) machineContext.__gregs[23]);
 #else
 #error Unknown Architecture
 #endif
