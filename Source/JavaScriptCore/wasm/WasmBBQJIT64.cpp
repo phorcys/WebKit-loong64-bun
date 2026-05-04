@@ -3664,7 +3664,8 @@ void NODELETE BBQJIT::notifyFunctionUsesSIMD()
 
     LOG_INSTRUCTION("VectorShuffle", a, aLocation, b, bLocation, RESULT(result));
 
-    if constexpr (isX86()) {
+#if CPU(X86_64)
+    {
         v128_t leftImm = imm;
         v128_t rightImm = imm;
         for (unsigned i = 0; i < 16; ++i) {
@@ -3685,15 +3686,18 @@ void NODELETE BBQJIT::notifyFunctionUsesSIMD()
         m_jit.vectorOr(SIMDInfo { SIMDLane::v128, SIMDSignMode::None }, scratches.fpr(0), wasmScratchFPR, resultLocation.asFPR());
         return { };
     }
+#endif
 
-#if CPU(ARM64)
+#if CPU(ARM64) || CPU(LOONGARCH64)
     materializeVectorConstant(imm, Location::fromFPR(wasmScratchFPR));
+#if CPU(ARM64)
     if (unsigned(aLocation.asFPR()) + 1 != unsigned(bLocation.asFPR())) {
         m_jit.moveVector(aLocation.asFPR(), ARM64Registers::q28);
         m_jit.moveVector(bLocation.asFPR(), ARM64Registers::q29);
         aLocation = Location::fromFPR(ARM64Registers::q28);
         bLocation = Location::fromFPR(ARM64Registers::q29);
     }
+#endif
     m_jit.vectorSwizzle2(aLocation.asFPR(), bLocation.asFPR(), wasmScratchFPR, resultLocation.asFPR());
 #else
     UNREACHABLE_FOR_PLATFORM();
@@ -3740,8 +3744,7 @@ void NODELETE BBQJIT::notifyFunctionUsesSIMD()
     } else {
         m_jit.and32(Imm32(mask), shiftLocation.asGPR(), wasmScratchGPR);
         if (op == SIMDLaneOperation::Shr) {
-            // ARM64 doesn't have a version of this instruction for right shift. Instead, if the input to
-            // left shift is negative, it's a right shift by the absolute value of that amount.
+            // ARM64 and LSX use negative left-shift counts to express right shifts.
             m_jit.neg32(wasmScratchGPR);
         }
         m_jit.vectorSplatInt8(wasmScratchGPR, wasmScratchFPR);
@@ -3749,6 +3752,27 @@ void NODELETE BBQJIT::notifyFunctionUsesSIMD()
             m_jit.vectorSshl(info, srcLocation.asFPR(), wasmScratchFPR, resultLocation.asFPR());
         else
             m_jit.vectorUshl(info, srcLocation.asFPR(), wasmScratchFPR, resultLocation.asFPR());
+    }
+#elif CPU(LOONGARCH64)
+    if (shift.isConst()) {
+        int32_t shiftImm = shift.asI32() & mask;
+        if (!shiftImm)
+            m_jit.moveVector(srcLocation.asFPR(), resultLocation.asFPR());
+        else if (op == SIMDLaneOperation::Shl)
+            m_jit.vectorShl8(info, srcLocation.asFPR(), TrustedImm32(shiftImm), resultLocation.asFPR());
+        else if (info.signMode == SIMDSignMode::Signed)
+            m_jit.vectorSshr8(info, srcLocation.asFPR(), TrustedImm32(shiftImm), resultLocation.asFPR());
+        else
+            m_jit.vectorUshr8(info, srcLocation.asFPR(), TrustedImm32(shiftImm), resultLocation.asFPR());
+    } else {
+        m_jit.and32(Imm32(mask), shiftLocation.asGPR(), wasmScratchGPR);
+        m_jit.vectorSplatInt8(wasmScratchGPR, wasmScratchFPR);
+        if (op == SIMDLaneOperation::Shl)
+            m_jit.vectorUshl(info, srcLocation.asFPR(), wasmScratchFPR, resultLocation.asFPR());
+        else if (info.signMode == SIMDSignMode::Signed)
+            m_jit.vectorSshr(info, srcLocation.asFPR(), wasmScratchFPR, resultLocation.asFPR());
+        else
+            m_jit.vectorUshr(info, srcLocation.asFPR(), wasmScratchFPR, resultLocation.asFPR());
     }
 #else
     ASSERT(isX86());
@@ -4024,12 +4048,24 @@ void NODELETE BBQJIT::notifyFunctionUsesSIMD()
 
         LOG_INSTRUCTION("Vector", op, pointer, uoffset, RESULT(result));
 
+#if CPU(LOONGARCH64)
+        m_jit.moveZeroToVector(resultLocation.asFPR());
+        if (op == SIMDLaneOperation::LoadPad32) {
+            m_jit.loadFloat(location, wasmScratchFPR);
+            m_jit.vectorReplaceLaneFloat32(TrustedImm32(0), wasmScratchFPR, resultLocation.asFPR());
+        } else {
+            ASSERT(op == SIMDLaneOperation::LoadPad64);
+            m_jit.loadDouble(location, wasmScratchFPR);
+            m_jit.vectorReplaceLaneFloat64(TrustedImm32(0), wasmScratchFPR, resultLocation.asFPR());
+        }
+#else
         if (op == SIMDLaneOperation::LoadPad32)
             m_jit.loadFloat(location, resultLocation.asFPR());
         else {
             ASSERT(op == SIMDLaneOperation::LoadPad64);
             m_jit.loadDouble(location, resultLocation.asFPR());
         }
+#endif
         return result;
     });
     return { };
@@ -4162,8 +4198,10 @@ void BBQJIT::materializeVectorConstant(v128_t value, Location result)
             m_jit.vectorHorizontalAdd(info, scratches.fpr(0), scratches.fpr(0));
             m_jit.moveFloatTo32(scratches.fpr(0), resultLocation.asGPR());
         }
-#else
+#elif CPU(X86_64)
         ASSERT(isX86());
+        m_jit.vectorBitmask(info, valueLocation.asFPR(), resultLocation.asGPR(), wasmScratchFPR);
+#else
         m_jit.vectorBitmask(info, valueLocation.asFPR(), resultLocation.asGPR(), wasmScratchFPR);
 #endif
         return { };
@@ -4172,6 +4210,8 @@ void BBQJIT::materializeVectorConstant(v128_t value, Location result)
         m_jit.vectorUnsignedMax(SIMDInfo { SIMDLane::i32x4, SIMDSignMode::None }, valueLocation.asFPR(), wasmScratchFPR);
         m_jit.moveFloatTo32(wasmScratchFPR, resultLocation.asGPR());
         m_jit.test32(ResultCondition::NonZero, resultLocation.asGPR(), resultLocation.asGPR(), resultLocation.asGPR());
+#elif CPU(LOONGARCH64)
+        m_jit.vectorAnyTrue(valueLocation.asFPR(), resultLocation.asGPR(), wasmScratchGPR);
 #else
         m_jit.vectorAnyTrue(valueLocation.asFPR(), resultLocation.asGPR());
 #endif
@@ -4195,8 +4235,10 @@ void BBQJIT::materializeVectorConstant(v128_t value, Location result)
 
         m_jit.moveFloatTo32(wasmScratchFPR, wasmScratchGPR);
         m_jit.test32(ResultCondition::NonZero, wasmScratchGPR, wasmScratchGPR, resultLocation.asGPR());
-#else
+#elif CPU(X86_64)
         ASSERT(isX86());
+        m_jit.vectorAllTrue(info, valueLocation.asFPR(), resultLocation.asGPR(), wasmScratchFPR);
+#else
         m_jit.vectorAllTrue(info, valueLocation.asFPR(), resultLocation.asGPR(), wasmScratchFPR);
 #endif
         return { };
@@ -4420,7 +4462,7 @@ void BBQJIT::materializeVectorConstant(v128_t value, Location result)
     return { };
 }
 
-[[nodiscard]] PartialResult BBQJIT::addSIMDRelOp(SIMDLaneOperation op, SIMDInfo info, ExpressionType left, ExpressionType right, B3::Air::Arg relOp, ExpressionType& result)
+[[nodiscard]] PartialResult BBQJIT::addSIMDRelOp(SIMDLaneOperation op, SIMDInfo info, ExpressionType left, ExpressionType right, SIMDRelOp relOp, ExpressionType& result)
 {
     Location leftLocation = loadIfNecessary(left);
     Location rightLocation = loadIfNecessary(right);
@@ -4432,6 +4474,7 @@ void BBQJIT::materializeVectorConstant(v128_t value, Location result)
 
     LOG_INSTRUCTION("Vector", op, left, leftLocation, right, rightLocation, RESULT(result));
 
+#if ENABLE(B3_JIT)
     if (scalarTypeIsFloatingPoint(info.lane)) {
         m_jit.compareFloatingPointVector(relOp.asDoubleCondition(), info, leftLocation.asFPR(), rightLocation.asFPR(), resultLocation.asFPR());
         return { };
@@ -4489,6 +4532,13 @@ void BBQJIT::materializeVectorConstant(v128_t value, Location result)
     }
 #else
     m_jit.compareIntegerVector(relOp.asRelationalCondition(), info, leftLocation.asFPR(), rightLocation.asFPR(), resultLocation.asFPR());
+#endif
+#else
+    UNUSED_PARAM(op);
+    if (scalarTypeIsFloatingPoint(info.lane))
+        m_jit.compareFloatingPointVector(relOp.asDoubleCondition(), info, leftLocation.asFPR(), rightLocation.asFPR(), resultLocation.asFPR());
+    else
+        m_jit.compareIntegerVector(relOp.asRelationalCondition(), info, leftLocation.asFPR(), rightLocation.asFPR(), resultLocation.asFPR());
 #endif
     return { };
 }
@@ -4597,7 +4647,11 @@ void BBQJIT::emitVectorMul(SIMDInfo info, Location left, Location right, Locatio
     case SIMDLaneOperation::Swizzle:
         if constexpr (isX86())
             return fixupOutOfBoundsIndicesForSwizzle(leftLocation, rightLocation, resultLocation);
+#if CPU(LOONGARCH64)
+        m_jit.vectorSwizzleStrict(leftLocation.asFPR(), rightLocation.asFPR(), resultLocation.asFPR());
+#else
         m_jit.vectorSwizzle(leftLocation.asFPR(), rightLocation.asFPR(), resultLocation.asFPR());
+#endif
         return { };
     case SIMDLaneOperation::RelaxedSwizzle:
         m_jit.vectorSwizzle(leftLocation.asFPR(), rightLocation.asFPR(), resultLocation.asFPR());

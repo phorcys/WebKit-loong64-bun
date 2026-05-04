@@ -132,6 +132,10 @@ RegisterSet RegisterSet::macroClobberedFPRs()
     result.add(MacroAssembler::fpTempRegister, IgnoreVectors);
     result.add(MacroAssembler::fpTempRegister2, IgnoreVectors);
 #elif CPU(LOONGARCH64)
+    static_assert(MacroAssembler::fpTempRegister == LOONGARCH64Registers::f22);
+    static_assert(MacroAssembler::fpTempRegister2 == LOONGARCH64Registers::f23);
+    // FPRInfo allocators manage f0..f21. Keep f22/f23 reserved for implicit
+    // MacroAssembler scratch use and explicit scratch users.
     result.add(MacroAssembler::fpTempRegister, IgnoreVectors);
     result.add(MacroAssembler::fpTempRegister2, IgnoreVectors);
 #endif

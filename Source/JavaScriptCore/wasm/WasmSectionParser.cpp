@@ -771,7 +771,6 @@ auto SectionParser::parseInitExpr(uint8_t& opcode, bool& isExtendedConstantExpre
         break;
     }
 
-#if ENABLE(B3_JIT)
     case ExtSIMD: {
         WASM_PARSER_FAIL_IF(!Options::useWasmSIMD(), "SIMD must be enabled"_s);
         uint8_t simdOpcode;
@@ -784,12 +783,6 @@ auto SectionParser::parseInitExpr(uint8_t& opcode, bool& isExtendedConstantExpre
         resultType = Types::V128;
         break;
     }
-#else
-    case ExtSIMD:
-        WASM_PARSER_FAIL_IF(true, "wasm-simd is not supported"_s);
-        (void) vectorBits;
-        break;
-#endif
 
     case GetGlobal: {
         uint32_t index;

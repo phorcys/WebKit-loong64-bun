@@ -83,6 +83,9 @@ Code::Code(Procedure& proc)
             RegisterSet all = bank == GP ? RegisterSet::allGPRs() : RegisterSet::allFPRs();
             all.exclude(RegisterSet::stackRegisters());
             all.exclude(RegisterSet::reservedHardwareRegisters());
+#if CPU(LOONGARCH64)
+            all.exclude(bank == GP ? RegisterSet::macroClobberedGPRs() : RegisterSet::macroClobberedFPRs());
+#endif
 #if CPU(ARM)
             // FIXME https://bugs.webkit.org/show_bug.cgi?id=243888
             // Unfortunately, the extra registers provided by the neon/vfpv3
@@ -105,6 +108,10 @@ Code::Code(Procedure& proc)
             auto calleeSave = RegisterSet::calleeSaveRegisters();
             all.forEach(
                 [&] (Reg reg) {
+#if CPU(LOONGARCH64)
+                    ASSERT(!RegisterSet::macroClobberedGPRs().contains(reg, IgnoreVectors));
+                    ASSERT(!RegisterSet::macroClobberedFPRs().contains(reg, IgnoreVectors));
+#endif
                     if (!calleeSave.contains(reg, IgnoreVectors))
                         volatileRegs.append(reg);
                     if (calleeSave.contains(reg, conservativeWidth(reg)))

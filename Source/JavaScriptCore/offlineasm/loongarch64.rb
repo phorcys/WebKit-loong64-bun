@@ -296,27 +296,98 @@ class FPRegisterID
             raise "Bad register name #{@name} at #{codeOriginString}"
         end
     end
+
+    def loongarch64VectorOperand
+        case @name
+        when 'fa0', 'wfa0'
+            '$vr0'
+        when 'fa1', 'wfa1'
+            '$vr1'
+        when 'fa2', 'wfa2'
+            '$vr2'
+        when 'fa3', 'wfa3'
+            '$vr3'
+        when 'fa4', 'wfa4'
+            '$vr4'
+        when 'fa5', 'wfa5'
+            '$vr5'
+        when 'fa6', 'wfa6'
+            '$vr6'
+        when 'fa7', 'wfa7'
+            '$vr7'
+        when 'ft0'
+            '$vr8'
+        when 'ft1'
+            '$vr9'
+        when 'ft2'
+            '$vr10'
+        when 'ft3'
+            '$vr11'
+        when 'ft4'
+            '$vr12'
+        when 'ft5'
+            '$vr13'
+        when 'ft6'
+            '$vr14'
+        when 'ft7'
+            '$vr15'
+        when 'ft8'
+            '$vr16'
+        when 'ft9'
+            '$vr17'
+        when 'ft10'
+            '$vr18'
+        when 'ft11'
+            '$vr19'
+        when 'ft12'
+            '$vr20'
+        when 'ft13'
+            '$vr21'
+        when 'ft14'
+            '$vr22'
+        when 'ft15'
+            '$vr23'
+        when 'ft16', 'csfr0'
+            '$vr24'
+        when 'ft17', 'csfr1'
+            '$vr25'
+        when 'ft18', 'csfr2'
+            '$vr26'
+        when 'ft19', 'csfr3'
+            '$vr27'
+        when 'ft20', 'csfr4'
+            '$vr28'
+        when 'ft21', 'csfr5'
+            '$vr29'
+        when 'csfr6'
+            '$vr30'
+        when 'csfr7'
+            '$vr31'
+        else
+            raise "Bad vector register name #{@name} at #{codeOriginString}"
+        end
+    end
 end
 
 class VecRegisterID
-    def loongarch64Operands
+    def loongarch64Operand
         case @name
         when 'v0', 'v0_b', 'v0_h', 'v0_i', 'v0_q'
-            ['$r16', '$r17']
+            '$vr16'
         when 'v1', 'v1_b', 'v1_h', 'v1_i', 'v1_q'
-            ['$r18', '$r19']
+            '$vr17'
         when 'v2', 'v2_b', 'v2_h', 'v2_i', 'v2_q'
-            ['$r20', '$r21']
+            '$vr18'
         when 'v3', 'v3_b', 'v3_h', 'v3_i', 'v3_q'
-            ['$r8', '$r9']
+            '$vr19'
         when 'v4', 'v4_b', 'v4_h', 'v4_i', 'v4_q'
-            ['$r10', '$r11']
+            '$vr20'
         when 'v5', 'v5_b', 'v5_h', 'v5_i', 'v5_q'
-            ['$r12', '$r13']
+            '$vr21'
         when 'v6', 'v6_b', 'v6_h', 'v6_i', 'v6_q'
-            ['$r14', '$r15']
+            '$vr22'
         when 'v7', 'v7_b', 'v7_h', 'v7_i', 'v7_q'
-            ['$r6', '$r7']
+            '$vr23'
         else
             raise "Bad vector register name #{@name} at #{codeOriginString}"
         end
@@ -650,6 +721,16 @@ def loongarch64LowerAtomic(list)
         newList << Instruction.new(node.codeOrigin, "move", [result, expectedAndResult]) if result != expectedAndResult
     end
 
+    def emitBranchingAtomicCAS(newList, node, size)
+        loongarch64ValidateOperands(node.operands, [RegisterID, RegisterID, Address, LocalLabelReference])
+
+        expectedAndResult = node.operands[0]
+        expected = Tmp.new(node.codeOrigin, :gpr)
+        newList << Instruction.new(node.codeOrigin, "move", [expectedAndResult, expected])
+        emitAtomicCAS(newList, node, size, expectedAndResult, node.operands[1], node.operands[2])
+        newList << Instruction.new(node.codeOrigin, "bne", [expectedAndResult, expected, node.operands[3]])
+    end
+
     def emitAtomicCASLoop(newList, node, size, src, address, dest, operation)
         addr = emitAtomicAddress(newList, node, address)
         oldValue = Tmp.new(node.codeOrigin, :gpr)
@@ -722,6 +803,8 @@ def loongarch64LowerAtomic(list)
                 newList << Instruction.new(node.codeOrigin, "li.d", [Immediate.new(node.codeOrigin, -1), inverted])
                 newList << Instruction.new(node.codeOrigin, "xor", [node.operands[0], inverted, inverted])
                 emitAtomicAM(newList, node, $1.to_sym, "amand", inverted, node.operands[1], node.operands[2])
+            when /^batomicweakcas(b|h|i|q)$/
+                emitBranchingAtomicCAS(newList, node, $1.to_sym)
             when /^atomicweakcas(b|h|i|q)$/
                 loongarch64ValidateOperands(node.operands, [RegisterID, RegisterID, Address])
                 emitAtomicCAS(newList, node, $1.to_sym, node.operands[0], node.operands[1], node.operands[2])
@@ -790,11 +873,9 @@ def loongarch64LowerOperation(list)
     def emitLoadVectorOperation(newList, node)
         case loongarch64OperandTypes(node.operands)
         when [Address, VecRegisterID]
-            low, high = node.operands[1].loongarch64Operands.map { |name| SpecialRegister.new(name) }
-            newList << Instruction.new(node.codeOrigin, "ld.d", [node.operands[0], low])
-            newList << Instruction.new(node.codeOrigin, "ld.d", [node.operands[0].withOffset(8), high])
+            newList << Instruction.new(node.codeOrigin, "vld", node.operands)
         when [Address, FPRegisterID]
-            newList << Instruction.new(node.codeOrigin, "fld.d", node.operands)
+            newList << Instruction.new(node.codeOrigin, "vldf", node.operands)
         else
             loongarch64RaiseMismatchedOperands(node.operands)
         end
@@ -803,11 +884,9 @@ def loongarch64LowerOperation(list)
     def emitStoreVectorOperation(newList, node)
         case loongarch64OperandTypes(node.operands)
         when [VecRegisterID, Address]
-            low, high = node.operands[0].loongarch64Operands.map { |name| SpecialRegister.new(name) }
-            newList << Instruction.new(node.codeOrigin, "st.d", [low, node.operands[1]])
-            newList << Instruction.new(node.codeOrigin, "st.d", [high, node.operands[1].withOffset(8)])
+            newList << Instruction.new(node.codeOrigin, "vst", node.operands)
         when [FPRegisterID, Address]
-            newList << Instruction.new(node.codeOrigin, "fst.d", node.operands)
+            newList << Instruction.new(node.codeOrigin, "vstf", node.operands)
         else
             loongarch64RaiseMismatchedOperands(node.operands)
         end
@@ -1596,9 +1675,13 @@ def loongarch64LowerFPOperation(list)
         when :f
             intSuffix = "w"
             fpSuffix = "s"
+            gr2frLimitSuffix = "w"
+            magnitudeLimit = 0x4b000000 # 2^23; all larger finite f32 values are already integral.
         when :d
             intSuffix = "l"
             fpSuffix = "d"
+            gr2frLimitSuffix = "d"
+            magnitudeLimit = 0x4330000000000000 # 2^52; all larger finite f64 values are already integral.
         else
             raise "Invalid precision"
         end
@@ -1615,18 +1698,42 @@ def loongarch64LowerFPOperation(list)
             raise "Invalid rounding mode #{@mode}"
         end
 
-        newList << Instruction.new(node.codeOrigin, "fmov.#{fpSuffix}", [from, to])
         tmp = Tmp.new(node.codeOrigin, :gpr)
         fscratch = SpecialRegister.new("$f23")
+        flimit = SpecialRegister.new("$f22")
+        fcc0 = SpecialRegister.new("$fcc0")
         newList << Instruction.new(node.codeOrigin, "fclass.#{fpSuffix}", [from, fscratch])
         newList << Instruction.new(node.codeOrigin, "movfr2gr.#{fpSuffix}", [fscratch, tmp])
-        # NaN and infinity
-        newList << Instruction.new(node.codeOrigin, "andi", [tmp, Immediate.new(node.codeOrigin, 0x4e), tmp])
-        returnLabel = LocalLabel.unique(node.codeOrigin, "return_exotic_float")
-        newList << Instruction.new(node.codeOrigin, "bnez", [tmp, LocalLabelReference.new(node.codeOrigin, returnLabel)])
-        newList << Instruction.new(node.codeOrigin, "#{roundOpcode}.#{intSuffix}.#{fpSuffix}", [from, to])
+        # NaN is propagated as an arithmetic NaN, matching MacroAssemblerLOONGARCH64::roundFP.
+        newList << Instruction.new(node.codeOrigin, "andi", [tmp, Immediate.new(node.codeOrigin, 0x3), tmp])
+        notNaNLabel = LocalLabel.unique(node.codeOrigin, "round_not_nan")
+        doneLabel = LocalLabel.unique(node.codeOrigin, "round_done")
+        notRoundableLabel = LocalLabel.unique(node.codeOrigin, "round_not_roundable")
+        newList << Instruction.new(node.codeOrigin, "beqz", [tmp, LocalLabelReference.new(node.codeOrigin, notNaNLabel)])
+        newList << Instruction.new(node.codeOrigin, "fadd.#{fpSuffix}", [from, from, to])
+        newList << Instruction.new(node.codeOrigin, "b", [LocalLabelReference.new(node.codeOrigin, doneLabel)])
+
+        newList << notNaNLabel
+        newList << Instruction.new(node.codeOrigin, "li.d", [Immediate.new(node.codeOrigin, magnitudeLimit), tmp])
+        newList << Instruction.new(node.codeOrigin, "movgr2fr.#{gr2frLimitSuffix}", [tmp, flimit])
+        newList << Instruction.new(node.codeOrigin, "fabs.#{fpSuffix}", [from, fscratch])
+        newList << Instruction.new(node.codeOrigin, "fcmp.clt.#{fpSuffix}", [fscratch, flimit, fcc0])
+        newList << Instruction.new(node.codeOrigin, "movcf2gr", [fcc0, tmp])
+        newList << Instruction.new(node.codeOrigin, "beqz", [tmp, LocalLabelReference.new(node.codeOrigin, notRoundableLabel)])
+
+        roundSource = from
+        if from == to
+            newList << Instruction.new(node.codeOrigin, "fmov.#{fpSuffix}", [from, fscratch])
+            roundSource = fscratch
+        end
+        newList << Instruction.new(node.codeOrigin, "#{roundOpcode}.#{intSuffix}.#{fpSuffix}", [roundSource, to])
         newList << Instruction.new(node.codeOrigin, "ffint.#{fpSuffix}.#{intSuffix}", [to, to])
-        newList << returnLabel
+        newList << Instruction.new(node.codeOrigin, "fcopysign.#{fpSuffix}", [to, roundSource, to])
+        newList << Instruction.new(node.codeOrigin, "b", [LocalLabelReference.new(node.codeOrigin, doneLabel)])
+
+        newList << notRoundableLabel
+        newList << Instruction.new(node.codeOrigin, "fmov.#{fpSuffix}", [from, to]) if from != to
+        newList << doneLabel
     end
 
     def emitConversionOperation(newList, node, sourceType, destinationType, signedness)
@@ -1678,6 +1785,17 @@ def loongarch64LowerFPOperation(list)
             end
         end
 
+        def fpResultToGrSuffix(type)
+            case type
+            when :i
+                "s"
+            when :p, :q
+                "d"
+            else
+                raise "Invalid type #{type}"
+            end
+        end
+
         loongarch64ValidateOperands(node.operands, [registerType(sourceType), registerType(destinationType)])
 
         zero      = SpecialRegister.new("$r0")
@@ -1698,23 +1816,30 @@ def loongarch64LowerFPOperation(list)
                 newList << Instruction.new(node.codeOrigin, "movgr2fr.#{gr2frSuffix(sourceType)}", [node.operands[0], node.operands[1]])
                 newList << Instruction.new(node.codeOrigin, fcvtOpcode, [node.operands[1], node.operands[1]])
             else
-                # UInt64 to Float or Double
-                belowZeroLabel = LocalLabel.unique(node.codeOrigin, "uint64_to_float_or_double_below_zero")
-                doneLabel = LocalLabel.unique(node.codeOrigin, "uint64_to_float_or_double_done")
-                newList << Instruction.new(node.codeOrigin, "blt", [node.operands[0], zero, LocalLabelReference.new(node.codeOrigin, belowZeroLabel)])
-                newList << Instruction.new(node.codeOrigin, "movgr2fr.#{gr2frSuffix(sourceType)}", [node.operands[0], node.operands[1]])
-                newList << Instruction.new(node.codeOrigin, fcvtOpcode, [node.operands[1], node.operands[1]])
-                newList << Instruction.new(node.codeOrigin, "b", [LocalLabelReference.new(node.codeOrigin, doneLabel)])
-                newList << belowZeroLabel
-                newList << Instruction.new(node.codeOrigin, "or", [node.operands[0], zero, rscratch])
-                newList << Instruction.new(node.codeOrigin, "andi", [rscratch, Immediate.new(node.codeOrigin, 0x1), rscratch])
-                newList << Instruction.new(node.codeOrigin, "or", [node.operands[0], zero, rscratch2])
-                newList << Instruction.new(node.codeOrigin, "srli.d", [rscratch2, Immediate.new(node.codeOrigin, 0x1), rscratch2])
-                newList << Instruction.new(node.codeOrigin, "or", [rscratch, rscratch2, rscratch])
-                newList << Instruction.new(node.codeOrigin, "movgr2fr.#{gr2frSuffix(sourceType)}", [rscratch, node.operands[1]])
-                newList << Instruction.new(node.codeOrigin, fcvtOpcode, [node.operands[1], node.operands[1]])
-                newList << Instruction.new(node.codeOrigin, "fadd.#{fpSuffix(destinationType)}", [node.operands[1], node.operands[1], node.operands[1]])
-                newList << doneLabel
+                if sourceType == :i
+                    # UInt32 to Float or Double.
+                    newList << Instruction.new(node.codeOrigin, "bstrpick.d", [node.operands[0], Immediate.new(node.codeOrigin, 31), Immediate.new(node.codeOrigin, 0), rscratch])
+                    newList << Instruction.new(node.codeOrigin, "movgr2fr.d", [rscratch, node.operands[1]])
+                    newList << Instruction.new(node.codeOrigin, "ffint.#{fpSuffix(destinationType)}.l", [node.operands[1], node.operands[1]])
+                else
+                    # UInt64 to Float or Double.
+                    belowZeroLabel = LocalLabel.unique(node.codeOrigin, "uint64_to_float_or_double_below_zero")
+                    doneLabel = LocalLabel.unique(node.codeOrigin, "uint64_to_float_or_double_done")
+                    newList << Instruction.new(node.codeOrigin, "blt", [node.operands[0], zero, LocalLabelReference.new(node.codeOrigin, belowZeroLabel)])
+                    newList << Instruction.new(node.codeOrigin, "movgr2fr.#{gr2frSuffix(sourceType)}", [node.operands[0], node.operands[1]])
+                    newList << Instruction.new(node.codeOrigin, fcvtOpcode, [node.operands[1], node.operands[1]])
+                    newList << Instruction.new(node.codeOrigin, "b", [LocalLabelReference.new(node.codeOrigin, doneLabel)])
+                    newList << belowZeroLabel
+                    newList << Instruction.new(node.codeOrigin, "or", [node.operands[0], zero, rscratch])
+                    newList << Instruction.new(node.codeOrigin, "andi", [rscratch, Immediate.new(node.codeOrigin, 0x1), rscratch])
+                    newList << Instruction.new(node.codeOrigin, "or", [node.operands[0], zero, rscratch2])
+                    newList << Instruction.new(node.codeOrigin, "srli.d", [rscratch2, Immediate.new(node.codeOrigin, 0x1), rscratch2])
+                    newList << Instruction.new(node.codeOrigin, "or", [rscratch, rscratch2, rscratch])
+                    newList << Instruction.new(node.codeOrigin, "movgr2fr.#{gr2frSuffix(sourceType)}", [rscratch, node.operands[1]])
+                    newList << Instruction.new(node.codeOrigin, fcvtOpcode, [node.operands[1], node.operands[1]])
+                    newList << Instruction.new(node.codeOrigin, "fadd.#{fpSuffix(destinationType)}", [node.operands[1], node.operands[1], node.operands[1]])
+                    newList << doneLabel
+                end
             end
 
         when [FPRegisterID, RegisterID]
@@ -1723,7 +1848,7 @@ def loongarch64LowerFPOperation(list)
             case signedness
             when :s
                 newList << Instruction.new(node.codeOrigin, fcvtOpcode, [node.operands[0], fscratch])
-                newList << Instruction.new(node.codeOrigin, "movfr2gr.#{fpSuffix(sourceType)}", [fscratch, node.operands[1]])
+                newList << Instruction.new(node.codeOrigin, "movfr2gr.#{fpResultToGrSuffix(destinationType)}", [fscratch, node.operands[1]])
             else
                 case sourceType
                 when :f
@@ -2129,6 +2254,33 @@ class Instruction
         when /^st.(b|h|w|d)$/
             loongarch64ValidateOperands(operands, [RegisterID, Address])
             $asm.puts "#{laop(opcode)} #{operands[0].loongarch64Operand}, #{operands[1].loongarch64Operand}"
+        when "vld"
+            loongarch64ValidateOperands(operands, [Address, VecRegisterID])
+            $asm.puts "vld #{operands[1].loongarch64Operand}, #{operands[0].loongarch64Operand}"
+        when "vst"
+            loongarch64ValidateOperands(operands, [VecRegisterID, Address])
+            $asm.puts "vst #{operands[0].loongarch64Operand}, #{operands[1].loongarch64Operand}"
+        when "vldf"
+            loongarch64ValidateOperands(operands, [Address, FPRegisterID])
+            $asm.puts "vld #{operands[1].loongarch64VectorOperand}, #{operands[0].loongarch64Operand}"
+        when "vstf"
+            loongarch64ValidateOperands(operands, [FPRegisterID, Address])
+            $asm.puts "vst #{operands[0].loongarch64VectorOperand}, #{operands[1].loongarch64Operand}"
+        when /^(vand|vor|vxor|vnor)\.v$/
+            loongarch64ValidateOperands(operands, [VecRegisterID, VecRegisterID, VecRegisterID])
+            $asm.puts "#{opcode} #{operands[2].loongarch64Operand}, #{operands[0].loongarch64Operand}, #{operands[1].loongarch64Operand}"
+        when "vbitsel.v"
+            loongarch64ValidateOperands(operands, [VecRegisterID, VecRegisterID, VecRegisterID, VecRegisterID])
+            $asm.puts "vbitsel.v #{operands[3].loongarch64Operand}, #{operands[0].loongarch64Operand}, #{operands[1].loongarch64Operand}, #{operands[2].loongarch64Operand}"
+        when /^vori\.b$/
+            loongarch64ValidateOperands(operands, [VecRegisterID, Immediate, VecRegisterID])
+            $asm.puts "#{opcode} #{operands[2].loongarch64Operand}, #{operands[0].loongarch64Operand}, #{operands[1].loongarch64Operand(:u8)}"
+        when /^vreplgr2vr\.(b|h|w|d)$/
+            loongarch64ValidateOperands(operands, [RegisterID, VecRegisterID])
+            $asm.puts "#{opcode} #{operands[1].loongarch64Operand}, #{operands[0].loongarch64Operand}"
+        when /^vpickve2gr\.(d)$/
+            loongarch64ValidateOperands(operands, [VecRegisterID, Immediate, RegisterID])
+            $asm.puts "#{opcode} #{operands[2].loongarch64Operand}, #{operands[0].loongarch64Operand}, #{operands[1].loongarch64Operand(:u8)}"
         when /^(add\.(w|d)|sub\.(w|d)|and|or|xor|s(ll|rl|ra)\.(w|d)|mul\.(w|d)|div\.(w|d)(u?)|mod\.(w|d)(u?))$/
             loongarch64ValidateOperands(operands, [RegisterID, RegisterID, RegisterID])
             $asm.puts "#{laop(opcode)} #{operands[2].loongarch64Operand}, #{operands[0].loongarch64Operand}, #{operands[1].loongarch64Operand}"
@@ -2183,20 +2335,16 @@ class Instruction
             loongarch64ValidateOperands(operands, [FPRegisterID], [VecRegisterID])
             $asm.puts "addi.d $r3, $r3, -16"
             if operands[0].is_a? VecRegisterID
-                low, high = operands[0].loongarch64Operands
-                $asm.puts "st.d #{low}, $r3, 0"
-                $asm.puts "st.d #{high}, $r3, 8"
+                $asm.puts "vst #{operands[0].loongarch64Operand}, $r3, 0"
             else
-                $asm.puts "fst.d #{operands[0].loongarch64Operand}, $r3, 0"
+                $asm.puts "vst #{operands[0].loongarch64VectorOperand}, $r3, 0"
             end
         when "popv"
             loongarch64ValidateOperands(operands, [FPRegisterID], [VecRegisterID])
             if operands[0].is_a? VecRegisterID
-                low, high = operands[0].loongarch64Operands
-                $asm.puts "ld.d #{low}, $r3, 0"
-                $asm.puts "ld.d #{high}, $r3, 8"
+                $asm.puts "vld #{operands[0].loongarch64Operand}, $r3, 0"
             else
-                $asm.puts "fld.d #{operands[0].loongarch64Operand}, $r3, 0"
+                $asm.puts "vld #{operands[0].loongarch64VectorOperand}, $r3, 0"
             end
             $asm.puts "addi.d $r3, $r3, 16"
         when "break"
@@ -2226,7 +2374,7 @@ class Instruction
             $asm.puts "#{laop(opcode)} #{operands[1].loongarch64Operand}, #{operands[0].loongarch64Operand}"
         when "movcf2gr"
             $asm.puts "#{laop(opcode)} #{operands[1].loongarch64Operand}, #{operands[0].loongarch64Operand}"
-        when /^f(add|sub|mul|div)\.(s|d)$/
+        when /^f(add|sub|mul|div|copysign)\.(s|d)$/
             loongarch64ValidateOperands(operands, [FPRegisterID, FPRegisterID, FPRegisterID])
             $asm.puts "#{laop(opcode)} #{operands[2].loongarch64Operand}, #{operands[0].loongarch64Operand}, #{operands[1].loongarch64Operand}"
         when /^f(sqrt|abs|neg)\.(s|d)$/

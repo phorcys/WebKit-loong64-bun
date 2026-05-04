@@ -42,6 +42,53 @@ WTF_ALLOW_UNSAFE_BUFFER_USAGE_BEGIN
 
 namespace JSC { namespace Wasm {
 
+#if ENABLE(B3_JIT)
+using SIMDRelOp = B3::Air::Arg;
+#else
+class SIMDRelOp {
+public:
+    SIMDRelOp() = default;
+
+    static SIMDRelOp relCond(MacroAssembler::RelationalCondition condition)
+    {
+        return SIMDRelOp(Kind::Relational, static_cast<int>(condition));
+    }
+
+    static SIMDRelOp doubleCond(MacroAssembler::DoubleCondition condition)
+    {
+        return SIMDRelOp(Kind::Double, static_cast<int>(condition));
+    }
+
+    MacroAssembler::RelationalCondition asRelationalCondition() const
+    {
+        ASSERT(m_kind == Kind::Relational);
+        return static_cast<MacroAssembler::RelationalCondition>(m_condition);
+    }
+
+    MacroAssembler::DoubleCondition asDoubleCondition() const
+    {
+        ASSERT(m_kind == Kind::Double);
+        return static_cast<MacroAssembler::DoubleCondition>(m_condition);
+    }
+
+private:
+    enum class Kind : uint8_t {
+        Empty,
+        Relational,
+        Double,
+    };
+
+    SIMDRelOp(Kind kind, int condition)
+        : m_kind(kind)
+        , m_condition(condition)
+    {
+    }
+
+    [[maybe_unused]] Kind m_kind { Kind::Empty };
+    [[maybe_unused]] int m_condition { 0 };
+};
+#endif
+
 class ConstExprGenerator;
 
 enum class BlockType {
@@ -254,10 +301,8 @@ private:
     [[nodiscard]] PartialResult atomicNotify(ExtAtomicOpType);
     [[nodiscard]] PartialResult atomicFence(ExtAtomicOpType);
 
-#if ENABLE(B3_JIT)
     template<bool isReachable, typename = void>
-    [[nodiscard]] PartialResult simd(SIMDLaneOperation, SIMDLane, SIMDSignMode, B3::Air::Arg optionalRelation = { });
-#endif
+    [[nodiscard]] PartialResult simd(SIMDLaneOperation, SIMDLane, SIMDSignMode, SIMDRelOp optionalRelation = { });
 
     [[nodiscard]] PartialResult parseTableIndex(unsigned&);
     [[nodiscard]] PartialResult parseElementIndex(unsigned&);
@@ -961,10 +1006,9 @@ auto FunctionParser<Context>::atomicFence(ExtAtomicOpType op) -> PartialResult
     return { };
 }
 
-#if ENABLE(B3_JIT)
 template<typename Context>
 template<bool isReachable, typename>
-auto FunctionParser<Context>::simd(SIMDLaneOperation op, SIMDLane lane, SIMDSignMode signMode, B3::Air::Arg optionalRelation) -> PartialResult
+auto FunctionParser<Context>::simd(SIMDLaneOperation op, SIMDLane lane, SIMDSignMode signMode, SIMDRelOp optionalRelation) -> PartialResult
 {
     UNUSED_PARAM(signMode);
     m_context.notifyFunctionUsesSIMD();
@@ -1555,7 +1599,6 @@ auto FunctionParser<Context>::simd(SIMDLaneOperation op, SIMDLane lane, SIMDSign
     }
     return { };
 }
-#endif
 
 template<typename Context>
 auto FunctionParser<Context>::parseTableIndex(unsigned& result) -> PartialResult
@@ -3903,7 +3946,6 @@ FOR_EACH_WASM_MEMORY_STORE_OP(CREATE_CASE)
 
         return { };
     }
-#if ENABLE(B3_JIT)
     case ExtSIMD: {
         WASM_PARSER_FAIL_IF(!Options::useWasmSIMD(), "wasm-simd is not enabled"_s);
         m_context.notifyFunctionUsesSIMD();
@@ -3913,8 +3955,10 @@ FOR_EACH_WASM_MEMORY_STORE_OP(CREATE_CASE)
         constexpr bool isReachable = true;
 
         ExtSIMDOpType op = static_cast<ExtSIMDOpType>(m_currentExtOp);
+#if ENABLE(B3_JIT)
         if (Options::dumpWasmOpcodeStatistics()) [[unlikely]]
             WasmOpcodeCounter::singleton().increment(op);
+#endif
 
         switch (op) {
         #define CREATE_SIMD_CASE(name, _, laneOp, lane, signMode) case ExtSIMDOpType::name: return simd<isReachable>(SIMDLaneOperation::laneOp, lane, signMode);
@@ -3929,11 +3973,6 @@ FOR_EACH_WASM_MEMORY_STORE_OP(CREATE_CASE)
         }
         return { };
     }
-#else
-    case ExtSIMD:
-        WASM_PARSER_FAIL_IF(true, "wasm-simd is not supported"_s);
-        return { };
-#endif
     }
 
     ASSERT_NOT_REACHED();
@@ -4529,7 +4568,6 @@ auto FunctionParser<Context>::parseUnreachableExpression() -> PartialResult
     }
 #undef CREATE_ATOMIC_CASE
 
-#if ENABLE(B3_JIT)
     case ExtSIMD: {
         WASM_PARSER_FAIL_IF(!Options::useWasmSIMD(), "wasm-simd is not enabled"_s);
         m_context.notifyFunctionUsesSIMD();
@@ -4552,11 +4590,6 @@ auto FunctionParser<Context>::parseUnreachableExpression() -> PartialResult
         }
         return { };
     }
-#else
-    case ExtSIMD:
-        WASM_PARSER_FAIL_IF(true, "wasm-simd is not supported"_s);
-        return { };
-#endif
 
     // no immediate cases
     FOR_EACH_WASM_BINARY_OP(CREATE_CASE)

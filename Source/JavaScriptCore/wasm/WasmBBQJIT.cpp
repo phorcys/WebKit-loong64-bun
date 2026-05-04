@@ -36,6 +36,7 @@
 #include "CCallHelpers.h"
 #include "CPU.h"
 #include "CompilerTimingScope.h"
+#include "FPRInfo.h"
 #include "GPRInfo.h"
 #include "JSCast.h"
 #include "JSWebAssemblyArrayInlines.h"
@@ -701,6 +702,19 @@ BBQJIT::BBQJIT(CompilationContext& compilationContext, const TypeDefinition& sig
 #endif
     fprSetBuilder.remove(wasmScratchFPR);
 
+#if ASSERT_ENABLED
+    RegisterSet macroClobberedFPRs = RegisterSet::macroClobberedFPRs();
+    RegisterSet vmCalleeSaveRegisters = RegisterSet::vmCalleeSaveRegisters();
+    fprSetBuilder.forEach([](Reg reg) {
+        ASSERT(reg.isFPR());
+        ASSERT(FPRInfo::toIndex(reg.fpr()) < FPRInfo::numberOfRegisters);
+    });
+    fprSetBuilder.forEach([&](Reg reg) {
+        ASSERT(!macroClobberedFPRs.contains(reg, IgnoreVectors));
+        ASSERT(!vmCalleeSaveRegisters.contains(reg, IgnoreVectors));
+    });
+#endif
+
     ASCIILiteral logPrefix = Options::verboseBBQJITAllocation() ? "BBQ"_s : ASCIILiteral();
     m_gprAllocator.initialize(gprSetBuilder, logPrefix);
     m_fprAllocator.initialize(fprSetBuilder, logPrefix);
@@ -741,6 +755,9 @@ BBQJIT::BBQJIT(CompilationContext& compilationContext, const TypeDefinition& sig
 
 bool BBQJIT::canTierUpToOMG() const
 {
+#if !ENABLE(WEBASSEMBLY_OMGJIT)
+    return false;
+#else
     if (!Options::useOMGJIT())
         return false;
 
@@ -752,6 +769,7 @@ bool BBQJIT::canTierUpToOMG() const
         return false;
     }
     return true;
+#endif
 }
 
 void BBQJIT::emitIncrementCallProfileCount(unsigned callProfileIndex)
@@ -1098,7 +1116,7 @@ void BBQJIT::emitMutatorFence()
 
 Address BBQJIT::materializePointer(Location pointerLocation, uint32_t uoffset)
 {
-    if (static_cast<uint64_t>(uoffset) > static_cast<uint64_t>(std::numeric_limits<int32_t>::max()) || !B3::Air::Arg::isValidAddrForm(B3::Air::Move, static_cast<int32_t>(uoffset), Width::Width128)) {
+    if (!canUseVectorOffsetForm(uoffset)) {
         m_jit.addPtr(TrustedImmPtr(static_cast<int64_t>(uoffset)), pointerLocation.asGPR());
         return Address(pointerLocation.asGPR());
     }
@@ -4394,7 +4412,7 @@ void BBQJIT::emitTailCall(FunctionSpaceIndex functionIndexSpace, const TypeDefin
     m_jit.loadPtr(Address(MacroAssembler::framePointerRegister), callerFramePointer);
     resolvedArguments.append(Value::pinned(pointerType(), Location::fromStack(sizeof(Register))));
     parameterLocations.append(Location::fromStack(tailCallStackOffsetFromFP + Checked<int>(sizeof(Register))));
-#elif CPU(ARM64) || CPU(ARM_THUMB2)
+#elif CPU(ARM64) || CPU(ARM_THUMB2) || CPU(LOONGARCH64)
     m_jit.loadPairPtr(MacroAssembler::framePointerRegister, callerFramePointer, MacroAssembler::linkRegister);
 #else
     UNUSED_PARAM(callerFramePointer);
@@ -4659,7 +4677,7 @@ void BBQJIT::emitIndirectTailCall(const char* opcode, const Value& callee, GPRRe
 
     resolvedArguments.append(Value::pinned(pointerType(), Location::fromStack(sizeof(Register))));
     parameterLocations.append(Location::fromStack(tailCallStackOffsetFromFP + Checked<int>(sizeof(Register))));
-#elif CPU(ARM64) || CPU(ARM_THUMB2)
+#elif CPU(ARM64) || CPU(ARM_THUMB2) || CPU(LOONGARCH64)
     auto preserved = callingConvention.argumentGPRs();
     preserved.add(importableFunction, IgnoreVectors);
     if constexpr (isARM64E())
@@ -4716,7 +4734,7 @@ void BBQJIT::emitIndirectTailCall(const char* opcode, const Value& callee, GPRRe
     m_jit.loadPtr(Address(MacroAssembler::framePointerRegister, tailCallStackOffsetFromFP), wasmScratchGPR);
     m_jit.addPtr(TrustedImm32(tailCallStackOffsetFromFP + Checked<int>(sizeof(Register))), MacroAssembler::framePointerRegister, MacroAssembler::stackPointerRegister);
     m_jit.move(wasmScratchGPR, MacroAssembler::framePointerRegister);
-#elif CPU(ARM64) || CPU(ARM_THUMB2)
+#elif CPU(ARM64) || CPU(ARM_THUMB2) || CPU(LOONGARCH64)
     m_jit.addPtr(TrustedImm32(tailCallStackOffsetFromFP + Checked<int>(sizeof(CallerFrameAndPC))), MacroAssembler::framePointerRegister, MacroAssembler::stackPointerRegister);
     m_jit.move(callerFramePointer, MacroAssembler::framePointerRegister);
 #else
