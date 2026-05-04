@@ -137,6 +137,24 @@ MacroAssemblerCodeRef<JITThunkPtrTag> throwStackOverflowFromWasmThunkGenerator(c
 }
 
 #if ENABLE(WEBASSEMBLY_BBQJIT)
+static RegisterSet registersToSpillForWasmThunkCCall(RegisterSet liveRegisters)
+{
+#if CPU(LOONGARCH64)
+    return RegisterSet::registersToSaveForCCall(liveRegisters);
+#else
+    return RegisterSet::registersToSaveForCCall(liveRegisters.normalizeWidths()).normalizeWidths();
+#endif
+}
+
+static constexpr Width widthForWasmThunkFPRArguments()
+{
+#if CPU(LOONGARCH64)
+    return Width128;
+#else
+    return Options::useWasmSIMD() ? Width128 : Width64;
+#endif
+}
+
 MacroAssemblerCodeRef<JITThunkPtrTag> materializeBaselineDataGenerator(const AbstractLocker&)
 {
     CCallHelpers jit;
@@ -148,9 +166,9 @@ MacroAssemblerCodeRef<JITThunkPtrTag> materializeBaselineDataGenerator(const Abs
     for (auto regs : wasmCallingConvention().jsrArgs)
         builder.add(regs, IgnoreVectors);
     for (auto reg : wasmCallingConvention().fprArgs)
-        builder.add(reg, Options::useWasmSIMD() ? Width128 : Width64);
+        builder.add(reg, widthForWasmThunkFPRArguments());
 
-    auto registersToSpill = RegisterSet::registersToSaveForCCall(builder.normalizeWidths()).normalizeWidths();
+    auto registersToSpill = registersToSpillForWasmThunkCCall(builder);
     unsigned numberOfStackBytesUsedForRegisterPreservation = ScratchRegisterAllocator::preserveRegistersToStackForCall(jit, registersToSpill, extraPaddingBytes);
 
     // We can clobber these argument registers now since we saved them and later we restore them.
@@ -209,9 +227,9 @@ MacroAssemblerCodeRef<JITThunkPtrTag> callPolymorphicCalleeGenerator(const Abstr
     for (auto regs : wasmCallingConvention().jsrArgs)
         builder.add(regs, IgnoreVectors);
     for (auto reg : wasmCallingConvention().fprArgs)
-        builder.add(reg, Options::useWasmSIMD() ? Width128 : Width64);
+        builder.add(reg, widthForWasmThunkFPRArguments());
 
-    auto registersToSpill = RegisterSet::registersToSaveForCCall(builder.normalizeWidths()).normalizeWidths();
+    auto registersToSpill = registersToSpillForWasmThunkCCall(builder);
     unsigned numberOfStackBytesUsedForRegisterPreservation = ScratchRegisterAllocator::preserveRegistersToStackForCall(jit, registersToSpill, extraPaddingBytes);
 
     // We can clobber these argument registers now since we saved them and later we restore them.

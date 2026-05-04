@@ -806,13 +806,11 @@ void Options::notifyOptionsChanged()
 #if !CPU(X86_64) && !CPU(ARM64)
     Options::useConcurrentGC() = false;
     Options::forceUnlinkedDFG() = false;
-    Options::useWasmSIMD() = false;
 #if !CPU(LOONGARCH64)
+    Options::useWasmSIMD() = false;
     Options::useWasmIPInt() = false;
-#else
-    Options::useWasmIPIntSIMD() = false;
 #endif
-#if !CPU(ARM_THUMB2)
+#if !CPU(ARM_THUMB2) && !CPU(LOONGARCH64)
     Options::useBBQJIT() = false;
 #endif
 #endif

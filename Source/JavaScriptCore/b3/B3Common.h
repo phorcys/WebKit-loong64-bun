@@ -27,16 +27,20 @@
 
 #include <wtf/Platform.h>
 
-#if ENABLE(B3_JIT)
+#if ENABLE(B3_JIT) || ENABLE(WEBASSEMBLY_BBQJIT)
 
+#include "JSExportMacros.h"
+#include <wtf/StdLibExtras.h>
+
+#if ENABLE(B3_JIT)
 #include "CPU.h"
 #include "GPRInfo.h"
-#include "JSExportMacros.h"
 #include "Options.h"
-#include <wtf/StdLibExtras.h>
+#endif
 
 namespace JSC { namespace B3 {
 
+#if ENABLE(B3_JIT)
 class Procedure;
 
 extern const char* const tierName;
@@ -51,6 +55,7 @@ bool NODELETE shouldDumpIRAtEachPhase(B3CompilationMode);
 bool NODELETE shouldValidateIR();
 bool NODELETE shouldValidateIRAtEachPhase();
 bool NODELETE shouldSaveIRBeforePhase();
+#endif
 
 template<typename IntType>
 static IntType chillDiv(IntType numerator, IntType denominator)
@@ -112,6 +117,7 @@ static IntType rotateLeft(IntType value, int32_t shift)
     return (uValue << shift) | (uValue >> ((bits - shift) & mask));
 }
 
+#if ENABLE(B3_JIT)
 inline unsigned defaultOptLevel()
 {
     // This should almost always return 2, but we allow this default to be lowered for testing. Some
@@ -120,7 +126,8 @@ inline unsigned defaultOptLevel()
 }
 
 GPRReg NODELETE extendedOffsetAddrRegister();
+#endif
 
 } } // namespace JSC::B3
 
-#endif // ENABLE(B3_JIT)
+#endif // ENABLE(B3_JIT) || ENABLE(WEBASSEMBLY_BBQJIT)

@@ -109,6 +109,7 @@
     macro(f19, "f19"_s, 0, 0)            \
     macro(f20, "f20"_s, 0, 0)            \
     macro(f21, "f21"_s, 0, 0)            \
+    /* MacroAssembler scratch registers, excluded by RegisterSet::macroClobberedFPRs(). */ \
     macro(f22, "f22"_s, 0, 0)            \
     macro(f23, "f23"_s, 0, 0)            \
     /* Callee-saved. */                \
