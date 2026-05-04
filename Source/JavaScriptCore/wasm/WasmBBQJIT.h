@@ -27,6 +27,7 @@
 
 #if ENABLE(WEBASSEMBLY_BBQJIT)
 
+#include "B3Common.h"
 #include "MathCommon.h"
 #include "PCToCodeOriginMap.h"
 #include "SimpleRegisterAllocator.h"
@@ -2164,7 +2165,7 @@ public:
 
     PartialResult addSIMDBitwiseSelect(ExpressionType, ExpressionType, ExpressionType, ExpressionType&);
 
-    PartialResult addSIMDRelOp(SIMDLaneOperation, SIMDInfo, ExpressionType, ExpressionType, B3::Air::Arg, ExpressionType&);
+    PartialResult addSIMDRelOp(SIMDLaneOperation, SIMDInfo, ExpressionType, ExpressionType, SIMDRelOp, ExpressionType&);
 
     void emitVectorMul(SIMDInfo info, Location left, Location right, Location result);
 

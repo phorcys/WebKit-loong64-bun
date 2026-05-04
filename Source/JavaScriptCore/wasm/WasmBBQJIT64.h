@@ -45,6 +45,16 @@ ALWAYS_INLINE bool BBQJIT::typeNeedsGPR2(TypeKind)
     return false;
 }
 
+ALWAYS_INLINE bool canUseVectorOffsetForm(uint64_t offset)
+{
+#if ENABLE(B3_JIT)
+    return offset <= static_cast<uint64_t>(std::numeric_limits<int32_t>::max()) && B3::Air::Arg::isValidAddrForm(B3::Air::Move, static_cast<int32_t>(offset), Width::Width128);
+#else
+    UNUSED_PARAM(offset);
+    return false;
+#endif
+}
+
 template<typename Functor>
 auto BBQJIT::emitCheckAndPrepareAndMaterializePointerApply(Value pointer, uint64_t uoffset, uint32_t sizeOfOperation, uint8_t memoryIndex, Functor&& functor) -> decltype(auto)
 {
@@ -81,7 +91,7 @@ auto BBQJIT::emitCheckAndPrepareAndMaterializePointerApply(Value pointer, uint64
             recordJumpToThrowException(ExceptionType::OutOfBoundsMemoryAccess, m_jit.jump());
         else {
             uint64_t finalOffset = constantPointer + uoffset;
-            if (finalOffset <= static_cast<uint64_t>(std::numeric_limits<int32_t>::max()) && B3::Air::Arg::isValidAddrForm(B3::Air::Move, static_cast<int32_t>(finalOffset), Width::Width128)) {
+            if (canUseVectorOffsetForm(finalOffset)) {
                 switch (memoryIndex ? MemoryMode::BoundsChecking : m_mode) {
                 case MemoryMode::BoundsChecking: {
                     m_jit.move(TrustedImmPtr(constantPointer + boundary), wasmScratchGPR);
@@ -153,7 +163,7 @@ auto BBQJIT::emitCheckAndPrepareAndMaterializePointerApply(Value pointer, uint64
     }
     }
 
-    bool canUseOffsetForm = uoffset <= static_cast<uint64_t>(std::numeric_limits<int32_t>::max()) && B3::Air::Arg::isValidAddrForm(B3::Air::Move, static_cast<int32_t>(uoffset), Width::Width128);
+    bool canUseOffsetForm = canUseVectorOffsetForm(uoffset);
 #if CPU(ARM64)
     if (canUseOffsetForm) {
         if (m_info.memory(memoryIndex).isMemory64())

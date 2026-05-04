@@ -710,7 +710,7 @@ macro preserveWasmFPRArgumentRegistersImpl(fprBaseOffset)
     forEachWasmArgumentFPR(macro (index, fpr1, fpr2)
         if ARM64 or ARM64E
             storepairv fpr1, fpr2, fprBaseOffset + index * VectorRegisterSize[sp]
-        elsif X86_64
+        elsif X86_64 or LOONGARCH64
             storev fpr1, fprBaseOffset + (index + 0) * VectorRegisterSize[sp]
             storev fpr2, fprBaseOffset + (index + 1) * VectorRegisterSize[sp]
         else
@@ -724,7 +724,7 @@ macro restoreWasmFPRArgumentRegistersImpl(fprBaseOffset)
     forEachWasmArgumentFPR(macro (index, fpr1, fpr2)
         if ARM64 or ARM64E
             loadpairv fprBaseOffset + index * VectorRegisterSize[sp], fpr1, fpr2
-        elsif X86_64
+        elsif X86_64 or LOONGARCH64
             loadv fprBaseOffset + (index + 0) * VectorRegisterSize[sp], fpr1
             loadv fprBaseOffset + (index + 1) * VectorRegisterSize[sp], fpr2
         else
@@ -1025,6 +1025,9 @@ end
         const base = NumberOfWasmArgumentGPRs * MachineRegisterSize
         if ARM64 or ARM64E
             loadpaird base + index * FPRRegisterSize[sp], fpr1, fpr2
+        elsif LOONGARCH64
+            loadv base + (index + 0) * VectorRegisterSize[sp], fpr1
+            loadv base + (index + 1) * VectorRegisterSize[sp], fpr2
         else
             loadd base + (index + 0) * FPRRegisterSize[sp], fpr1
             loadd base + (index + 1) * FPRRegisterSize[sp], fpr2
@@ -1087,6 +1090,9 @@ end
         const base = NumberOfWasmArgumentGPRs * MachineRegisterSize
         if ARM64 or ARM64E
             storepaird fpr1, fpr2, base + index * FPRRegisterSize[sp]
+        elsif LOONGARCH64
+            storev fpr1, base + (index + 0) * VectorRegisterSize[sp]
+            storev fpr2, base + (index + 1) * VectorRegisterSize[sp]
         else
             stored fpr1, base + (index + 0) * FPRRegisterSize[sp]
             stored fpr2, base + (index + 1) * FPRRegisterSize[sp]
@@ -1156,7 +1162,7 @@ end
     # Memory
     if ARM64 or ARM64E
         loadpairq constexpr (JSWebAssemblyInstance::offsetOfCachedMemoryBaseSizePair(0))[wasmInstance], memoryBase, boundsCheckingSize
-    elsif X86_64
+    elsif RISCV64 or LOONGARCH64 or X86_64
         loadp constexpr (JSWebAssemblyInstance::offsetOfCachedMemoryBaseSizePair(0))[wasmInstance], memoryBase
         loadp constexpr (JSWebAssemblyInstance::offsetOfCachedMemoryBaseSizePair(0) + 8)[wasmInstance], boundsCheckingSize
     end
@@ -1201,6 +1207,9 @@ op(wasm_to_js_wrapper_entry, macro()
         const base = NumberOfWasmArgumentGPRs * MachineRegisterSize
         if ARM64 or ARM64E
             storepaird fpr1, fpr2, base + index * FPRRegisterSize[sp]
+        elsif LOONGARCH64
+            storev fpr1, base + (index + 0) * VectorRegisterSize[sp]
+            storev fpr2, base + (index + 1) * VectorRegisterSize[sp]
         else
             stored fpr1, base + (index + 0) * FPRRegisterSize[sp]
             stored fpr2, base + (index + 1) * FPRRegisterSize[sp]
@@ -1281,6 +1290,9 @@ end
         const base = NumberOfWasmArgumentGPRs * MachineRegisterSize
         if ARM64 or ARM64E
             loadpaird base + index * FPRRegisterSize[sp], fpr1, fpr2
+        elsif LOONGARCH64
+            loadv base + (index + 0) * VectorRegisterSize[sp], fpr1
+            loadv base + (index + 1) * VectorRegisterSize[sp], fpr2
         else
             loadd base + (index + 0) * FPRRegisterSize[sp], fpr1
             loadd base + (index + 1) * FPRRegisterSize[sp], fpr2
@@ -1496,7 +1508,7 @@ end
 end
 
 op(ipint_catch_entry, macro()
-if WEBASSEMBLY and (ARM64 or ARM64E or X86_64)
+if WEBASSEMBLY and (ARM64 or ARM64E or X86_64 or LOONGARCH64)
     ipintCatchCommon()
 
     move cfr, a1
@@ -1512,7 +1524,7 @@ end
 end)
 
 op(ipint_catch_all_entry, macro()
-if WEBASSEMBLY and (ARM64 or ARM64E or X86_64)
+if WEBASSEMBLY and (ARM64 or ARM64E or X86_64 or LOONGARCH64)
     ipintCatchCommon()
 
     move cfr, a1
@@ -1648,6 +1660,81 @@ end
     jmp _wasm_unwind_from_slow_path_trampoline
 end
 
+macro wasmBuiltinCallTrampolineSignExtendI32(setName, builtinName, wasmInstanceArgGPR, i32ArgGPR)
+    functionPrologue()
+
+    # IPInt stores the callee and wasmInstance into the frame but JIT tiers don't, so we must do that here.
+    leap JSWebAssemblyInstance::m_builtinCalleeBits[wasmInstance], t5
+    loadp WasmBuiltinCalleeOffsets::%setName%__%builtinName%[t5], t5  # [!] BUILTIN_FULL_NAME(setName, builtinName)
+    storep t5, Callee[cfr]
+    storep wasmInstance, CodeBlock[cfr]
+
+    # Set VM topCallFrame to null to not build an unnecessary stack trace if the function throws an exception.
+    loadp JSWebAssemblyInstance::m_vm[wasmInstance], t5
+    storep 0, VM::topCallFrame[t5]
+
+    if LOONGARCH64
+        sxi2q i32ArgGPR, i32ArgGPR
+    end
+
+    # Add the extra wasmInstance arg
+    move wasmInstance, wasmInstanceArgGPR
+    call _wasm_builtin__%setName%__%builtinName%  # [!] BUILTIN_WASM_ENTRY_NAME(setName, builtinName)
+
+    loadp JSWebAssemblyInstance::m_vm[wasmInstance], t5
+    btpnz VM::m_exception[t5], .handleException
+
+    # On x86, a0 and r0 are distinct (a0=rdi, r0=rax). The host function returns the result in r0,
+    # but IPInt always expects it in a0.
+if X86_64
+    move r0, a0
+end
+
+    functionEpilogue()
+    ret
+
+.handleException:
+    jmp _wasm_unwind_from_slow_path_trampoline
+end
+
+macro wasmBuiltinCallTrampolineSignExtendI32Pair(setName, builtinName, wasmInstanceArgGPR, i32ArgGPR1, i32ArgGPR2)
+    functionPrologue()
+
+    # IPInt stores the callee and wasmInstance into the frame but JIT tiers don't, so we must do that here.
+    leap JSWebAssemblyInstance::m_builtinCalleeBits[wasmInstance], t5
+    loadp WasmBuiltinCalleeOffsets::%setName%__%builtinName%[t5], t5  # [!] BUILTIN_FULL_NAME(setName, builtinName)
+    storep t5, Callee[cfr]
+    storep wasmInstance, CodeBlock[cfr]
+
+    # Set VM topCallFrame to null to not build an unnecessary stack trace if the function throws an exception.
+    loadp JSWebAssemblyInstance::m_vm[wasmInstance], t5
+    storep 0, VM::topCallFrame[t5]
+
+    if LOONGARCH64
+        sxi2q i32ArgGPR1, i32ArgGPR1
+        sxi2q i32ArgGPR2, i32ArgGPR2
+    end
+
+    # Add the extra wasmInstance arg
+    move wasmInstance, wasmInstanceArgGPR
+    call _wasm_builtin__%setName%__%builtinName%  # [!] BUILTIN_WASM_ENTRY_NAME(setName, builtinName)
+
+    loadp JSWebAssemblyInstance::m_vm[wasmInstance], t5
+    btpnz VM::m_exception[t5], .handleException
+
+    # On x86, a0 and r0 are distinct (a0=rdi, r0=rax). The host function returns the result in r0,
+    # but IPInt always expects it in a0.
+if X86_64
+    move r0, a0
+end
+
+    functionEpilogue()
+    ret
+
+.handleException:
+    jmp _wasm_unwind_from_slow_path_trampoline
+end
+
 macro defineWasmBuiltinTrampoline(setName, builtinName, wasmInstanceArgGPR)
 global _wasm_builtin_trampoline__%setName%__%builtinName%    # [!] BUILTIN_TRAMPOLINE_NAME(setName, builtinName)
 _wasm_builtin_trampoline__%setName%__%builtinName%:
@@ -1665,22 +1752,34 @@ defineWasmBuiltinTrampoline(jsstring, cast, a1)
 defineWasmBuiltinTrampoline(jsstring, test, a1)
 
 # (arrayref, i32, i32, wasmInstance) -> externref
-defineWasmBuiltinTrampoline(jsstring, fromCharCodeArray, a3)
+global _wasm_builtin_trampoline__jsstring__fromCharCodeArray    # [!] BUILTIN_TRAMPOLINE_NAME(jsstring, fromCharCodeArray)
+_wasm_builtin_trampoline__jsstring__fromCharCodeArray:
+    wasmBuiltinCallTrampolineSignExtendI32Pair(jsstring, fromCharCodeArray, a3, a1, a2)
 
 # (externref, arrayref, i32, wasmInstance) -> externref
-defineWasmBuiltinTrampoline(jsstring, intoCharCodeArray, a3)
+global _wasm_builtin_trampoline__jsstring__intoCharCodeArray    # [!] BUILTIN_TRAMPOLINE_NAME(jsstring, intoCharCodeArray)
+_wasm_builtin_trampoline__jsstring__intoCharCodeArray:
+    wasmBuiltinCallTrampolineSignExtendI32(jsstring, intoCharCodeArray, a3, a2)
 
 # (i32, wasmInstance) -> externref
-defineWasmBuiltinTrampoline(jsstring, fromCharCode, a1)
+global _wasm_builtin_trampoline__jsstring__fromCharCode    # [!] BUILTIN_TRAMPOLINE_NAME(jsstring, fromCharCode)
+_wasm_builtin_trampoline__jsstring__fromCharCode:
+    wasmBuiltinCallTrampolineSignExtendI32(jsstring, fromCharCode, a1, a0)
 
 # (i32, wasmInstance) -> externref
-defineWasmBuiltinTrampoline(jsstring, fromCodePoint, a1)
+global _wasm_builtin_trampoline__jsstring__fromCodePoint    # [!] BUILTIN_TRAMPOLINE_NAME(jsstring, fromCodePoint)
+_wasm_builtin_trampoline__jsstring__fromCodePoint:
+    wasmBuiltinCallTrampolineSignExtendI32(jsstring, fromCodePoint, a1, a0)
 
 # (externref, i32, wasmInstance) -> i32
-defineWasmBuiltinTrampoline(jsstring, charCodeAt, a2)
+global _wasm_builtin_trampoline__jsstring__charCodeAt    # [!] BUILTIN_TRAMPOLINE_NAME(jsstring, charCodeAt)
+_wasm_builtin_trampoline__jsstring__charCodeAt:
+    wasmBuiltinCallTrampolineSignExtendI32(jsstring, charCodeAt, a2, a1)
 
 # (externref, i32, wasmInstance) -> i32
-defineWasmBuiltinTrampoline(jsstring, codePointAt, a2)
+global _wasm_builtin_trampoline__jsstring__codePointAt    # [!] BUILTIN_TRAMPOLINE_NAME(jsstring, codePointAt)
+_wasm_builtin_trampoline__jsstring__codePointAt:
+    wasmBuiltinCallTrampolineSignExtendI32(jsstring, codePointAt, a2, a1)
 
 # (externref, wasmInstance) -> i32
 defineWasmBuiltinTrampoline(jsstring, length, a1)
@@ -1689,7 +1788,9 @@ defineWasmBuiltinTrampoline(jsstring, length, a1)
 defineWasmBuiltinTrampoline(jsstring, concat, a2)
 
 # (externref, i32, i32, wasmInstance) -> externref
-defineWasmBuiltinTrampoline(jsstring, substring, a3)
+global _wasm_builtin_trampoline__jsstring__substring    # [!] BUILTIN_TRAMPOLINE_NAME(jsstring, substring)
+_wasm_builtin_trampoline__jsstring__substring:
+    wasmBuiltinCallTrampolineSignExtendI32Pair(jsstring, substring, a3, a1, a2)
 
 # (externref, externref, wasmInstance) -> i32
 defineWasmBuiltinTrampoline(jsstring, equals, a2)
@@ -1723,6 +1824,9 @@ macro storeAllArgumentRegisters(base)
     forEachWasmArgumentFPR(macro(index, reg1, reg2)
         if ARM64 or ARM64E
             storepaird reg1, reg2, NumberOfWasmArgumentGPRs * MachineRegisterSize + index * FPRRegisterSize[base]
+        elsif LOONGARCH64
+            storev reg1, NumberOfWasmArgumentGPRs * MachineRegisterSize + (index + 0) * VectorRegisterSize[base]
+            storev reg2, NumberOfWasmArgumentGPRs * MachineRegisterSize + (index + 1) * VectorRegisterSize[base]
         else
             stored reg1, NumberOfWasmArgumentGPRs * MachineRegisterSize + (index + 0) * FPRRegisterSize[base]
             stored reg2, NumberOfWasmArgumentGPRs * MachineRegisterSize + (index + 1) * FPRRegisterSize[base]
@@ -1744,6 +1848,9 @@ macro loadAllArgumentRegisters(base)
     forEachWasmArgumentFPR(macro(index, fpr1, fpr2)
         if ARM64 or ARM64E
             loadpaird NumberOfWasmArgumentGPRs * MachineRegisterSize + index * FPRRegisterSize[base], fpr1, fpr2
+        elsif LOONGARCH64
+            loadv NumberOfWasmArgumentGPRs * MachineRegisterSize + (index + 0) * VectorRegisterSize[base], fpr1
+            loadv NumberOfWasmArgumentGPRs * MachineRegisterSize + (index + 1) * VectorRegisterSize[base], fpr2
         else
             loadd NumberOfWasmArgumentGPRs * MachineRegisterSize + (index + 0) * FPRRegisterSize[base], fpr1
             loadd NumberOfWasmArgumentGPRs * MachineRegisterSize + (index + 1) * FPRRegisterSize[base], fpr2

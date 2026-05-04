@@ -73,7 +73,7 @@ do { \
     v(ipint_conversion_dispatch_base, ipint_i32_trunc_sat_f32_s_validate) \
     v(ipint_atomic_dispatch_base, ipint_memory_atomic_notify_atomic_validate) \
 
-#if CPU(ARM64) || CPU(X86_64)
+#if CPU(ARM64) || CPU(X86_64) || CPU(LOONGARCH64)
 #define FOR_EACH_IPINT_SIMD_BASE_POINTER(v) \
     v(ipint_simd_dispatch_base, ipint_simd_v128_load_mem_validate) \
 
@@ -94,7 +94,7 @@ void initialize()
     FOR_EACH_IPINT_OPCODE(VALIDATE_IPINT_OPCODE);
     FOR_EACH_IPINT_GC_OPCODE(VALIDATE_IPINT_GC_OPCODE);
     FOR_EACH_IPINT_CONVERSION_OPCODE(VALIDATE_IPINT_CONVERSION_OPCODE);
-#if CPU(ARM64) || CPU(X86_64)
+#if CPU(ARM64) || CPU(X86_64) || CPU(LOONGARCH64)
     FOR_EACH_IPINT_SIMD_OPCODE(VALIDATE_IPINT_SIMD_OPCODE);
 #endif
     FOR_EACH_IPINT_ATOMIC_OPCODE(VALIDATE_IPINT_ATOMIC_OPCODE);

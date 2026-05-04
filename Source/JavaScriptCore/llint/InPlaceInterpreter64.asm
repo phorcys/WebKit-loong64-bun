@@ -67,7 +67,7 @@ if ARM64 or ARM64E or RISCV64 or LOONGARCH64 or X86_64
 const ipint_dispatch_base = _ipint_unreachable
 end
 
-if ARM64 or ARM64E
+if ARM64 or ARM64E or LOONGARCH64
 const ipint_gc_dispatch_base = _ipint_struct_new
 const ipint_conversion_dispatch_base = _ipint_i32_trunc_sat_f32_s
 const ipint_simd_dispatch_base = _ipint_simd_v128_load_mem
@@ -906,6 +906,7 @@ ipintOp(_table_get, macro()
     # Load pre-computed index from metadata
     loadi IPInt::TableAccessMetadata::index[MC], a1
     popInt32(a2)
+    zxi2q a2, a2
 
     operationCallMayThrow(macro() cCall3(_ipint_extern_table_get) end)
 
@@ -923,6 +924,7 @@ ipintOp(_table_set, macro()
     loadi IPInt::TableAccessMetadata::index[MC], a1
     popQuad(a3)
     popInt32(a2)
+    zxi2q a2, a2
     operationCallMayThrow(macro() cCall4(_ipint_extern_table_set) end)
 
     loadb IPInt::TableAccessMetadata::instructionLength[MC], t0
@@ -1307,6 +1309,7 @@ end)
 
 ipintOp(_memory_grow, macro()
     popInt32(a1)
+    zxi2q a1, a1
     loadb IPInt::MemoryGrowMetadata::memoryIndex[MC], a2
     advanceMC(constexpr (sizeof(IPInt::MemoryGrowMetadata)))
     operationCall(macro() cCall3(_ipint_extern_memory_grow) end)
@@ -3278,6 +3281,7 @@ end)
 ipintOp(_array_new, macro()
     loadi IPInt::ArrayNewMetadata::type[MC], a1  # type
     popInt32(a2)  # length
+    zxi2q a2, a2
     move sp, a3  # pointer to default value
     operationCallMayThrow(macro() cCall4(_ipint_extern_array_new) end)
     addp StackValueSize, sp # pop default value
@@ -3293,6 +3297,7 @@ end)
 ipintOp(_array_new_default, macro()
     loadi IPInt::ArrayNewMetadata::type[MC], a1  # type
     popInt32(a2)  # length
+    zxi2q a2, a2
     operationCallMayThrow(macro() cCall3(_ipint_extern_array_new_default) end)
 
     pushQuad(r0)
@@ -3326,6 +3331,8 @@ ipintOp(_array_new_data, macro()
     move MC, a1  # metadata
     popInt32(a3)  # size
     popInt32(a2)  # offset
+    zxi2q a3, a3
+    zxi2q a2, a2
     operationCallMayThrow(macro() cCall4(_ipint_extern_array_new_data) end)
 
     pushQuad(r0)
@@ -3340,6 +3347,8 @@ ipintOp(_array_new_elem, macro()
     move MC, a1  # metadata
     popInt32(a3)  # size
     popInt32(a2)  # offset
+    zxi2q a3, a3
+    zxi2q a2, a2
     operationCallMayThrow(macro() cCall4(_ipint_extern_array_new_elem) end)
 
     pushQuad(r0)
@@ -3754,7 +3763,7 @@ ipintOp(_i64_trunc_sat_f32_s, macro()
 
     move 0xdf000000, t0 # INT64_MIN
     fi2f t0, ft1
-    bfltun ft0, ft1, .ipint_i64_trunc_sat_f32_s_outOfBoundsTruncSatMinOrNaN
+    bfltequn ft0, ft1, .ipint_i64_trunc_sat_f32_s_outOfBoundsTruncSatMinOrNaN
 
     move 0x5f000000, t0 # -INT64_MIN
     fi2f t0, ft1
@@ -3821,7 +3830,7 @@ ipintOp(_i64_trunc_sat_f64_s, macro()
     popFloat64(ft0)
     move 0xc3e0000000000000, t0 # INT64_MIN
     fq2d t0, ft1
-    bdltun ft0, ft1, .ipint_i64_trunc_sat_f64_s_outOfBoundsTruncSatMinOrNaN
+    bdltequn ft0, ft1, .ipint_i64_trunc_sat_f64_s_outOfBoundsTruncSatMinOrNaN
 
     move 0x43e0000000000000, t0 # -INT64_MIN
     fq2d t0, ft1
@@ -4098,7 +4107,7 @@ end)
     ## SIMD Instructions ##
     #######################
 
-if ARM64 or ARM64E or X86_64
+if ARM64 or ARM64E or X86_64 or LOONGARCH64
 
 const ImmLaneIdxOffset = 0 # Offset from t4 (points past the decoded SIMD opcode)
 const ImmLaneIdx16Mask = 0xf
@@ -4116,6 +4125,9 @@ macro simdLoad8x8s()
         emit "sxtl v16.8h, v0.8b"
     elsif X86_64
         emit "pmovsxbw (%rax), %xmm0"
+    elsif LOONGARCH64
+        emit "vldrepl.d $vr16, $r4, 0"
+        emit "vsllwil.h.b $vr16, $vr16, 0"
     else
         break
     end
@@ -4127,6 +4139,9 @@ macro simdLoad8x8u()
         emit "uxtl v16.8h, v0.8b"
     elsif X86_64
         emit "pmovzxbw (%rax), %xmm0"
+    elsif LOONGARCH64
+        emit "vldrepl.d $vr16, $r4, 0"
+        emit "vsllwil.hu.bu $vr16, $vr16, 0"
     else
         break
     end
@@ -4138,6 +4153,9 @@ macro simdLoad16x4s()
         emit "sxtl v16.4s, v0.4h"
     elsif X86_64
         emit "pmovsxwd (%rax), %xmm0"
+    elsif LOONGARCH64
+        emit "vldrepl.d $vr16, $r4, 0"
+        emit "vsllwil.w.h $vr16, $vr16, 0"
     else
         break
     end
@@ -4149,6 +4167,9 @@ macro simdLoad16x4u()
         emit "uxtl v16.4s, v0.4h"
     elsif X86_64
         emit "pmovzxwd (%rax), %xmm0"
+    elsif LOONGARCH64
+        emit "vldrepl.d $vr16, $r4, 0"
+        emit "vsllwil.wu.hu $vr16, $vr16, 0"
     else
         break
     end
@@ -4160,6 +4181,9 @@ macro simdLoad32x2s()
         emit "sxtl v16.2d, v0.2s"
     elsif X86_64
         emit "pmovsxdq (%rax), %xmm0"
+    elsif LOONGARCH64
+        emit "vldrepl.d $vr16, $r4, 0"
+        emit "vsllwil.d.w $vr16, $vr16, 0"
     else
         break
     end
@@ -4171,6 +4195,9 @@ macro simdLoad32x2u()
         emit "uxtl v16.2d, v0.2s"
     elsif X86_64
         emit "pmovzxdq (%rax), %xmm0"
+    elsif LOONGARCH64
+        emit "vldrepl.d $vr16, $r4, 0"
+        emit "vsllwil.du.wu $vr16, $vr16, 0"
     else
         break
     end
@@ -4184,6 +4211,8 @@ macro simdLoadSplat8()
         emit "vpinsrb $0, (%rax), %xmm0, %xmm0"
         emit "vpxor %xmm1, %xmm1, %xmm1"
         emit "vpshufb %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vldrepl.b $vr16, $r4, 0"
     else
         break
     end
@@ -4197,6 +4226,8 @@ macro simdLoadSplat16()
         emit "vpinsrw $0, (%rax), %xmm0, %xmm0"
         emit "vpshuflw $0, %xmm0, %xmm0"
         emit "vpunpcklqdq %xmm0, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vldrepl.h $vr16, $r4, 0"
     else
         break
     end
@@ -4208,6 +4239,8 @@ macro simdLoadSplat32()
         emit "dup v16.4s, w1"
     elsif X86_64
         emit "vbroadcastss (%rax), %xmm0"
+    elsif LOONGARCH64
+        emit "vldrepl.w $vr16, $r4, 0"
     else
         break
     end
@@ -4219,6 +4252,8 @@ macro simdLoadSplat64()
         emit "dup v16.2d, x1"
     elsif X86_64
         emit "vmovddup (%rax), %xmm0"
+    elsif LOONGARCH64
+        emit "vldrepl.d $vr16, $r4, 0"
     else
         break
     end
@@ -4365,6 +4400,12 @@ ipintOp(_simd_i8x16_shuffle, macro()
         loadv [t4], v2
         emit "tbl v16.16b, {v16.16b, v17.16b}, v18.16b"
         pushVec(v0)
+    elsif LOONGARCH64
+        popVec(v1)
+        popVec(v0)
+        loadv [t4], v2
+        emit "vshuf.b $vr16, $vr17, $vr16, $vr18"
+        pushVec(v0)
     else
         # X86_64 doesn't natively support shuffle so emulate it
         subp V128ISize, sp                # Allocate temp result
@@ -4426,6 +4467,11 @@ ipintOp(_simd_i8x16_swizzle, macro()
         emit "vpunpcklqdq %xmm2, %xmm2, %xmm2"   # xmm2 = [0x70, 0x70, ..., 0x70] (16 bytes)
         emit "vpaddusb %xmm2, %xmm1, %xmm1"      # Saturating add to set bit 7 for indices > 15
         emit "vpshufb %xmm1, %xmm0, %xmm0"       # Now vpshufb will return 0 for out-of-bounds
+    elsif LOONGARCH64
+        emit "vxor.v $vr18, $vr18, $vr18"
+        emit "vslti.bu $vr19, $vr17, 16"
+        emit "vshuf.b $vr16, $vr18, $vr16, $vr17"
+        emit "vbitsel.v $vr16, $vr18, $vr16, $vr19"
     else
         break # Not implemented
     end
@@ -4447,6 +4493,8 @@ ipintOp(_simd_i8x16_splat, macro()
         emit "vpinsrb $1, %eax, %xmm0, %xmm0"
         emit "vpshuflw $0, %xmm0, %xmm0"
         emit "vpunpcklqdq %xmm0, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vreplgr2vr.b $vr16, $r4"
     else
         break # Not implemented
     end
@@ -4467,6 +4515,8 @@ ipintOp(_simd_i16x8_splat, macro()
         emit "vmovd %eax, %xmm0"
         emit "vpshuflw $0, %xmm0, %xmm0"
         emit "vpunpcklqdq %xmm0, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vreplgr2vr.h $vr16, $r4"
     else
         break # Not implemented
     end
@@ -4486,6 +4536,8 @@ ipintOp(_simd_i32x4_splat, macro()
         # t0 is eax on X86_64, move to xmm0 and broadcast to all 4 dwords
         emit "vmovd %eax, %xmm0"
         emit "vshufps $0, %xmm0, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vreplgr2vr.w $vr16, $r4"
     else
         break # Not implemented
     end
@@ -4505,6 +4557,8 @@ ipintOp(_simd_i64x2_splat, macro()
         # t0 is rax on X86_64
         emit "vmovq %rax, %xmm0"
         emit "vmovddup %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vreplgr2vr.d $vr16, $r4"
     else
         break # Not implemented
     end
@@ -4523,6 +4577,8 @@ ipintOp(_simd_f32x4_splat, macro()
     elsif X86_64
         # ft0 is xmm0 on X86_64, broadcast to all 4 float lanes
         emit "vshufps $0x00, %xmm0, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vreplvei.w $vr16, $vr8, 0"
     else
         break # Not implemented
     end
@@ -4541,6 +4597,8 @@ ipintOp(_simd_f64x2_splat, macro()
     elsif X86_64
         # ft0 is xmm0 on X86_64, duplicate lower 64-bit to both lanes
         emit "vmovddup %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vreplvei.d $vr16, $vr8, 0"
     else
         break # Not implemented
     end
@@ -4708,6 +4766,8 @@ ipintOp(_simd_i8x16_eq, macro()
         emit "cmeq v16.16b, v16.16b, v17.16b"
     elsif X86_64
         emit "vpcmpeqb %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vseq.b $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -4729,6 +4789,9 @@ ipintOp(_simd_i8x16_ne, macro()
         emit "vpcmpeqb %xmm1, %xmm0, %xmm0"
         emit "vpcmpeqb %xmm2, %xmm2, %xmm2"  # Set all bits to 1
         emit "vpxor %xmm2, %xmm0, %xmm0"     # Invert result
+    elsif LOONGARCH64
+        emit "vseq.b $vr16, $vr16, $vr17"
+        emit "vnor.v $vr16, $vr16, $vr16"
     else
         break # Not implemented
     end
@@ -4747,6 +4810,8 @@ ipintOp(_simd_i8x16_lt_s, macro()
     elsif X86_64
         # vpcmpgtb xmm1, xmm0 gives us xmm1 > xmm0, which is equivalent to xmm0 < xmm1
         emit "vpcmpgtb %xmm0, %xmm1, %xmm0"
+    elsif LOONGARCH64
+        emit "vslt.b $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -4768,6 +4833,8 @@ ipintOp(_simd_i8x16_lt_u, macro()
         emit "vpcmpeqb %xmm0, %xmm2, %xmm2"  # xmm0 == min ? (xmm0 <= xmm1)
         emit "vpcmpeqb %xmm1, %xmm0, %xmm0"  # xmm0 == xmm1 ?
         emit "vpandn %xmm2, %xmm0, %xmm0"    # (xmm0 <= xmm1) && (xmm0 != xmm1) = (xmm0 < xmm1)
+    elsif LOONGARCH64
+        emit "vslt.bu $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -4784,6 +4851,8 @@ ipintOp(_simd_i8x16_gt_s, macro()
         emit "cmgt v16.16b, v16.16b, v17.16b"
     elsif X86_64
         emit "vpcmpgtb %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vslt.b $vr16, $vr17, $vr16"
     else
         break # Not implemented
     end
@@ -4804,6 +4873,8 @@ ipintOp(_simd_i8x16_gt_u, macro()
         emit "vpcmpeqb %xmm1, %xmm2, %xmm2"  # xmm1 == min ? (xmm1 <= xmm0)
         emit "vpcmpeqb %xmm1, %xmm0, %xmm0"  # xmm0 == xmm1 ?
         emit "vpandn %xmm2, %xmm0, %xmm0"    # (xmm1 <= xmm0) && (xmm0 != xmm1) = (xmm0 > xmm1)
+    elsif LOONGARCH64
+        emit "vslt.bu $vr16, $vr17, $vr16"
     else
         break # Not implemented
     end
@@ -4824,6 +4895,8 @@ ipintOp(_simd_i8x16_le_s, macro()
         emit "vpcmpgtb %xmm1, %xmm0, %xmm0"  # xmm0 > xmm1
         emit "vpcmpeqb %xmm2, %xmm2, %xmm2"  # Set all bits to 1
         emit "vpxor %xmm2, %xmm0, %xmm0"     # Invert result: !(xmm0 > xmm1)
+    elsif LOONGARCH64
+        emit "vsle.b $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -4843,6 +4916,8 @@ ipintOp(_simd_i8x16_le_u, macro()
         # xmm0 <= xmm1 iff min(xmm0, xmm1) == xmm0
         emit "vpminub %xmm1, %xmm0, %xmm2"   # min(xmm0, xmm1) -> xmm2
         emit "vpcmpeqb %xmm0, %xmm2, %xmm0"  # xmm0 == min ? (xmm0 <= xmm1)
+    elsif LOONGARCH64
+        emit "vsle.bu $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -4862,6 +4937,8 @@ ipintOp(_simd_i8x16_ge_s, macro()
         emit "vpcmpgtb %xmm0, %xmm1, %xmm0"  # xmm1 > xmm0
         emit "vpcmpeqb %xmm2, %xmm2, %xmm2"  # Set all bits to 1
         emit "vpxor %xmm2, %xmm0, %xmm0"     # Invert result: !(xmm1 > xmm0)
+    elsif LOONGARCH64
+        emit "vsle.b $vr16, $vr17, $vr16"
     else
         break # Not implemented
     end
@@ -4880,6 +4957,8 @@ ipintOp(_simd_i8x16_ge_u, macro()
         # xmm0 >= xmm1 iff min(xmm0, xmm1) == xmm1
         emit "vpminub %xmm1, %xmm0, %xmm2"   # min(xmm0, xmm1) -> xmm2
         emit "vpcmpeqb %xmm1, %xmm2, %xmm0"  # xmm1 == min ? (xmm1 <= xmm0) = (xmm0 >= xmm1)
+    elsif LOONGARCH64
+        emit "vsle.bu $vr16, $vr17, $vr16"
     else
         break # Not implemented
     end
@@ -4898,6 +4977,8 @@ ipintOp(_simd_i16x8_eq, macro()
         emit "cmeq v16.8h, v16.8h, v17.8h"
     elsif X86_64
         emit "vpcmpeqw %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vseq.h $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -4918,6 +4999,9 @@ ipintOp(_simd_i16x8_ne, macro()
         emit "vpcmpeqw %xmm1, %xmm0, %xmm0"
         emit "vpcmpeqw %xmm2, %xmm2, %xmm2"  # Set all bits to 1
         emit "vpxor %xmm2, %xmm0, %xmm0"     # Invert result
+    elsif LOONGARCH64
+        emit "vseq.h $vr16, $vr16, $vr17"
+        emit "vnor.v $vr16, $vr16, $vr16"
     else
         break # Not implemented
     end
@@ -4936,6 +5020,8 @@ ipintOp(_simd_i16x8_lt_s, macro()
     elsif X86_64
         # vpcmpgtw xmm1, xmm0 gives us xmm1 > xmm0, which is equivalent to xmm0 < xmm1
         emit "vpcmpgtw %xmm0, %xmm1, %xmm0"
+    elsif LOONGARCH64
+        emit "vslt.h $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -4957,6 +5043,8 @@ ipintOp(_simd_i16x8_lt_u, macro()
         emit "vpcmpeqw %xmm0, %xmm2, %xmm2"  # xmm0 == min ? (xmm0 <= xmm1)
         emit "vpcmpeqw %xmm1, %xmm0, %xmm0"  # xmm0 == xmm1 ?
         emit "vpandn %xmm2, %xmm0, %xmm0"    # (xmm0 <= xmm1) && (xmm0 != xmm1) = (xmm0 < xmm1)
+    elsif LOONGARCH64
+        emit "vslt.hu $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -4973,6 +5061,8 @@ ipintOp(_simd_i16x8_gt_s, macro()
         emit "cmgt v16.8h, v16.8h, v17.8h"
     elsif X86_64
         emit "vpcmpgtw %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vslt.h $vr16, $vr17, $vr16"
     else
         break # Not implemented
     end
@@ -4993,6 +5083,8 @@ ipintOp(_simd_i16x8_gt_u, macro()
         emit "vpcmpeqw %xmm1, %xmm2, %xmm2"  # xmm1 == min ? (xmm1 <= xmm0)
         emit "vpcmpeqw %xmm1, %xmm0, %xmm0"  # xmm0 == xmm1 ?
         emit "vpandn %xmm2, %xmm0, %xmm0"    # (xmm1 <= xmm0) && (xmm0 != xmm1) = (xmm0 > xmm1)
+    elsif LOONGARCH64
+        emit "vslt.hu $vr16, $vr17, $vr16"
     else
         break # Not implemented
     end
@@ -5013,6 +5105,8 @@ ipintOp(_simd_i16x8_le_s, macro()
         emit "vpcmpgtw %xmm1, %xmm0, %xmm0"  # xmm0 > xmm1
         emit "vpcmpeqw %xmm2, %xmm2, %xmm2"  # Set all bits to 1
         emit "vpxor %xmm2, %xmm0, %xmm0"     # Invert result: !(xmm0 > xmm1)
+    elsif LOONGARCH64
+        emit "vsle.h $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -5032,6 +5126,8 @@ ipintOp(_simd_i16x8_le_u, macro()
         # xmm0 <= xmm1 iff min(xmm0, xmm1) == xmm0
         emit "vpminuw %xmm1, %xmm0, %xmm2"   # min(xmm0, xmm1) -> xmm2
         emit "vpcmpeqw %xmm0, %xmm2, %xmm0"  # xmm0 == min ? (xmm0 <= xmm1)
+    elsif LOONGARCH64
+        emit "vsle.hu $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -5051,6 +5147,8 @@ ipintOp(_simd_i16x8_ge_s, macro()
         emit "vpcmpgtw %xmm0, %xmm1, %xmm0"  # xmm1 > xmm0
         emit "vpcmpeqw %xmm2, %xmm2, %xmm2"  # Set all bits to 1
         emit "vpxor %xmm2, %xmm0, %xmm0"     # Invert result: !(xmm1 > xmm0)
+    elsif LOONGARCH64
+        emit "vsle.h $vr16, $vr17, $vr16"
     else
         break # Not implemented
     end
@@ -5069,6 +5167,8 @@ ipintOp(_simd_i16x8_ge_u, macro()
         # xmm0 >= xmm1 iff min(xmm0, xmm1) == xmm1
         emit "vpminuw %xmm1, %xmm0, %xmm2"   # min(xmm0, xmm1) -> xmm2
         emit "vpcmpeqw %xmm1, %xmm2, %xmm0"  # xmm1 == min ? (xmm1 <= xmm0) = (xmm0 >= xmm1)
+    elsif LOONGARCH64
+        emit "vsle.hu $vr16, $vr17, $vr16"
     else
         break # Not implemented
     end
@@ -5086,6 +5186,8 @@ ipintOp(_simd_i32x4_eq, macro()
         emit "cmeq v16.4s, v16.4s, v17.4s"
     elsif X86_64
         emit "vpcmpeqd %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vseq.w $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -5106,6 +5208,9 @@ ipintOp(_simd_i32x4_ne, macro()
         emit "vpcmpeqd %xmm1, %xmm0, %xmm0"
         emit "vpcmpeqd %xmm2, %xmm2, %xmm2"  # Set all bits to 1
         emit "vpxor %xmm2, %xmm0, %xmm0"     # Invert result
+    elsif LOONGARCH64
+        emit "vseq.w $vr16, $vr16, $vr17"
+        emit "vnor.v $vr16, $vr16, $vr16"
     else
         break # Not implemented
     end
@@ -5124,6 +5229,8 @@ ipintOp(_simd_i32x4_lt_s, macro()
     elsif X86_64
         # vpcmpgtd xmm1, xmm0 gives us xmm1 > xmm0, which is equivalent to xmm0 < xmm1
         emit "vpcmpgtd %xmm0, %xmm1, %xmm0"
+    elsif LOONGARCH64
+        emit "vslt.w $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -5145,6 +5252,8 @@ ipintOp(_simd_i32x4_lt_u, macro()
         emit "vpcmpeqd %xmm0, %xmm2, %xmm2"  # xmm0 == min ? (xmm0 <= xmm1)
         emit "vpcmpeqd %xmm1, %xmm0, %xmm0"  # xmm0 == xmm1 ?
         emit "vpandn %xmm2, %xmm0, %xmm0"    # (xmm0 <= xmm1) && (xmm0 != xmm1) = (xmm0 < xmm1)
+    elsif LOONGARCH64
+        emit "vslt.wu $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -5161,6 +5270,8 @@ ipintOp(_simd_i32x4_gt_s, macro()
         emit "cmgt v16.4s, v16.4s, v17.4s"
     elsif X86_64
         emit "vpcmpgtd %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vslt.w $vr16, $vr17, $vr16"
     else
         break # Not implemented
     end
@@ -5181,6 +5292,8 @@ ipintOp(_simd_i32x4_gt_u, macro()
         emit "vpcmpeqd %xmm1, %xmm2, %xmm2"  # xmm1 == min ? (xmm1 <= xmm0)
         emit "vpcmpeqd %xmm1, %xmm0, %xmm0"  # xmm0 == xmm1 ?
         emit "vpandn %xmm2, %xmm0, %xmm0"    # (xmm1 <= xmm0) && (xmm0 != xmm1) = (xmm0 > xmm1)
+    elsif LOONGARCH64
+        emit "vslt.wu $vr16, $vr17, $vr16"
     else
         break # Not implemented
     end
@@ -5201,6 +5314,8 @@ ipintOp(_simd_i32x4_le_s, macro()
         emit "vpcmpgtd %xmm1, %xmm0, %xmm0"  # xmm0 > xmm1
         emit "vpcmpeqd %xmm2, %xmm2, %xmm2"  # Set all bits to 1
         emit "vpxor %xmm2, %xmm0, %xmm0"     # Invert result: !(xmm0 > xmm1)
+    elsif LOONGARCH64
+        emit "vsle.w $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -5220,6 +5335,8 @@ ipintOp(_simd_i32x4_le_u, macro()
         # xmm0 <= xmm1 iff min(xmm0, xmm1) == xmm0
         emit "vpminud %xmm1, %xmm0, %xmm2"   # min(xmm0, xmm1) -> xmm2
         emit "vpcmpeqd %xmm0, %xmm2, %xmm0"  # xmm0 == min ? (xmm0 <= xmm1)
+    elsif LOONGARCH64
+        emit "vsle.wu $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -5239,6 +5356,8 @@ ipintOp(_simd_i32x4_ge_s, macro()
         emit "vpcmpgtd %xmm0, %xmm1, %xmm0"  # xmm1 > xmm0
         emit "vpcmpeqd %xmm2, %xmm2, %xmm2"  # Set all bits to 1
         emit "vpxor %xmm2, %xmm0, %xmm0"     # Invert result: !(xmm1 > xmm0)
+    elsif LOONGARCH64
+        emit "vsle.w $vr16, $vr17, $vr16"
     else
         break # Not implemented
     end
@@ -5257,6 +5376,8 @@ ipintOp(_simd_i32x4_ge_u, macro()
         # xmm0 >= xmm1 iff min(xmm0, xmm1) == xmm1
         emit "vpminud %xmm1, %xmm0, %xmm2"   # min(xmm0, xmm1) -> xmm2
         emit "vpcmpeqd %xmm1, %xmm2, %xmm0"  # xmm1 == min ? (xmm1 <= xmm0) = (xmm0 >= xmm1)
+    elsif LOONGARCH64
+        emit "vsle.wu $vr16, $vr17, $vr16"
     else
         break # Not implemented
     end
@@ -5274,6 +5395,8 @@ ipintOp(_simd_f32x4_eq, macro()
         emit "fcmeq v16.4s, v16.4s, v17.4s"
     elsif X86_64
         emit "vcmpeqps %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vfcmp.ceq.s $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -5291,6 +5414,8 @@ ipintOp(_simd_f32x4_ne, macro()
         emit "mvn v16.16b, v16.16b"
     elsif X86_64
         emit "vcmpneqps %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vfcmp.cune.s $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -5308,6 +5433,8 @@ ipintOp(_simd_f32x4_lt, macro()
         emit "fcmgt v16.4s, v17.4s, v16.4s"
     elsif X86_64
         emit "vcmpltps %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vfcmp.clt.s $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -5324,6 +5451,8 @@ ipintOp(_simd_f32x4_gt, macro()
         emit "fcmgt v16.4s, v16.4s, v17.4s"
     elsif X86_64
         emit "vcmpgtps %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vfcmp.clt.s $vr16, $vr17, $vr16"
     else
         break # Not implemented
     end
@@ -5341,6 +5470,8 @@ ipintOp(_simd_f32x4_le, macro()
         emit "fcmge v16.4s, v17.4s, v16.4s"
     elsif X86_64
         emit "vcmpleps %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vfcmp.cle.s $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -5357,6 +5488,8 @@ ipintOp(_simd_f32x4_ge, macro()
         emit "fcmge v16.4s, v16.4s, v17.4s"
     elsif X86_64
         emit "vcmpgeps %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vfcmp.cle.s $vr16, $vr17, $vr16"
     else
         break # Not implemented
     end
@@ -5374,6 +5507,8 @@ ipintOp(_simd_f64x2_eq, macro()
         emit "fcmeq v16.2d, v16.2d, v17.2d"
     elsif X86_64
         emit "vcmpeqpd %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vfcmp.ceq.d $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -5391,6 +5526,8 @@ ipintOp(_simd_f64x2_ne, macro()
         emit "mvn v16.16b, v16.16b"
     elsif X86_64
         emit "vcmpneqpd %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vfcmp.cune.d $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -5408,6 +5545,8 @@ ipintOp(_simd_f64x2_lt, macro()
         emit "fcmgt v16.2d, v17.2d, v16.2d"
     elsif X86_64
         emit "vcmpltpd %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vfcmp.clt.d $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -5424,6 +5563,8 @@ ipintOp(_simd_f64x2_gt, macro()
         emit "fcmgt v16.2d, v16.2d, v17.2d"
     elsif X86_64
         emit "vcmpgtpd %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vfcmp.clt.d $vr16, $vr17, $vr16"
     else
         break # Not implemented
     end
@@ -5441,6 +5582,8 @@ ipintOp(_simd_f64x2_le, macro()
         emit "fcmge v16.2d, v17.2d, v16.2d"
     elsif X86_64
         emit "vcmplepd %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vfcmp.cle.d $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -5457,6 +5600,8 @@ ipintOp(_simd_f64x2_ge, macro()
         emit "fcmge v16.2d, v16.2d, v17.2d"
     elsif X86_64
         emit "vcmpgepd %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vfcmp.cle.d $vr16, $vr17, $vr16"
     else
         break # Not implemented
     end
@@ -5475,6 +5620,8 @@ ipintOp(_simd_v128_not, macro()
     elsif X86_64
         emit "vpcmpeqb %xmm1, %xmm1, %xmm1"  # Set all bits to 1
         emit "vpxor %xmm1, %xmm0, %xmm0"     # Invert all bits
+    elsif LOONGARCH64
+        emit "vnor.v $vr16, $vr16, $vr16"
     else
         break # Not implemented
     end
@@ -5491,6 +5638,8 @@ ipintOp(_simd_v128_and, macro()
         emit "and v16.16b, v16.16b, v17.16b"
     elsif X86_64
         emit "vpand %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vand.v $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -5507,6 +5656,9 @@ ipintOp(_simd_v128_andnot, macro()
         emit "bic v16.16b, v16.16b, v17.16b"
     elsif X86_64
         emit "vpandn %xmm0, %xmm1, %xmm0"
+    elsif LOONGARCH64
+        emit "vnor.v $vr17, $vr17, $vr17"
+        emit "vand.v $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -5523,6 +5675,8 @@ ipintOp(_simd_v128_or, macro()
         emit "orr v16.16b, v16.16b, v17.16b"
     elsif X86_64
         emit "vpor %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vor.v $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -5539,6 +5693,8 @@ ipintOp(_simd_v128_xor, macro()
         emit "eor v16.16b, v16.16b, v17.16b"
     elsif X86_64
         emit "vpxor %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vxor.v $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -5564,6 +5720,10 @@ ipintOp(_simd_v128_bitselect, macro()
         emit "vpand %xmm2, %xmm0, %xmm3"     # xmm3 = a & c
         emit "vpandn %xmm1, %xmm2, %xmm2"    # xmm2 = b & ~c (vpandn does ~src1 & src2)
         emit "vpor %xmm2, %xmm3, %xmm0"      # xmm0 = (a & c) | (b & ~c)
+    elsif LOONGARCH64
+        # LSX vbitsel computes dst = (mask & trueValue) | (~mask & falseValue).
+        emit "vbitsel.v $vr18, $vr17, $vr16, $vr18"
+        emit "vor.v $vr16, $vr18, $vr18"
     else
         break # Not implemented
     end
@@ -5587,6 +5747,15 @@ ipintOp(_simd_v128_any_true, macro()
         emit "vptest %xmm0, %xmm0"
         emit "setne %al"                  # Set AL to 1 if ZF=0 (any bit set), 0 if ZF=1 (all zero)
         emit "movzbl %al, %eax"           # Zero-extend AL to EAX
+    elsif LOONGARCH64
+        # V128 stays in LSX registers. Only the final i32 predicate result is
+        # reduced through GPRs for pushInt32().
+        emit "vpickve2gr.d $r4, $vr16, 0"
+        emit "vpickve2gr.d $r5, $vr16, 1"
+        orq t1, t0
+        btqz t0, .v128_any_true_done
+        move 1, t0
+    .v128_any_true_done:
     else
         break # Not implemented
     end
@@ -5749,6 +5918,10 @@ ipintOp(_simd_f32x4_demote_f64x2_zero, macro()
         emit "mov v16.d[1], xzr"
     elsif X86_64
         emit "vcvtpd2ps %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vor.v $vr18, $vr16, $vr16"
+        emit "vxor.v $vr16, $vr16, $vr16"
+        emit "vfcvt.s.d $vr16, $vr16, $vr18"
     else
         break # Not implemented
     end
@@ -5764,6 +5937,8 @@ ipintOp(_simd_f64x2_promote_low_f32x4, macro()
         emit "fcvtl v16.2d, v16.2s"
     elsif X86_64
         emit "vcvtps2pd %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vfcvtl.d.s $vr16, $vr16"
     else
         break # Not implemented
     end
@@ -5781,6 +5956,11 @@ ipintOp(_simd_i8x16_abs, macro()
         emit "abs v16.16b, v16.16b"
     elsif X86_64
         emit "vpabsb %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vxor.v $vr17, $vr17, $vr17"
+        emit "vsub.b $vr18, $vr17, $vr16"
+        emit "vslt.b $vr17, $vr16, $vr17"
+        emit "vbitsel.v $vr16, $vr16, $vr18, $vr17"
     else
         break # Not implemented
     end
@@ -5798,6 +5978,8 @@ ipintOp(_simd_i8x16_neg, macro()
         # Negate by subtracting from zero
         emit "vpxor %xmm1, %xmm1, %xmm1"
         emit "vpsubb %xmm0, %xmm1, %xmm0"
+    elsif LOONGARCH64
+        emit "vneg.b $vr16, $vr16"
     else
         break # Not implemented
     end
@@ -5840,6 +6022,8 @@ ipintOp(_simd_i8x16_popcnt, macro()
 
         # Add the results
         emit "vpaddb %xmm3, %xmm0, %xmm0"        # Add popcount of low and high nibbles
+    elsif LOONGARCH64
+        emit "vpcnt.b $vr16, $vr16"
     else
         break # Not implemented
     end
@@ -5865,6 +6049,19 @@ ipintOp(_simd_i8x16_all_true, macro()
         emit "test %eax, %eax"                # Test if any bit is set (any lane was zero)
         emit "sete %al"                       # Set AL to 1 if no bits set (all lanes non-zero), 0 otherwise
         emit "movzbl %al, %eax"               # Zero-extend to full 32-bit register
+    elsif LOONGARCH64
+        # V128 stays in LSX registers. Reduce the zero-lane mask to the i32
+        # all_true result only at the scalar result boundary.
+        emit "vxor.v $vr17, $vr17, $vr17"
+        emit "vseq.b $vr17, $vr16, $vr17"
+        emit "vpickve2gr.d $r4, $vr17, 0"
+        emit "vpickve2gr.d $r5, $vr17, 1"
+        orq t1, t0
+        move 0, t1
+        btpnz t0, .i8x16_all_true_done
+        move 1, t1
+    .i8x16_all_true_done:
+        move t1, t0
     else
         break # Not implemented
     end
@@ -5911,6 +6108,10 @@ ipintOp(_simd_i8x16_narrow_i16x8_s, macro()
         emit "sqxtn2 v16.16b, v17.8h"  # Narrow second vector (v1) to upper 8 bytes
     elsif X86_64
         emit "vpacksswb %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vor.v $vr18, $vr16, $vr16"
+        emit "vor.v $vr16, $vr17, $vr17"
+        emit "vssrani.b.h $vr16, $vr18, 0"
     else
         break # Not implemented
     end
@@ -5929,6 +6130,10 @@ ipintOp(_simd_i8x16_narrow_i16x8_u, macro()
         emit "sqxtun2 v16.16b, v17.8h"  # Narrow second vector (v1) to upper 8 bytes
     elsif X86_64
         emit "vpackuswb %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vor.v $vr18, $vr16, $vr16"
+        emit "vor.v $vr16, $vr17, $vr17"
+        emit "vssrani.bu.h $vr16, $vr18, 0"
     else
         break # Not implemented
     end
@@ -5946,6 +6151,8 @@ ipintOp(_simd_f32x4_ceil, macro()
         emit "frintp v16.4s, v16.4s"
     elsif X86_64
         emit "vroundps $0x2, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vfrintrp.s $vr16, $vr16"
     else
         break # Not implemented
     end
@@ -5961,6 +6168,8 @@ ipintOp(_simd_f32x4_floor, macro()
         emit "frintm v16.4s, v16.4s"
     elsif X86_64
         emit "vroundps $0x1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vfrintrm.s $vr16, $vr16"
     else
         break # Not implemented
     end
@@ -5976,6 +6185,8 @@ ipintOp(_simd_f32x4_trunc, macro()
         emit "frintz v16.4s, v16.4s"
     elsif X86_64
         emit "vroundps $0x3, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vfrintrz.s $vr16, $vr16"
     else
         break # Not implemented
     end
@@ -5991,6 +6202,8 @@ ipintOp(_simd_f32x4_nearest, macro()
         emit "frintn v16.4s, v16.4s"
     elsif X86_64
         emit "vroundps $0x0, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vfrintrne.s $vr16, $vr16"
     else
         break # Not implemented
     end
@@ -6039,6 +6252,10 @@ ipintOp(_simd_i8x16_shl, macro()
 
         # Pack low and high results back to bytes
         emit "vpackuswb %xmm3, %xmm2, %xmm0"
+    elsif LOONGARCH64
+        andi 7, t0
+        emit "vreplgr2vr.b $vr17, $r4"
+        emit "vsll.b $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -6081,6 +6298,10 @@ ipintOp(_simd_i8x16_shr_s, macro()
 
         # Pack low and high results back to signed bytes
         emit "vpacksswb %xmm3, %xmm2, %xmm0"
+    elsif LOONGARCH64
+        andi 7, t0
+        emit "vreplgr2vr.b $vr17, $r4"
+        emit "vsra.b $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -6123,6 +6344,10 @@ ipintOp(_simd_i8x16_shr_u, macro()
 
         # Pack low and high results back to unsigned bytes
         emit "vpackuswb %xmm3, %xmm2, %xmm0"
+    elsif LOONGARCH64
+        andi 7, t0
+        emit "vreplgr2vr.b $vr17, $r4"
+        emit "vsrl.b $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -6139,6 +6364,8 @@ ipintOp(_simd_i8x16_add, macro()
         emit "add v16.16b, v16.16b, v17.16b"
     elsif X86_64
         emit "vpaddb %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vadd.b $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -6155,6 +6382,8 @@ ipintOp(_simd_i8x16_add_sat_s, macro()
         emit "sqadd v16.16b, v16.16b, v17.16b"
     elsif X86_64
         emit "vpaddsb %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vsadd.b $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -6171,6 +6400,8 @@ ipintOp(_simd_i8x16_add_sat_u, macro()
         emit "uqadd v16.16b, v16.16b, v17.16b"
     elsif X86_64
         emit "vpaddusb %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vsadd.bu $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -6187,6 +6418,8 @@ ipintOp(_simd_i8x16_sub, macro()
         emit "sub v16.16b, v16.16b, v17.16b"
     elsif X86_64
         emit "vpsubb %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vsub.b $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -6203,6 +6436,8 @@ ipintOp(_simd_i8x16_sub_sat_s, macro()
         emit "sqsub v16.16b, v16.16b, v17.16b"
     elsif X86_64
         emit "vpsubsb %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vssub.b $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -6219,6 +6454,8 @@ ipintOp(_simd_i8x16_sub_sat_u, macro()
         emit "uqsub v16.16b, v16.16b, v17.16b"
     elsif X86_64
         emit "vpsubusb %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vssub.bu $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -6236,6 +6473,8 @@ ipintOp(_simd_f64x2_ceil, macro()
         emit "frintp v16.2d, v16.2d"
     elsif X86_64
         emit "vroundpd $0x2, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vfrintrp.d $vr16, $vr16"
     else
         break # Not implemented
     end
@@ -6251,6 +6490,8 @@ ipintOp(_simd_f64x2_floor, macro()
         emit "frintm v16.2d, v16.2d"
     elsif X86_64
         emit "vroundpd $0x1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vfrintrm.d $vr16, $vr16"
     else
         break # Not implemented
     end
@@ -6268,6 +6509,8 @@ ipintOp(_simd_i8x16_min_s, macro()
         emit "smin v16.16b, v16.16b, v17.16b"
     elsif X86_64
         emit "vpminsb %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vmin.b $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -6284,6 +6527,8 @@ ipintOp(_simd_i8x16_min_u, macro()
         emit "umin v16.16b, v16.16b, v17.16b"
     elsif X86_64
         emit "vpminub %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vmin.bu $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -6300,6 +6545,8 @@ ipintOp(_simd_i8x16_max_s, macro()
         emit "smax v16.16b, v16.16b, v17.16b"
     elsif X86_64
         emit "vpmaxsb %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vmax.b $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -6316,6 +6563,8 @@ ipintOp(_simd_i8x16_max_u, macro()
         emit "umax v16.16b, v16.16b, v17.16b"
     elsif X86_64
         emit "vpmaxub %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vmax.bu $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -6333,6 +6582,8 @@ ipintOp(_simd_f64x2_trunc, macro()
         emit "frintz v16.2d, v16.2d"
     elsif X86_64
         emit "vroundpd $0x3, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vfrintrz.d $vr16, $vr16"
     else
         break # Not implemented
     end
@@ -6351,6 +6602,8 @@ ipintOp(_simd_i8x16_avgr_u, macro()
         emit "urhadd v16.16b, v16.16b, v17.16b"
     elsif X86_64
         emit "vpavgb %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vavgr.bu $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -6371,6 +6624,8 @@ ipintOp(_simd_i16x8_extadd_pairwise_i8x16_s, macro()
         emit "vpsrlw $15, %xmm1, %xmm1"       # Shift to get 0x0001 in each 16-bit lane
         emit "vpackuswb %xmm1, %xmm1, %xmm1"  # Pack to get 0x01 in each 8-bit lane
         emit "vpmaddubsw %xmm0, %xmm1, %xmm0" # Pairwise multiply-add (signed)
+    elsif LOONGARCH64
+        emit "vhaddw.h.b $vr16, $vr16, $vr16"
     else
         break # Not implemented
     end
@@ -6389,6 +6644,8 @@ ipintOp(_simd_i16x8_extadd_pairwise_i8x16_u, macro()
         emit "vpsrlw $15, %xmm1, %xmm1"       # Shift to get 0x0001 in each 16-bit lane
         emit "vpackuswb %xmm1, %xmm1, %xmm1"  # Pack to get 0x01 in each 8-bit lane
         emit "vpmaddubsw %xmm1, %xmm0, %xmm0" # Pairwise multiply-add (unsigned)
+    elsif LOONGARCH64
+        emit "vhaddw.hu.bu $vr16, $vr16, $vr16"
     else
         break # Not implemented
     end
@@ -6407,6 +6664,8 @@ ipintOp(_simd_i32x4_extadd_pairwise_i16x8_s, macro()
         emit "vpsrld $31, %xmm1, %xmm1"       # Shift to get 0x00000001 in each 32-bit lane
         emit "vpackssdw %xmm1, %xmm1, %xmm1"  # Pack to get 0x0001 in each 16-bit lane
         emit "vpmaddwd %xmm0, %xmm1, %xmm0"   # Pairwise multiply-add
+    elsif LOONGARCH64
+        emit "vhaddw.w.h $vr16, $vr16, $vr16"
     else
         break # Not implemented
     end
@@ -6424,6 +6683,8 @@ ipintOp(_simd_i32x4_extadd_pairwise_i16x8_u, macro()
         emit "vpsrld $16, %xmm0, %xmm1"            # Shift right to get high 16-bits in low position
         emit "vpblendw $0xAA, %xmm1, %xmm0, %xmm0" # Blend: keep low 16-bits from src, high 16-bits from shifted
         emit "vpaddd %xmm1, %xmm0, %xmm0"          # Add the pairs
+    elsif LOONGARCH64
+        emit "vhaddw.wu.hu $vr16, $vr16, $vr16"
     else
         break # Not implemented
     end
@@ -6441,6 +6702,11 @@ ipintOp(_simd_i16x8_abs, macro()
         emit "abs v16.8h, v16.8h"
     elsif X86_64
         emit "vpabsw %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vxor.v $vr17, $vr17, $vr17"
+        emit "vsub.h $vr18, $vr17, $vr16"
+        emit "vslt.h $vr17, $vr16, $vr17"
+        emit "vbitsel.v $vr16, $vr16, $vr18, $vr17"
     else
         break # Not implemented
     end
@@ -6458,6 +6724,8 @@ ipintOp(_simd_i16x8_neg, macro()
         # Negate by subtracting from zero
         emit "vpxor %xmm1, %xmm1, %xmm1"
         emit "vpsubw %xmm0, %xmm1, %xmm0"
+    elsif LOONGARCH64
+        emit "vneg.h $vr16, $vr16"
     else
         break # Not implemented
     end
@@ -6482,6 +6750,14 @@ ipintOp(_simd_i16x8_q15mulr_sat_s, macro()
         emit "vpshufd $0x00, %xmm2, %xmm2"          # Splat to all 8 words
         emit "vpcmpeqw %xmm2, %xmm0, %xmm2"         # Compare result with -32768
         emit "vpxor %xmm2, %xmm0, %xmm0"            # Fix saturation: -32768 becomes 32767
+    elsif LOONGARCH64
+        emit "vmulwev.w.h $vr18, $vr16, $vr17"
+        emit "vmulwod.w.h $vr19, $vr16, $vr17"
+        emit "vxor.v $vr16, $vr16, $vr16"
+        emit "vssrarni.h.w $vr16, $vr18, 15"
+        emit "vxor.v $vr18, $vr18, $vr18"
+        emit "vssrarni.h.w $vr18, $vr19, 15"
+        emit "vilvl.h $vr16, $vr18, $vr16"
     else
         break # Not implemented
     end
@@ -6509,6 +6785,19 @@ ipintOp(_simd_i16x8_all_true, macro()
         emit "testl %eax, %eax"              # Test if any bits are set
         emit "sete %al"                      # Set AL to 1 if no bits set (all lanes non-zero), 0 otherwise
         emit "movzbl %al, %eax"              # Zero-extend to 32-bit
+    elsif LOONGARCH64
+        # V128 stays in LSX registers. Reduce the zero-lane mask to the i32
+        # all_true result only at the scalar result boundary.
+        emit "vxor.v $vr17, $vr17, $vr17"
+        emit "vseq.h $vr17, $vr16, $vr17"
+        emit "vpickve2gr.d $r4, $vr17, 0"
+        emit "vpickve2gr.d $r5, $vr17, 1"
+        orq t1, t0
+        move 0, t1
+        btpnz t0, .i16x8_all_true_done
+        move 1, t1
+    .i16x8_all_true_done:
+        move t1, t0
     else
         break # Not implemented
     end
@@ -6555,6 +6844,10 @@ ipintOp(_simd_i16x8_narrow_i32x4_s, macro()
         emit "sqxtn2 v16.8h, v17.4s"   # Narrow second vector (v1) to upper 4 halfwords
     elsif X86_64
         emit "vpackssdw %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vor.v $vr18, $vr16, $vr16"
+        emit "vor.v $vr16, $vr17, $vr17"
+        emit "vssrani.h.w $vr16, $vr18, 0"
     else
         break # Not implemented
     end
@@ -6573,6 +6866,10 @@ ipintOp(_simd_i16x8_narrow_i32x4_u, macro()
         emit "sqxtun2 v16.8h, v17.4s"   # Narrow second vector (v1) to upper 4 halfwords
     elsif X86_64
         emit "vpackusdw %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vor.v $vr18, $vr16, $vr16"
+        emit "vor.v $vr16, $vr17, $vr17"
+        emit "vssrani.hu.w $vr16, $vr18, 0"
     else
         break # Not implemented
     end
@@ -6588,6 +6885,8 @@ ipintOp(_simd_i16x8_extend_low_i8x16_s, macro()
         emit "sxtl v16.8h, v16.8b"
     elsif X86_64
         emit "vpmovsxbw %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vsllwil.h.b $vr16, $vr16, 0"
     else
         break # Not implemented
     end
@@ -6605,6 +6904,8 @@ ipintOp(_simd_i16x8_extend_high_i8x16_s, macro()
         # Move high 64 bits to low, then sign extend
         emit "vpsrldq $8, %xmm0, %xmm0"   # Shift right 8 bytes to get high half
         emit "vpmovsxbw %xmm0, %xmm0"     # Sign extend
+    elsif LOONGARCH64
+        emit "vexth.h.b $vr16, $vr16"
     else
         break # Not implemented
     end
@@ -6620,6 +6921,8 @@ ipintOp(_simd_i16x8_extend_low_i8x16_u, macro()
         emit "uxtl v16.8h, v16.8b"
     elsif X86_64
         emit "vpmovzxbw %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vsllwil.hu.bu $vr16, $vr16, 0"
     else
         break # Not implemented
     end
@@ -6637,6 +6940,8 @@ ipintOp(_simd_i16x8_extend_high_i8x16_u, macro()
         # Move high 64 bits to low, then zero extend
         emit "vpsrldq $8, %xmm0, %xmm0"   # Shift right 8 bytes to get high half
         emit "vpmovzxbw %xmm0, %xmm0"     # Zero extend
+    elsif LOONGARCH64
+        emit "vexth.hu.bu $vr16, $vr16"
     else
         break # Not implemented
     end
@@ -6662,6 +6967,10 @@ ipintOp(_simd_i16x8_shl, macro()
         emit "movd %eax, %xmm1"
         # Perform left shift on 16-bit words
         emit "vpsllw %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        andi 15, t0
+        emit "vreplgr2vr.h $vr17, $r4"
+        emit "vsll.h $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -6689,6 +6998,10 @@ ipintOp(_simd_i16x8_shr_s, macro()
         emit "movd %eax, %xmm1"
         # Perform arithmetic right shift on 16-bit words
         emit "vpsraw %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        andi 15, t0
+        emit "vreplgr2vr.h $vr17, $r4"
+        emit "vsra.h $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -6714,6 +7027,10 @@ ipintOp(_simd_i16x8_shr_u, macro()
         andi 15, t0
         emit "movd %eax, %xmm1"
         emit "vpsrlw %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        andi 15, t0
+        emit "vreplgr2vr.h $vr17, $r4"
+        emit "vsrl.h $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -6730,6 +7047,8 @@ ipintOp(_simd_i16x8_add, macro()
         emit "add v16.8h, v16.8h, v17.8h"
     elsif X86_64
         emit "vpaddw %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vadd.h $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -6746,6 +7065,8 @@ ipintOp(_simd_i16x8_add_sat_s, macro()
         emit "sqadd v16.8h, v16.8h, v17.8h"
     elsif X86_64
         emit "vpaddsw %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vsadd.h $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -6762,6 +7083,8 @@ ipintOp(_simd_i16x8_add_sat_u, macro()
         emit "uqadd v16.8h, v16.8h, v17.8h"
     elsif X86_64
         emit "vpaddusw %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vsadd.hu $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -6778,6 +7101,8 @@ ipintOp(_simd_i16x8_sub, macro()
         emit "sub v16.8h, v16.8h, v17.8h"
     elsif X86_64
         emit "vpsubw %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vsub.h $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -6794,6 +7119,8 @@ ipintOp(_simd_i16x8_sub_sat_s, macro()
         emit "sqsub v16.8h, v16.8h, v17.8h"
     elsif X86_64
         emit "vpsubsw %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vssub.h $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -6810,6 +7137,8 @@ ipintOp(_simd_i16x8_sub_sat_u, macro()
         emit "uqsub v16.8h, v16.8h, v17.8h"
     elsif X86_64
         emit "vpsubusw %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vssub.hu $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -6827,6 +7156,8 @@ ipintOp(_simd_f64x2_nearest, macro()
         emit "frintn v16.2d, v16.2d"
     elsif X86_64
         emit "vroundpd $0x0, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vfrintrne.d $vr16, $vr16"
     else
         break # Not implemented
     end
@@ -6845,6 +7176,8 @@ ipintOp(_simd_i16x8_mul, macro()
         emit "mul v16.8h, v16.8h, v17.8h"
     elsif X86_64
         emit "vpmullw %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vmul.h $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -6861,6 +7194,8 @@ ipintOp(_simd_i16x8_min_s, macro()
         emit "smin v16.8h, v16.8h, v17.8h"
     elsif X86_64
         emit "vpminsw %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vmin.h $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -6877,6 +7212,8 @@ ipintOp(_simd_i16x8_min_u, macro()
         emit "umin v16.8h, v16.8h, v17.8h"
     elsif X86_64
         emit "vpminuw %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vmin.hu $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -6893,6 +7230,8 @@ ipintOp(_simd_i16x8_max_s, macro()
         emit "smax v16.8h, v16.8h, v17.8h"
     elsif X86_64
         emit "vpmaxsw %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vmax.h $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -6909,6 +7248,8 @@ ipintOp(_simd_i16x8_max_u, macro()
         emit "umax v16.8h, v16.8h, v17.8h"
     elsif X86_64
         emit "vpmaxuw %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vmax.hu $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -6927,6 +7268,8 @@ ipintOp(_simd_i16x8_avgr_u, macro()
         emit "urhadd v16.8h, v16.8h, v17.8h"
     elsif X86_64
         emit "vpavgw %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vavgr.hu $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -6946,6 +7289,10 @@ ipintOp(_simd_i16x8_extmul_low_i8x16_s, macro()
         emit "vpmovsxbw %xmm0, %xmm2"     # Sign extend left to scratch
         emit "vpmovsxbw %xmm1, %xmm0"     # Sign extend right to dest
         emit "vpmullw %xmm2, %xmm0, %xmm0" # Multiply
+    elsif LOONGARCH64
+        emit "vilvl.b $vr18, $vr16, $vr16"
+        emit "vilvl.b $vr19, $vr17, $vr17"
+        emit "vmulwev.h.b $vr16, $vr18, $vr19"
     else
         break # Not implemented
     end
@@ -6967,6 +7314,10 @@ ipintOp(_simd_i16x8_extmul_high_i8x16_s, macro()
         emit "vpunpckhbw %xmm1, %xmm1, %xmm0"  # Unpack high bytes of right
         emit "vpsraw $8, %xmm0, %xmm0"         # Arithmetic shift to sign extend
         emit "vpmullw %xmm2, %xmm0, %xmm0"     # Multiply
+    elsif LOONGARCH64
+        emit "vilvh.b $vr18, $vr16, $vr16"
+        emit "vilvh.b $vr19, $vr17, $vr17"
+        emit "vmulwev.h.b $vr16, $vr18, $vr19"
     else
         break # Not implemented
     end
@@ -6986,6 +7337,10 @@ ipintOp(_simd_i16x8_extmul_low_i8x16_u, macro()
         emit "vpmovzxbw %xmm0, %xmm2"      # Zero extend left to scratch
         emit "vpmovzxbw %xmm1, %xmm0"      # Zero extend right to dest
         emit "vpmullw %xmm2, %xmm0, %xmm0" # Multiply
+    elsif LOONGARCH64
+        emit "vilvl.b $vr18, $vr16, $vr16"
+        emit "vilvl.b $vr19, $vr17, $vr17"
+        emit "vmulwev.h.bu $vr16, $vr18, $vr19"
     else
         break # Not implemented
     end
@@ -7006,6 +7361,10 @@ ipintOp(_simd_i16x8_extmul_high_i8x16_u, macro()
         emit "vpunpckhbw %xmm2, %xmm1, %xmm1"  # Unpack high bytes of right with zeros  
         emit "vpunpckhbw %xmm2, %xmm0, %xmm0"  # Unpack high bytes of left with zeros
         emit "vpmullw %xmm1, %xmm0, %xmm0"     # Multiply
+    elsif LOONGARCH64
+        emit "vilvh.b $vr18, $vr16, $vr16"
+        emit "vilvh.b $vr19, $vr17, $vr17"
+        emit "vmulwev.h.bu $vr16, $vr18, $vr19"
     else
         break # Not implemented
     end
@@ -7023,6 +7382,11 @@ ipintOp(_simd_i32x4_abs, macro()
         emit "abs v16.4s, v16.4s"
     elsif X86_64
         emit "vpabsd %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vxor.v $vr17, $vr17, $vr17"
+        emit "vsub.w $vr18, $vr17, $vr16"
+        emit "vslt.w $vr17, $vr16, $vr17"
+        emit "vbitsel.v $vr16, $vr16, $vr18, $vr17"
     else
         break # Not implemented
     end
@@ -7040,6 +7404,8 @@ ipintOp(_simd_i32x4_neg, macro()
         # Negate by subtracting from zero
         emit "vpxor %xmm1, %xmm1, %xmm1"
         emit "vpsubd %xmm0, %xmm1, %xmm0"
+    elsif LOONGARCH64
+        emit "vneg.w $vr16, $vr16"
     else
         break # Not implemented
     end
@@ -7069,6 +7435,19 @@ ipintOp(_simd_i32x4_all_true, macro()
         emit "testl %eax, %eax"              # Test if any bits are set
         emit "sete %al"                      # Set AL to 1 if no bits set (all lanes non-zero), 0 otherwise
         emit "movzbl %al, %eax"              # Zero-extend to 32-bit
+    elsif LOONGARCH64
+        # V128 stays in LSX registers. Reduce the zero-lane mask to the i32
+        # all_true result only at the scalar result boundary.
+        emit "vxor.v $vr17, $vr17, $vr17"
+        emit "vseq.w $vr17, $vr16, $vr17"
+        emit "vpickve2gr.d $r4, $vr17, 0"
+        emit "vpickve2gr.d $r5, $vr17, 1"
+        orq t1, t0
+        move 0, t1
+        btpnz t0, .i32x4_all_true_done
+        move 1, t1
+    .i32x4_all_true_done:
+        move t1, t0
     else
         break # Not implemented
     end
@@ -7115,6 +7494,8 @@ ipintOp(_simd_i32x4_extend_low_i16x8_s, macro()
         emit "sxtl v16.4s, v16.4h"
     elsif X86_64
         emit "vpmovsxwd %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vsllwil.w.h $vr16, $vr16, 0"
     else
         break # Not implemented
     end
@@ -7132,6 +7513,8 @@ ipintOp(_simd_i32x4_extend_high_i16x8_s, macro()
         # Move high 64 bits to low, then sign extend
         emit "vpsrldq $8, %xmm0, %xmm0"   # Shift right 8 bytes to get high half
         emit "vpmovsxwd %xmm0, %xmm0"     # Sign extend
+    elsif LOONGARCH64
+        emit "vexth.w.h $vr16, $vr16"
     else
         break # Not implemented
     end
@@ -7147,6 +7530,8 @@ ipintOp(_simd_i32x4_extend_low_i16x8_u, macro()
         emit "uxtl v16.4s, v16.4h"
     elsif X86_64
         emit "vpmovzxwd %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vsllwil.wu.hu $vr16, $vr16, 0"
     else
         break # Not implemented
     end
@@ -7164,6 +7549,8 @@ ipintOp(_simd_i32x4_extend_high_i16x8_u, macro()
         # Move high 64 bits to low, then zero extend
         emit "vpsrldq $8, %xmm0, %xmm0"   # Shift right 8 bytes to get high half
         emit "vpmovzxwd %xmm0, %xmm0"     # Zero extend
+    elsif LOONGARCH64
+        emit "vexth.wu.hu $vr16, $vr16"
     else
         break # Not implemented
     end
@@ -7187,6 +7574,10 @@ ipintOp(_simd_i32x4_shl, macro()
         andi 31, t0
         emit "vmovd %eax, %xmm1"
         emit "vpslld %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        andi 31, t0
+        emit "vreplgr2vr.w $vr17, $r4"
+        emit "vsll.w $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -7212,6 +7603,10 @@ ipintOp(_simd_i32x4_shr_s, macro()
         andi 31, t0
         emit "vmovd %eax, %xmm1"
         emit "vpsrad %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        andi 31, t0
+        emit "vreplgr2vr.w $vr17, $r4"
+        emit "vsra.w $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -7237,6 +7632,10 @@ ipintOp(_simd_i32x4_shr_u, macro()
         andi 31, t0
         emit "vmovd %eax, %xmm1"
         emit "vpsrld %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        andi 31, t0
+        emit "vreplgr2vr.w $vr17, $r4"
+        emit "vsrl.w $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -7253,6 +7652,8 @@ ipintOp(_simd_i32x4_add, macro()
         emit "add v16.4s, v16.4s, v17.4s"
     elsif X86_64
         emit "vpaddd %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vadd.w $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -7272,6 +7673,8 @@ ipintOp(_simd_i32x4_sub, macro()
         emit "sub v16.4s, v16.4s, v17.4s"
     elsif X86_64
         emit "vpsubd %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vsub.w $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -7292,6 +7695,8 @@ ipintOp(_simd_i32x4_mul, macro()
         emit "mul v16.4s, v16.4s, v17.4s"
     elsif X86_64
         emit "vpmulld %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vmul.w $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -7308,6 +7713,8 @@ ipintOp(_simd_i32x4_min_s, macro()
         emit "smin v16.4s, v16.4s, v17.4s"
     elsif X86_64
         emit "vpminsd %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vmin.w $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -7324,6 +7731,8 @@ ipintOp(_simd_i32x4_min_u, macro()
         emit "umin v16.4s, v16.4s, v17.4s"
     elsif X86_64
         emit "vpminud %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vmin.wu $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -7340,6 +7749,8 @@ ipintOp(_simd_i32x4_max_s, macro()
         emit "smax v16.4s, v16.4s, v17.4s"
     elsif X86_64
         emit "vpmaxsd %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vmax.w $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -7356,6 +7767,8 @@ ipintOp(_simd_i32x4_max_u, macro()
         emit "umax v16.4s, v16.4s, v17.4s"
     elsif X86_64
         emit "vpmaxud %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vmax.wu $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -7377,6 +7790,10 @@ ipintOp(_simd_i32x4_dot_i16x8_s, macro()
         emit "addp v16.4s, v18.4s, v16.4s"       # pairwise add to get final dot product result
     elsif X86_64
         emit "vpmaddwd %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vmulwev.w.h $vr18, $vr16, $vr17"
+        emit "vmulwod.w.h $vr19, $vr16, $vr17"
+        emit "vadd.w $vr16, $vr18, $vr19"
     else
         break # Not implemented
     end
@@ -7397,6 +7814,10 @@ ipintOp(_simd_i32x4_extmul_low_i16x8_s, macro()
         emit "vpmullw %xmm1, %xmm0, %xmm2"     # Low multiply to scratch
         emit "vpmulhw %xmm1, %xmm0, %xmm0"     # High multiply (signed) to dest
         emit "vpunpcklwd %xmm0, %xmm2, %xmm0"  # Interleave low words
+    elsif LOONGARCH64
+        emit "vilvl.h $vr18, $vr16, $vr16"
+        emit "vilvl.h $vr19, $vr17, $vr17"
+        emit "vmulwev.w.h $vr16, $vr18, $vr19"
     else
         break # Not implemented
     end
@@ -7416,6 +7837,10 @@ ipintOp(_simd_i32x4_extmul_high_i16x8_s, macro()
         emit "vpmullw %xmm1, %xmm0, %xmm2"     # Low multiply to scratch
         emit "vpmulhw %xmm1, %xmm0, %xmm0"     # High multiply (signed) to dest
         emit "vpunpckhwd %xmm0, %xmm2, %xmm0"  # Interleave high words
+    elsif LOONGARCH64
+        emit "vilvh.h $vr18, $vr16, $vr16"
+        emit "vilvh.h $vr19, $vr17, $vr17"
+        emit "vmulwev.w.h $vr16, $vr18, $vr19"
     else
         break # Not implemented
     end
@@ -7435,6 +7860,10 @@ ipintOp(_simd_i32x4_extmul_low_i16x8_u, macro()
         emit "vpmullw %xmm1, %xmm0, %xmm2"     # Low multiply to scratch
         emit "vpmulhuw %xmm1, %xmm0, %xmm0"    # High multiply (unsigned) to dest
         emit "vpunpcklwd %xmm0, %xmm2, %xmm0"  # Interleave low words
+    elsif LOONGARCH64
+        emit "vilvl.h $vr18, $vr16, $vr16"
+        emit "vilvl.h $vr19, $vr17, $vr17"
+        emit "vmulwev.w.hu $vr16, $vr18, $vr19"
     else
         break # Not implemented
     end
@@ -7454,6 +7883,10 @@ ipintOp(_simd_i32x4_extmul_high_i16x8_u, macro()
         emit "vpmullw %xmm1, %xmm0, %xmm2"     # Low multiply to scratch
         emit "vpmulhuw %xmm1, %xmm0, %xmm0"    # High multiply (unsigned) to dest
         emit "vpunpckhwd %xmm0, %xmm2, %xmm0"  # Interleave high words
+    elsif LOONGARCH64
+        emit "vilvh.h $vr18, $vr16, $vr16"
+        emit "vilvh.h $vr19, $vr17, $vr17"
+        emit "vmulwev.w.hu $vr16, $vr18, $vr19"
     else
         break # Not implemented
     end
@@ -7476,6 +7909,11 @@ ipintOp(_simd_i64x2_abs, macro()
         emit "vpcmpgtq %xmm0, %xmm1, %xmm2"  # xmm2 = mask where x < 0 (0 > x)
         emit "vpsubq %xmm0, %xmm1, %xmm1"    # xmm1 = -x
         emit "vpblendvb %xmm2, %xmm1, %xmm0, %xmm0" # blend: use -x where mask is true, x otherwise
+    elsif LOONGARCH64
+        emit "vxor.v $vr17, $vr17, $vr17"
+        emit "vsub.d $vr18, $vr17, $vr16"
+        emit "vslt.d $vr17, $vr16, $vr17"
+        emit "vbitsel.v $vr16, $vr16, $vr18, $vr17"
     else
         break # Not implemented
     end
@@ -7493,6 +7931,8 @@ ipintOp(_simd_i64x2_neg, macro()
         # Negate by subtracting from zero
         emit "vpxor %xmm1, %xmm1, %xmm1"
         emit "vpsubq %xmm0, %xmm1, %xmm0"
+    elsif LOONGARCH64
+        emit "vneg.d $vr16, $vr16"
     else
         break # Not implemented
     end
@@ -7522,6 +7962,19 @@ ipintOp(_simd_i64x2_all_true, macro()
         emit "testl %eax, %eax"              # Test if any bits are set
         emit "sete %al"                      # Set AL to 1 if no bits set (all lanes non-zero), 0 otherwise
         emit "movzbl %al, %eax"              # Zero-extend to 32-bit
+    elsif LOONGARCH64
+        # V128 stays in LSX registers. Reduce the zero-lane mask to the i32
+        # all_true result only at the scalar result boundary.
+        emit "vxor.v $vr17, $vr17, $vr17"
+        emit "vseq.d $vr17, $vr16, $vr17"
+        emit "vpickve2gr.d $r4, $vr17, 0"
+        emit "vpickve2gr.d $r5, $vr17, 1"
+        orq t1, t0
+        move 0, t1
+        btpnz t0, .i64x2_all_true_done
+        move 1, t1
+    .i64x2_all_true_done:
+        move t1, t0
     else
         break # Not implemented
     end
@@ -7570,6 +8023,8 @@ ipintOp(_simd_i64x2_extend_low_i32x4_s, macro()
         emit "sxtl v16.2d, v16.2s"
     elsif X86_64
         emit "vpmovsxdq %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vsllwil.d.w $vr16, $vr16, 0"
     else
         break # Not implemented
     end
@@ -7587,6 +8042,8 @@ ipintOp(_simd_i64x2_extend_high_i32x4_s, macro()
         # Move high 64 bits to low, then sign extend
         emit "vpsrldq $8, %xmm0, %xmm0"   # Shift right 8 bytes to get high half
         emit "vpmovsxdq %xmm0, %xmm0"     # Sign extend
+    elsif LOONGARCH64
+        emit "vexth.d.w $vr16, $vr16"
     else
         break # Not implemented
     end
@@ -7602,6 +8059,8 @@ ipintOp(_simd_i64x2_extend_low_i32x4_u, macro()
         emit "uxtl v16.2d, v16.2s"
     elsif X86_64
         emit "vpmovzxdq %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vsllwil.du.wu $vr16, $vr16, 0"
     else
         break # Not implemented
     end
@@ -7619,6 +8078,8 @@ ipintOp(_simd_i64x2_extend_high_i32x4_u, macro()
         # Move high 64 bits to low, then zero extend
         emit "vpsrldq $8, %xmm0, %xmm0"   # Shift right 8 bytes to get high half
         emit "vpmovzxdq %xmm0, %xmm0"     # Zero extend
+    elsif LOONGARCH64
+        emit "vexth.du.wu $vr16, $vr16"
     else
         break # Not implemented
     end
@@ -7642,6 +8103,10 @@ ipintOp(_simd_i64x2_shl, macro()
         andi 63, t0
         emit "movd %eax, %xmm1"
         emit "vpsllq %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        andi 63, t0
+        emit "vreplgr2vr.d $vr17, $r4"
+        emit "vsll.d $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -7653,17 +8118,24 @@ end)
 ipintOp(_simd_i64x2_shr_s, macro()
     # i64x2.shr_s - arithmetic right shift 2 64-bit signed integers
     popInt32(t0)  # shift count
-    # Mask shift count to 0-63 range for 64-bit elements
-    andi 63, t0
-
-    loadq 8[sp], t1
-    rshiftq t0, t1
-    storeq t1, 8[sp]
-
-    loadq [sp], t1
-    rshiftq t0, t1
-    storeq t1, [sp]
-
+    popVec(v0)        # vector
+    if ARM64 or ARM64E
+        andi 63, t0
+        negq t0
+        emit "dup v17.2d, x0"
+        emit "sshl v16.2d, v16.2d, v17.2d"
+    elsif X86_64
+        andi 63, t0
+        emit "movd %eax, %xmm1"
+        emit "vpsraq %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        andi 63, t0
+        emit "vreplgr2vr.d $vr17, $r4"
+        emit "vsra.d $vr16, $vr16, $vr17"
+    else
+        break # Not implemented
+    end
+    pushVec(v0)
     move t4, PC
     nextIPIntInstruction()
 end)
@@ -7685,6 +8157,10 @@ ipintOp(_simd_i64x2_shr_u, macro()
         andi 63, t0
         emit "movd %eax, %xmm1"
         emit "vpsrlq %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        andi 63, t0
+        emit "vreplgr2vr.d $vr17, $r4"
+        emit "vsrl.d $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -7701,6 +8177,8 @@ ipintOp(_simd_i64x2_add, macro()
         emit "add v16.2d, v16.2d, v17.2d"
     elsif X86_64
         emit "vpaddq %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vadd.d $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -7720,6 +8198,8 @@ ipintOp(_simd_i64x2_sub, macro()
         emit "sub v16.2d, v16.2d, v17.2d"
     elsif X86_64
         emit "vpsubq %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vsub.d $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -7734,21 +8214,14 @@ reservedOpcode(0xfdd401)
 
 ipintOp(_simd_i64x2_mul, macro()
     # i64x2.mul - multiply 2 64-bit integers (low 64 bits of result)
-
-    # Extract and multiply lane 0 (first 64-bit element)
-    loadq [sp], t0            # Load lane 0 of vector1
-    loadq 16[sp], t1          # Load lane 0 of vector0
-    mulq t1, t0               # Multiply: t0 = t0 * t1
-    storeq t0, 16[sp]         # Store result back to vector0
-
-    # Extract and multiply lane 1 (second 64-bit element)
-    loadq 8[sp], t0           # Load lane 1 of vector1
-    loadq 24[sp], t1          # Load lane 1 of vector0
-    mulq t1, t0               # Multiply: t0 = t0 * t1
-    storeq t0, 24[sp]         # Store result back to vector0
-
-    # Pop vector1, result in vector0
-    addp V128ISize, sp        # Remove first vector from stack, leaving result
+    popVec(v1)
+    popVec(v0)
+    if LOONGARCH64
+        emit "vmul.d $vr16, $vr16, $vr17"
+    else
+        break # Not implemented
+    end
+    pushVec(v0)
     move t4, PC
     nextIPIntInstruction()
 end)
@@ -7761,6 +8234,8 @@ ipintOp(_simd_i64x2_eq, macro()
         emit "cmeq v16.2d, v16.2d, v17.2d"
     elsif X86_64
         emit "vpcmpeqq %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vseq.d $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -7781,6 +8256,9 @@ ipintOp(_simd_i64x2_ne, macro()
         emit "vpcmpeqq %xmm1, %xmm0, %xmm0"
         emit "vpcmpeqq %xmm2, %xmm2, %xmm2"  # Set all bits to 1
         emit "vpxor %xmm2, %xmm0, %xmm0"     # Invert result
+    elsif LOONGARCH64
+        emit "vseq.d $vr16, $vr16, $vr17"
+        emit "vnor.v $vr16, $vr16, $vr16"
     else
         break # Not implemented
     end
@@ -7799,6 +8277,8 @@ ipintOp(_simd_i64x2_lt_s, macro()
     elsif X86_64
         # vpcmpgtq xmm1, xmm0 gives us xmm1 > xmm0, which is equivalent to xmm0 < xmm1
         emit "vpcmpgtq %xmm0, %xmm1, %xmm0"
+    elsif LOONGARCH64
+        emit "vslt.d $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -7815,6 +8295,8 @@ ipintOp(_simd_i64x2_gt_s, macro()
         emit "cmgt v16.2d, v16.2d, v17.2d"
     elsif X86_64
         emit "vpcmpgtq %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vslt.d $vr16, $vr17, $vr16"
     else
         break # Not implemented
     end
@@ -7835,6 +8317,8 @@ ipintOp(_simd_i64x2_le_s, macro()
         emit "vpcmpgtq %xmm1, %xmm0, %xmm0"  # xmm0 > xmm1
         emit "vpcmpeqq %xmm2, %xmm2, %xmm2"  # Set all bits to 1
         emit "vpxor %xmm2, %xmm0, %xmm0"     # Invert result: !(xmm0 > xmm1)
+    elsif LOONGARCH64
+        emit "vsle.d $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -7854,6 +8338,8 @@ ipintOp(_simd_i64x2_ge_s, macro()
         emit "vpcmpgtq %xmm0, %xmm1, %xmm0"  # xmm1 > xmm0
         emit "vpcmpeqq %xmm2, %xmm2, %xmm2"  # Set all bits to 1
         emit "vpxor %xmm2, %xmm0, %xmm0"     # Invert result: !(xmm1 > xmm0)
+    elsif LOONGARCH64
+        emit "vsle.d $vr16, $vr17, $vr16"
     else
         break # Not implemented
     end
@@ -7873,6 +8359,10 @@ ipintOp(_simd_i64x2_extmul_low_i32x4_s, macro()
         emit "vpunpckldq %xmm0, %xmm0, %xmm2"  # Duplicate low dwords of left
         emit "vpunpckldq %xmm1, %xmm1, %xmm0"  # Duplicate low dwords of right
         emit "vpmuldq %xmm2, %xmm0, %xmm0"     # Signed multiply
+    elsif LOONGARCH64
+        emit "vilvl.w $vr18, $vr16, $vr16"
+        emit "vilvl.w $vr19, $vr17, $vr17"
+        emit "vmulwev.d.w $vr16, $vr18, $vr19"
     else
         break # Not implemented
     end
@@ -7892,6 +8382,10 @@ ipintOp(_simd_i64x2_extmul_high_i32x4_s, macro()
         emit "vpunpckhdq %xmm0, %xmm0, %xmm2"  # Duplicate high dwords of left
         emit "vpunpckhdq %xmm1, %xmm1, %xmm0"  # Duplicate high dwords of right
         emit "vpmuldq %xmm2, %xmm0, %xmm0"     # Signed multiply
+    elsif LOONGARCH64
+        emit "vilvh.w $vr18, $vr16, $vr16"
+        emit "vilvh.w $vr19, $vr17, $vr17"
+        emit "vmulwev.d.w $vr16, $vr18, $vr19"
     else
         break # Not implemented
     end
@@ -7911,6 +8405,10 @@ ipintOp(_simd_i64x2_extmul_low_i32x4_u, macro()
         emit "vpunpckldq %xmm0, %xmm0, %xmm2"  # Duplicate low dwords of left
         emit "vpunpckldq %xmm1, %xmm1, %xmm0"  # Duplicate low dwords of right
         emit "vpmuludq %xmm2, %xmm0, %xmm0"    # Unsigned multiply
+    elsif LOONGARCH64
+        emit "vilvl.w $vr18, $vr16, $vr16"
+        emit "vilvl.w $vr19, $vr17, $vr17"
+        emit "vmulwev.d.wu $vr16, $vr18, $vr19"
     else
         break # Not implemented
     end
@@ -7930,6 +8428,10 @@ ipintOp(_simd_i64x2_extmul_high_i32x4_u, macro()
         emit "vpunpckhdq %xmm0, %xmm0, %xmm2"  # Duplicate high dwords of left
         emit "vpunpckhdq %xmm1, %xmm1, %xmm0"  # Duplicate high dwords of right
         emit "vpmuludq %xmm2, %xmm0, %xmm0"    # Unsigned multiply
+    elsif LOONGARCH64
+        emit "vilvh.w $vr18, $vr16, $vr16"
+        emit "vilvh.w $vr19, $vr17, $vr17"
+        emit "vmulwev.d.wu $vr16, $vr18, $vr19"
     else
         break # Not implemented
     end
@@ -7951,6 +8453,10 @@ ipintOp(_simd_f32x4_abs, macro()
         emit "vmovq %rax, %xmm1"
         emit "vpunpcklqdq %xmm1, %xmm1, %xmm1"
         emit "vandps %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        move 0x7fffffff, t0
+        emit "vreplgr2vr.w $vr17, $r4"
+        emit "vand.v $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -7970,6 +8476,11 @@ ipintOp(_simd_f32x4_neg, macro()
         emit "vmovq %rax, %xmm1"
         emit "vpunpcklqdq %xmm1, %xmm1, %xmm1"
         emit "vxorps %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        move 1, t0
+        lshifti 31, t0
+        emit "vreplgr2vr.w $vr17, $r4"
+        emit "vxor.v $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -7987,6 +8498,8 @@ ipintOp(_simd_f32x4_sqrt, macro()
         emit "fsqrt v16.4s, v16.4s"
     elsif X86_64
         emit "vsqrtps %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vfsqrt.s $vr16, $vr16"
     else
         break # Not implemented
     end
@@ -8003,6 +8516,8 @@ ipintOp(_simd_f32x4_add, macro()
         emit "fadd v16.4s, v16.4s, v17.4s"
     elsif X86_64
         emit "vaddps %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vfadd.s $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -8019,6 +8534,8 @@ ipintOp(_simd_f32x4_sub, macro()
         emit "fsub v16.4s, v16.4s, v17.4s"
     elsif X86_64
         emit "vsubps %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vfsub.s $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -8035,6 +8552,8 @@ ipintOp(_simd_f32x4_mul, macro()
         emit "fmul v16.4s, v16.4s, v17.4s"
     elsif X86_64
         emit "vmulps %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vfmul.s $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -8051,6 +8570,8 @@ ipintOp(_simd_f32x4_div, macro()
         emit "fdiv v16.4s, v16.4s, v17.4s"
     elsif X86_64
         emit "vdivps %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vfdiv.s $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -8080,6 +8601,15 @@ ipintOp(_simd_f32x4_min, macro()
         emit "vorps %xmm0, %xmm2, %xmm2"        # xmm2 |= NaN mask
         emit "vpsrld $10, %xmm0, %xmm0"         # Shift mask to clear mantissa bits (f32 uses 10)
         emit "vpandn %xmm2, %xmm0, %xmm0"       # Clear mantissa to canonicalize NaN
+    elsif LOONGARCH64
+        emit "vor.v $vr20, $vr16, $vr16"
+        emit "vfmin.s $vr16, $vr16, $vr17"
+        emit "vfcmp.cune.s $vr18, $vr20, $vr20"
+        emit "vfcmp.cune.s $vr19, $vr17, $vr17"
+        emit "vor.v $vr18, $vr18, $vr19"
+        move 0x7fc00000, t0
+        emit "vreplgr2vr.w $vr19, $r4"
+        emit "vbitsel.v $vr16, $vr16, $vr19, $vr18"
     else
         break # Not implemented
     end
@@ -8114,6 +8644,15 @@ ipintOp(_simd_f32x4_max, macro()
         emit "vcmpunordps %xmm2, %xmm0, %xmm0" # xmm0 = NaN mask (all 1's where NaN)
         emit "vpsrld $10, %xmm0, %xmm0"         # Shift mask to clear mantissa bits (f32 uses 10)
         emit "vpandn %xmm2, %xmm0, %xmm0"       # Clear mantissa to canonicalize NaN
+    elsif LOONGARCH64
+        emit "vor.v $vr20, $vr16, $vr16"
+        emit "vfmax.s $vr16, $vr16, $vr17"
+        emit "vfcmp.cune.s $vr18, $vr20, $vr20"
+        emit "vfcmp.cune.s $vr19, $vr17, $vr17"
+        emit "vor.v $vr18, $vr18, $vr19"
+        move 0x7fc00000, t0
+        emit "vreplgr2vr.w $vr19, $r4"
+        emit "vbitsel.v $vr16, $vr16, $vr19, $vr18"
     else
         break # Not implemented
     end
@@ -8134,6 +8673,9 @@ ipintOp(_simd_f32x4_pmin, macro()
     elsif X86_64
         emit "vcmpgtps %xmm1, %xmm0, %xmm2"          # xmm2 = (a > b) ? 0xFFFFFFFF : 0x00000000
         emit "vblendvps %xmm2, %xmm1, %xmm0, %xmm0"  # select b if mask is true, a if false
+    elsif LOONGARCH64
+        emit "vfcmp.clt.s $vr18, $vr17, $vr16"
+        emit "vbitsel.v $vr16, $vr16, $vr17, $vr18"
     else
         break # Not implemented
     end
@@ -8154,6 +8696,9 @@ ipintOp(_simd_f32x4_pmax, macro()
     elsif X86_64
         emit "vcmpgtps %xmm0, %xmm1, %xmm2"          # xmm2 = (b > a) ? 0xFFFFFFFF : 0x00000000
         emit "vblendvps %xmm2, %xmm1, %xmm0, %xmm0"  # select b if mask is true, a if false
+    elsif LOONGARCH64
+        emit "vfcmp.clt.s $vr18, $vr16, $vr17"
+        emit "vbitsel.v $vr16, $vr16, $vr17, $vr18"
     else
         break # Not implemented
     end
@@ -8175,6 +8720,12 @@ ipintOp(_simd_f64x2_abs, macro()
         emit "vmovq %rax, %xmm1"
         emit "vpunpcklqdq %xmm1, %xmm1, %xmm1"
         emit "vandpd %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        move 1, t0
+        lshiftq 63, t0
+        emit "vreplgr2vr.d $vr17, $r4"
+        emit "vnor.v $vr17, $vr17, $vr17"
+        emit "vand.v $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -8194,6 +8745,11 @@ ipintOp(_simd_f64x2_neg, macro()
         emit "vmovq %rax, %xmm1"
         emit "vpunpcklqdq %xmm1, %xmm1, %xmm1"
         emit "vxorpd %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        move 1, t0
+        lshiftq 63, t0
+        emit "vreplgr2vr.d $vr17, $r4"
+        emit "vxor.v $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -8211,6 +8767,8 @@ ipintOp(_simd_f64x2_sqrt, macro()
         emit "fsqrt v16.2d, v16.2d"
     elsif X86_64
         emit "vsqrtpd %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vfsqrt.d $vr16, $vr16"
     else
         break # Not implemented
     end
@@ -8227,6 +8785,8 @@ ipintOp(_simd_f64x2_add, macro()
         emit "fadd v16.2d, v16.2d, v17.2d"
     elsif X86_64
         emit "vaddpd %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vfadd.d $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -8243,6 +8803,8 @@ ipintOp(_simd_f64x2_sub, macro()
         emit "fsub v16.2d, v16.2d, v17.2d"
     elsif X86_64
         emit "vsubpd %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vfsub.d $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -8259,6 +8821,8 @@ ipintOp(_simd_f64x2_mul, macro()
         emit "fmul v16.2d, v16.2d, v17.2d"
     elsif X86_64
         emit "vmulpd %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vfmul.d $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -8275,6 +8839,8 @@ ipintOp(_simd_f64x2_div, macro()
         emit "fdiv v16.2d, v16.2d, v17.2d"
     elsif X86_64
         emit "vdivpd %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vfdiv.d $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -8304,6 +8870,15 @@ ipintOp(_simd_f64x2_min, macro()
         emit "vorpd %xmm0, %xmm2, %xmm2"        # xmm2 |= NaN mask
         emit "vpsrlq $13, %xmm0, %xmm0"         # Shift mask to clear mantissa bits
         emit "vpandn %xmm2, %xmm0, %xmm0"       # Clear mantissa to canonicalize NaN
+    elsif LOONGARCH64
+        emit "vor.v $vr20, $vr16, $vr16"
+        emit "vfmin.d $vr16, $vr16, $vr17"
+        emit "vfcmp.cune.d $vr18, $vr20, $vr20"
+        emit "vfcmp.cune.d $vr19, $vr17, $vr17"
+        emit "vor.v $vr18, $vr18, $vr19"
+        move 0x7ff8000000000000, t0
+        emit "vreplgr2vr.d $vr19, $r4"
+        emit "vbitsel.v $vr16, $vr16, $vr19, $vr18"
     else
         break # Not implemented
     end
@@ -8338,6 +8913,15 @@ ipintOp(_simd_f64x2_max, macro()
         emit "vcmpunordpd %xmm2, %xmm0, %xmm0" # xmm0 = NaN mask (all 1's where NaN)
         emit "vpsrlq $13, %xmm0, %xmm0"         # Shift mask to clear mantissa bits
         emit "vpandn %xmm2, %xmm0, %xmm0"       # Clear mantissa to canonicalize NaN
+    elsif LOONGARCH64
+        emit "vor.v $vr20, $vr16, $vr16"
+        emit "vfmax.d $vr16, $vr16, $vr17"
+        emit "vfcmp.cune.d $vr18, $vr20, $vr20"
+        emit "vfcmp.cune.d $vr19, $vr17, $vr17"
+        emit "vor.v $vr18, $vr18, $vr19"
+        move 0x7ff8000000000000, t0
+        emit "vreplgr2vr.d $vr19, $r4"
+        emit "vbitsel.v $vr16, $vr16, $vr19, $vr18"
     else
         break # Not implemented
     end
@@ -8358,6 +8942,9 @@ ipintOp(_simd_f64x2_pmin, macro()
     elsif X86_64
         emit "vcmpgtpd %xmm1, %xmm0, %xmm2"          # xmm2 = (a > b) ? 0xFFFFFFFF : 0x00000000
         emit "vblendvpd %xmm2, %xmm1, %xmm0, %xmm0"  # select b if mask is true, a if false
+    elsif LOONGARCH64
+        emit "vfcmp.clt.d $vr18, $vr17, $vr16"
+        emit "vbitsel.v $vr16, $vr16, $vr17, $vr18"
     else
         break # Not implemented
     end
@@ -8378,6 +8965,9 @@ ipintOp(_simd_f64x2_pmax, macro()
     elsif X86_64
         emit "vcmpgtpd %xmm0, %xmm1, %xmm2"          # xmm2 = (b > a) ? 0xFFFFFFFF : 0x00000000
         emit "vblendvpd %xmm2, %xmm1, %xmm0, %xmm0"  # select b if mask is true, a if false
+    elsif LOONGARCH64
+        emit "vfcmp.clt.d $vr18, $vr16, $vr17"
+        emit "vbitsel.v $vr16, $vr16, $vr17, $vr18"
     else
         break # Not implemented
     end
@@ -8407,6 +8997,8 @@ ipintOp(_simd_i32x4_trunc_sat_f32x4_s, macro()
         emit "vcmpnltps %xmm2, %xmm1, %xmm3"                 # xmm3 = positive overflow mask (src >= 0x80000000)
         emit "vcvttps2dq %xmm1, %xmm1"                       # Convert with overflow saturated to 0x80000000
         emit "vpxor %xmm3, %xmm1, %xmm0"                     # Convert positive overflow to 0x7FFFFFFF
+    elsif LOONGARCH64
+        emit "vftintrz.w.s $vr16, $vr16"
     else
         break # Not implemented
     end
@@ -8441,6 +9033,8 @@ ipintOp(_simd_i32x4_trunc_sat_f32x4_u, macro()
         
         emit "vcvttps2dq %xmm0, %xmm0"                       # Convert original src
         emit "vpaddd %xmm3, %xmm0, %xmm0"                    # Add correction
+    elsif LOONGARCH64
+        emit "vftintrz.wu.s $vr16, $vr16"
     else
         break # Not implemented
     end
@@ -8456,6 +9050,8 @@ ipintOp(_simd_f32x4_convert_i32x4_s, macro()
         emit "scvtf v16.4s, v16.4s"
     elsif X86_64
         emit "vcvtdq2ps %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vffint.s.w $vr16, $vr16"
     else
         break # Not implemented
     end
@@ -8479,6 +9075,8 @@ ipintOp(_simd_f32x4_convert_i32x4_u, macro()
         emit "vcvtdq2ps %xmm0, %xmm0"                    # f_half_high = convertToF32(i_half_high)
         emit "vaddps %xmm0, %xmm0, %xmm0"                # dst = f_half_high + f_half_high + f_low
         emit "vaddps %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vffint.s.wu $vr16, $vr16"
     else
         break # Not implemented
     end
@@ -8508,6 +9106,10 @@ ipintOp(_simd_i32x4_trunc_sat_f64x2_s_zero, macro()
         emit "vandpd %xmm2, %xmm1, %xmm1"                    # xmm1 = 2147483647.0 where not NaN, 0 where NaN
         emit "vminpd %xmm1, %xmm0, %xmm0"                    # Clamp to max value and handle NaN
         emit "vcvttpd2dq %xmm0, %xmm0"                       # Convert to i32 (result in lower 64 bits, upper zeroed)
+    elsif LOONGARCH64
+        emit "vor.v $vr18, $vr16, $vr16"
+        emit "vxor.v $vr16, $vr16, $vr16"
+        emit "vftintrz.w.d $vr16, $vr16, $vr18"
     else
         break # Not implemented
     end
@@ -8543,6 +9145,13 @@ ipintOp(_simd_i32x4_trunc_sat_f64x2_u_zero, macro()
         emit "vroundpd $3, %xmm0, %xmm0"                     # Truncate toward zero
         emit "vaddpd %xmm3, %xmm0, %xmm0"                    # Add 0x1.0p+52 (magic number conversion)
         emit "vshufps $0x88, %xmm1, %xmm0, %xmm0"            # Pack to i32 and zero upper
+    elsif LOONGARCH64
+        emit "vor.v $vr18, $vr16, $vr16"
+        emit "vxor.v $vr16, $vr16, $vr16"
+        emit "vfcmp.clt.d $vr19, $vr16, $vr18"
+        emit "vbitsel.v $vr18, $vr16, $vr18, $vr19"
+        emit "vftintrz.lu.d $vr18, $vr18"
+        emit "vssrlni.wu.d $vr16, $vr18, 0"
     else
         break # Not implemented
     end
@@ -8560,6 +9169,8 @@ ipintOp(_simd_f64x2_convert_low_i32x4_s, macro()
         emit "scvtf v16.2d, v16.2d"
     elsif X86_64
         emit "vcvtdq2pd %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vffintl.d.w $vr16, $vr16"
     else
         break # Not implemented
     end
@@ -8592,6 +9203,9 @@ ipintOp(_simd_f64x2_convert_low_i32x4_u, macro()
 
         # Subtract to get the correct unsigned values
         emit "vsubpd %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vsllwil.du.wu $vr16, $vr16, 0"
+        emit "vffint.d.lu $vr16, $vr16"
     else
         break # Not implemented
     end
@@ -8616,6 +9230,9 @@ ipintOp(_simd_i8x16_relaxed_swizzle, macro()
         # x86-64 vpshufb returns 0 for indices with bit 7 set
         # For relaxed semantics, we can use it directly
         emit "vpshufb %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vxor.v $vr18, $vr18, $vr18"
+        emit "vshuf.b $vr16, $vr18, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -8631,6 +9248,8 @@ ipintOp(_simd_i32x4_relaxed_trunc_f32x4_s, macro()
         emit "fcvtzs v16.4s, v16.4s"
     elsif X86_64
         emit "vcvttps2dq %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vftintrz.w.s $vr16, $vr16"
     else
         break # Not implemented
     end
@@ -8650,6 +9269,8 @@ ipintOp(_simd_i32x4_relaxed_trunc_f32x4_u, macro()
         emit "vxorps %xmm1, %xmm1, %xmm1"
         emit "vmaxps %xmm1, %xmm0, %xmm0"
         emit "vcvttps2dq %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vftintrz.wu.s $vr16, $vr16"
     else
         break # Not implemented
     end
@@ -8666,6 +9287,10 @@ ipintOp(_simd_i32x4_relaxed_trunc_f64x2_s_zero, macro()
         emit "sqxtn v16.2s, v16.2d"
     elsif X86_64
         emit "vcvttpd2dq %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vor.v $vr18, $vr16, $vr16"
+        emit "vxor.v $vr16, $vr16, $vr16"
+        emit "vftintrz.w.d $vr16, $vr16, $vr18"
     else
         break # Not implemented
     end
@@ -8691,6 +9316,10 @@ ipintOp(_simd_i32x4_relaxed_trunc_f64x2_u_zero, macro()
         emit "vroundpd $3, %xmm0, %xmm0"
         emit "vaddpd %xmm1, %xmm0, %xmm0"
         emit "vshufps $0x88, %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vftintrz.lu.d $vr18, $vr16"
+        emit "vxor.v $vr16, $vr16, $vr16"
+        emit "vssrlni.wu.d $vr16, $vr18, 0"
     else
         break # Not implemented
     end
@@ -8715,6 +9344,9 @@ ipintOp(_simd_f32x4_relaxed_madd, macro()
         # We have: xmm0=a, xmm1=b, xmm2=c, want: a*b+c
         emit "vmulps %xmm1, %xmm0, %xmm0"
         emit "vaddps %xmm2, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vfmul.s $vr16, $vr16, $vr17"
+        emit "vfadd.s $vr16, $vr16, $vr18"
     else
         break # Not implemented
     end
@@ -8737,6 +9369,9 @@ ipintOp(_simd_f32x4_relaxed_nmadd, macro()
         # vfnmadd213ps does: dest = -(dest * src1) + src2
         emit "vmulps %xmm1, %xmm0, %xmm0"
         emit "vsubps %xmm0, %xmm2, %xmm0"
+    elsif LOONGARCH64
+        emit "vfmul.s $vr16, $vr16, $vr17"
+        emit "vfsub.s $vr16, $vr18, $vr16"
     else
         break # Not implemented
     end
@@ -8756,6 +9391,9 @@ ipintOp(_simd_f64x2_relaxed_madd, macro()
     elsif X86_64
         emit "vmulpd %xmm1, %xmm0, %xmm0"
         emit "vaddpd %xmm2, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vfmul.d $vr16, $vr16, $vr17"
+        emit "vfadd.d $vr16, $vr16, $vr18"
     else
         break # Not implemented
     end
@@ -8775,6 +9413,9 @@ ipintOp(_simd_f64x2_relaxed_nmadd, macro()
     elsif X86_64
         emit "vmulpd %xmm1, %xmm0, %xmm0"
         emit "vsubpd %xmm0, %xmm2, %xmm0"
+    elsif LOONGARCH64
+        emit "vfmul.d $vr16, $vr16, $vr17"
+        emit "vfsub.d $vr16, $vr18, $vr16"
     else
         break # Not implemented
     end
@@ -8797,6 +9438,9 @@ ipintOp(_simd_i8x16_relaxed_laneselect, macro()
     elsif X86_64
         # vpblendvb uses high bit of each byte in mask
         emit "vpblendvb %xmm2, %xmm0, %xmm1, %xmm0"
+    elsif LOONGARCH64
+        emit "vbitsel.v $vr18, $vr17, $vr16, $vr18"
+        emit "vor.v $vr16, $vr18, $vr18"
     else
         break # Not implemented
     end
@@ -8815,6 +9459,9 @@ ipintOp(_simd_i16x8_relaxed_laneselect, macro()
         emit "mov v16.16b, v18.16b"
     elsif X86_64
         emit "vpblendvb %xmm2, %xmm0, %xmm1, %xmm0"
+    elsif LOONGARCH64
+        emit "vbitsel.v $vr18, $vr17, $vr16, $vr18"
+        emit "vor.v $vr16, $vr18, $vr18"
     else
         break # Not implemented
     end
@@ -8833,6 +9480,9 @@ ipintOp(_simd_i32x4_relaxed_laneselect, macro()
         emit "mov v16.16b, v18.16b"
     elsif X86_64
         emit "vpblendvb %xmm2, %xmm0, %xmm1, %xmm0"
+    elsif LOONGARCH64
+        emit "vbitsel.v $vr18, $vr17, $vr16, $vr18"
+        emit "vor.v $vr16, $vr18, $vr18"
     else
         break # Not implemented
     end
@@ -8851,6 +9501,9 @@ ipintOp(_simd_i64x2_relaxed_laneselect, macro()
         emit "mov v16.16b, v18.16b"
     elsif X86_64
         emit "vpblendvb %xmm2, %xmm0, %xmm1, %xmm0"
+    elsif LOONGARCH64
+        emit "vbitsel.v $vr18, $vr17, $vr16, $vr18"
+        emit "vor.v $vr16, $vr18, $vr18"
     else
         break # Not implemented
     end
@@ -8867,6 +9520,8 @@ ipintOp(_simd_f32x4_relaxed_min, macro()
         emit "fmin v16.4s, v16.4s, v17.4s"
     elsif X86_64
         emit "vminps %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vfmin.s $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -8883,6 +9538,8 @@ ipintOp(_simd_f32x4_relaxed_max, macro()
         emit "fmax v16.4s, v16.4s, v17.4s"
     elsif X86_64
         emit "vmaxps %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vfmax.s $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -8899,6 +9556,8 @@ ipintOp(_simd_f64x2_relaxed_min, macro()
         emit "fmin v16.2d, v16.2d, v17.2d"
     elsif X86_64
         emit "vminpd %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vfmin.d $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -8915,6 +9574,8 @@ ipintOp(_simd_f64x2_relaxed_max, macro()
         emit "fmax v16.2d, v16.2d, v17.2d"
     elsif X86_64
         emit "vmaxpd %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vfmax.d $vr16, $vr16, $vr17"
     else
         break # Not implemented
     end
@@ -8931,6 +9592,14 @@ ipintOp(_simd_i16x8_relaxed_q15mulr_s, macro()
         emit "sqrdmulh v16.8h, v16.8h, v17.8h"
     elsif X86_64
         emit "vpmulhrsw %xmm1, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vmulwev.w.h $vr18, $vr16, $vr17"
+        emit "vmulwod.w.h $vr19, $vr16, $vr17"
+        emit "vxor.v $vr16, $vr16, $vr16"
+        emit "vssrarni.h.w $vr16, $vr18, 15"
+        emit "vxor.v $vr18, $vr18, $vr18"
+        emit "vssrarni.h.w $vr18, $vr19, 15"
+        emit "vilvl.h $vr16, $vr18, $vr16"
     else
         break # Not implemented
     end
@@ -8955,6 +9624,12 @@ ipintOp(_simd_i16x8_relaxed_dot_i8x16_i7x16_s, macro()
         # vpmaddubsw: treats first operand as unsigned, second as signed
         # Swapped order: xmm0=signed, xmm1=unsigned-like
         emit "vpmaddubsw %xmm0, %xmm1, %xmm0"
+    elsif LOONGARCH64
+        emit "vxor.v $vr18, $vr18, $vr18"
+        emit "vmaddwev.h.bu.b $vr18, $vr17, $vr16"
+        emit "vxor.v $vr19, $vr19, $vr19"
+        emit "vmaddwod.h.bu.b $vr19, $vr17, $vr16"
+        emit "vsadd.h $vr16, $vr19, $vr18"
     else
         break # Not implemented
     end
@@ -8984,6 +9659,15 @@ ipintOp(_simd_i32x4_relaxed_dot_i8x16_i7x16_add_s, macro()
         emit "vpsrlw $15, %xmm3, %xmm3"
         emit "vpmaddwd %xmm3, %xmm0, %xmm0"
         emit "vpaddd %xmm2, %xmm0, %xmm0"
+    elsif LOONGARCH64
+        emit "vor.v $vr20, $vr18, $vr18"
+        emit "vxor.v $vr18, $vr18, $vr18"
+        emit "vmaddwev.h.bu.b $vr18, $vr17, $vr16"
+        emit "vxor.v $vr19, $vr19, $vr19"
+        emit "vmaddwod.h.bu.b $vr19, $vr17, $vr16"
+        emit "vsadd.h $vr18, $vr19, $vr18"
+        emit "vhaddw.w.h $vr18, $vr18, $vr18"
+        emit "vadd.w $vr16, $vr18, $vr20"
     else
         break # Not implemented
     end
@@ -11170,7 +11854,7 @@ end)
 ## Out-of-line slow paths for SIMD memory access ##
 ###################################################
 
-if ARM64 or ARM64E or X86_64
+if ARM64 or ARM64E or X86_64 or LOONGARCH64
 
 # t0 = wasm address (from popMemoryIndex before branching).
 # t4 = cursor pointing to start of memarg (past SIMD opcode, set by simd_prefix).

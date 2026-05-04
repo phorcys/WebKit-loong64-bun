@@ -30,6 +30,7 @@
 
 #include "AbstractMacroAssembler.h"
 #include "LOONGARCH64Assembler.h"
+#include "SIMDInfo.h"
 
 #define MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(methodName) \
     template<typename... Args> void methodName(Args&&...) { }
@@ -59,6 +60,12 @@ public:
     RegisterID scratchRegister()
     {
         return dataTempRegister;
+    }
+
+    RegisterID dataTempRegisterForAvoiding(RegisterID avoid)
+    {
+        RELEASE_ASSERT(m_allowScratchRegister);
+        return avoid == dataTempRegister ? dataTempRegister2 : dataTempRegister;
     }
 
     enum TempRegisterType : int8_t {
@@ -509,6 +516,14 @@ public:
         m_assembler.maskRegister<32>(dest);
     }
 
+    void multiplySub32(RegisterID mulLeft, RegisterID mulRight, RegisterID minuend, RegisterID dest)
+    {
+        auto temp = temps<Data>();
+        m_assembler.mul_wInsn(temp.data(), mulLeft, mulRight);
+        m_assembler.sub_wInsn(dest, minuend, temp.data());
+        m_assembler.maskRegister<32>(dest);
+    }
+
     void mul64(RegisterID src, RegisterID dest)
     {
         mul64(src, dest, dest);
@@ -519,163 +534,110 @@ public:
         m_assembler.mul_dInsn(dest, lhs, rhs);
     }
 
+    void multiplySub64(RegisterID mulLeft, RegisterID mulRight, RegisterID minuend, RegisterID dest)
+    {
+        auto temp = temps<Data>();
+        m_assembler.mul_dInsn(temp.data(), mulLeft, mulRight);
+        m_assembler.sub_dInsn(dest, minuend, temp.data());
+    }
+
+    void div32(RegisterID dividend, RegisterID divisor, RegisterID dest)
+    {
+        auto temp = temps<Data, Data2>();
+        m_assembler.signExtend<32>(temp.data(), dividend);
+        m_assembler.signExtend<32>(temp.data2(), divisor);
+        m_assembler.div_wInsn(dest, temp.data(), temp.data2());
+        m_assembler.maskRegister<32>(dest);
+    }
+
+    void div64(RegisterID dividend, RegisterID divisor, RegisterID dest)
+    {
+        m_assembler.div_dInsn(dest, dividend, divisor);
+    }
+
+    void uDiv32(RegisterID dividend, RegisterID divisor, RegisterID dest)
+    {
+        auto temp = temps<Data, Data2>();
+        m_assembler.slli_dInsn(temp.data(), dividend, 32);
+        m_assembler.srli_dInsn(temp.data(), temp.data(), 32);
+        m_assembler.slli_dInsn(temp.data2(), divisor, 32);
+        m_assembler.srli_dInsn(temp.data2(), temp.data2(), 32);
+        m_assembler.div_wuInsn(dest, temp.data(), temp.data2());
+        m_assembler.maskRegister<32>(dest);
+    }
+
+    void uDiv64(RegisterID dividend, RegisterID divisor, RegisterID dest)
+    {
+        m_assembler.div_duInsn(dest, dividend, divisor);
+    }
+
     void extractUnsignedBitfield32(RegisterID src, TrustedImm32 lsb, TrustedImm32 width, RegisterID dest)
     {
-        m_assembler.srli_dInsn(dest, src, std::clamp<int32_t>(lsb.m_value, 0, 31));
-        if (!Imm::I12Type::isUImm<12>(width.m_value)) {
-            auto temp = temps<Data>();
-            loadImmediate(width, temp.data());
-            m_assembler.andInsn(dest, dest, temp.data());
-        } else
-            m_assembler.andiInsn(dest, dest, Imm::I12((uint32_t)width.m_value));
+        RELEASE_ASSERT(width.m_value > 0);
+        RELEASE_ASSERT(lsb.m_value >= 0 && lsb.m_value + width.m_value <= 32);
+        m_assembler.bstrpick_dInsn(dest, src, lsb.m_value + width.m_value - 1, lsb.m_value);
     }
 
     void extractUnsignedBitfield64(RegisterID src, TrustedImm32 lsb, TrustedImm32 width, RegisterID dest)
     {
-        m_assembler.srli_dInsn(dest, src, std::clamp<int32_t>(lsb.m_value, 0, 63));
-        if (!Imm::I12Type::isUImm<12>(width.m_value)) {
-            auto temp = temps<Data>();
-            loadImmediate(width, temp.data());
-            m_assembler.andInsn(dest, dest, temp.data());
-        } else
-            m_assembler.andiInsn(dest, dest, Imm::I12((uint32_t)width.m_value));
+        RELEASE_ASSERT(width.m_value > 0);
+        RELEASE_ASSERT(lsb.m_value >= 0 && lsb.m_value + width.m_value <= 64);
+        m_assembler.bstrpick_dInsn(dest, src, lsb.m_value + width.m_value - 1, lsb.m_value);
     }
 
     void insertUnsignedBitfieldInZero32(RegisterID src, TrustedImm32 lsb, TrustedImm32 width, RegisterID dest)
     {
-        if (!Imm::I12Type::isUImm<12>(width.m_value)) {
-            auto temp = temps<Data>();
-            loadImmediate(width, temp.data());
-            m_assembler.andInsn(dest, src, temp.data());
-        } else
-            m_assembler.andiInsn(dest, src, Imm::I12((uint32_t)width.m_value));
-        m_assembler.slli_dInsn(dest, dest, std::clamp<int32_t>(lsb.m_value, 0, 63));
+        RELEASE_ASSERT(width.m_value > 0);
+        RELEASE_ASSERT(lsb.m_value >= 0 && lsb.m_value + width.m_value <= 32);
+        m_assembler.bstrpick_dInsn(dest, src, width.m_value - 1, 0);
+        if (lsb.m_value)
+            m_assembler.slli_dInsn(dest, dest, lsb.m_value);
     }
 
     void insertUnsignedBitfieldInZero64(RegisterID src, TrustedImm32 lsb, TrustedImm32 width, RegisterID dest)
     {
-        if (!Imm::I12Type::isUImm<12>(width.m_value)) {
-            auto temp = temps<Data>();
-            loadImmediate(width, temp.data());
-            m_assembler.andInsn(dest, src, temp.data());
-        } else
-            m_assembler.andiInsn(dest, src, Imm::I12((uint32_t)width.m_value));
-        m_assembler.slli_dInsn(dest, dest, std::clamp<int32_t>(lsb.m_value, 0, 63));
+        RELEASE_ASSERT(width.m_value > 0);
+        RELEASE_ASSERT(lsb.m_value >= 0 && lsb.m_value + width.m_value <= 64);
+        m_assembler.bstrpick_dInsn(dest, src, width.m_value - 1, 0);
+        if (lsb.m_value)
+            m_assembler.slli_dInsn(dest, dest, lsb.m_value);
     }
 
     void countLeadingZeros32(RegisterID src, RegisterID dest)
     {
-        auto temp = temps<Data>();
-        m_assembler.zeroExtend<32>(temp.data(), src);
-        m_assembler.addi_dInsn(dest, LOONGARCH64Registers::zero, Imm::I12<32>());
-
-        JumpList zero(makeBranch(Equal, temp.data(), LOONGARCH64Registers::zero));
-
-        Label loop = label();
-        m_assembler.srli_dInsn(temp.data(), temp.data(), 1);
-        m_assembler.addi_dInsn(dest, dest, Imm::I12<-1>());
-        zero.append(makeBranch(Equal, temp.data(), LOONGARCH64Registers::zero));
-        jump().linkTo(loop, this);
-
-        zero.link(this);
+        m_assembler.clz_wInsn(dest, src);
     }
 
     void countLeadingZeros64(RegisterID src, RegisterID dest)
     {
-        auto temp = temps<Data>();
-        m_assembler.addi_dInsn(temp.data(), src, Imm::I12<0>());
-        m_assembler.addi_dInsn(dest, LOONGARCH64Registers::zero, Imm::I12<64>());
-
-        JumpList zero(makeBranch(Equal, temp.data(), LOONGARCH64Registers::zero));
-
-        Label loop = label();
-        m_assembler.srli_dInsn(temp.data(), temp.data(), 1);
-        m_assembler.addi_dInsn(dest, dest, Imm::I12<-1>());
-        zero.append(makeBranch(Equal, temp.data(), LOONGARCH64Registers::zero));
-        jump().linkTo(loop, this);
-
-        zero.link(this);
+        m_assembler.clz_dInsn(dest, src);
     }
 
     void countTrailingZeros32(RegisterID src, RegisterID dest)
     {
-        auto temp = temps<Data>();
-        m_assembler.addi_dInsn(dest, LOONGARCH64Registers::zero, Imm::I12<32>());
-        m_assembler.zeroExtend<32>(temp.data(), src);
-
-        JumpList zero(makeBranch(Equal, temp.data(), LOONGARCH64Registers::zero));
-
-        Label loop = label();
-        m_assembler.slli_dInsn(temp.data(), temp.data(), 1);
-        m_assembler.addi_dInsn(dest, dest, Imm::I12<-1>());
-        zero.append(makeBranch(Equal, temp.data(), LOONGARCH64Registers::zero));
-        jump().linkTo(loop, this);
-
-        zero.link(this);
+        m_assembler.ctz_wInsn(dest, src);
     }
 
     void countTrailingZeros64(RegisterID src, RegisterID dest)
     {
-        auto temp = temps<Data>();
-        m_assembler.addi_dInsn(dest, LOONGARCH64Registers::zero, Imm::I12<64>());
-        m_assembler.addi_dInsn(temp.data(), src, Imm::I12<0>());
-
-        JumpList zero(makeBranch(Equal, temp.data(), LOONGARCH64Registers::zero));
-
-        Label loop = label();
-        m_assembler.slli_dInsn(temp.data(), temp.data(), 1);
-        m_assembler.addi_dInsn(dest, dest, Imm::I12<-1>());
-        zero.append(makeBranch(Equal, temp.data(), LOONGARCH64Registers::zero));
-        jump().linkTo(loop, this);
-
-        zero.link(this);
+        m_assembler.ctz_dInsn(dest, src);
     }
 
     void byteSwap16(RegisterID reg)
     {
-        auto temp = temps<Data>();
-        m_assembler.andiInsn(temp.data(), reg, Imm::I12<0xff>());
-        m_assembler.slli_dInsn(temp.data(), temp.data(), 8);
-        m_assembler.slli_dInsn(reg, reg, 48);
-        m_assembler.srli_dInsn(reg, reg, 56);
-        m_assembler.orInsn(reg, reg, temp.data());
+        m_assembler.revb_2hInsn(reg, reg);
+        m_assembler.bstrpick_dInsn(reg, reg, 15, 0);
     }
 
     void byteSwap32(RegisterID reg)
     {
-        auto temp = temps<Data, Memory>();
-        m_assembler.andiInsn(temp.data(), reg, Imm::I12<0xff>());
-        m_assembler.slli_dInsn(temp.data(), temp.data(), 8);
-        m_assembler.srli_dInsn(reg, reg, 8);
-
-        for (unsigned i = 0; i < 2; ++i) {
-            m_assembler.andiInsn(temp.memory(), reg, Imm::I12<0xff>());
-            m_assembler.orInsn(temp.data(), temp.data(), temp.memory());
-            m_assembler.slli_dInsn(temp.data(), temp.data(), 8);
-            m_assembler.srli_dInsn(reg, reg, 8);
-        }
-
-        m_assembler.andiInsn(temp.memory(), reg, Imm::I12<0xff>());
-        m_assembler.orInsn(reg, temp.data(), temp.memory());
+        m_assembler.revb_2wInsn(reg, reg);
+        m_assembler.bstrpick_dInsn(reg, reg, 31, 0);
     }
 
     void byteSwap64(RegisterID reg)
     {
-        auto temp = temps<Data, Memory>();
-        RELEASE_ASSERT(reg != temp.data() && reg != temp.memory());
-        m_assembler.andiInsn(temp.data(), reg, Imm::I12<0xff>());
-        m_assembler.slli_dInsn(temp.data(), temp.data(), 8);
-        m_assembler.srli_dInsn(reg, reg, 8);
-
-        for (unsigned i = 0; i < 6; ++i) {
-            m_assembler.andiInsn(temp.memory(), reg, Imm::I12<0xff>());
-            m_assembler.orInsn(temp.data(), temp.data(), temp.memory());
-            m_assembler.slli_dInsn(temp.data(), temp.data(), 8);
-            m_assembler.srli_dInsn(reg, reg, 8);
-        }
-
-        m_assembler.andiInsn(temp.memory(), reg, Imm::I12<0xff>());
-        m_assembler.orInsn(reg, temp.data(), temp.memory());
+        m_assembler.revb_dInsn(reg, reg);
     }
 
     void lshift32(RegisterID shiftAmount, RegisterID dest)
@@ -860,8 +822,57 @@ public:
         m_assembler.srli_dInsn(dest, src, imm.m_value & 0x3f);
     }
 
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(rotateRight32);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(rotateRight64);
+    void rotateRight32(TrustedImm32 imm, RegisterID dest)
+    {
+        if (!(imm.m_value & 0x1f)) [[unlikely]]
+            return;
+        m_assembler.rotri_wInsn(dest, dest, imm.m_value & 0x1f);
+        m_assembler.maskRegister<32>(dest);
+    }
+
+    void rotateRight32(RegisterID shiftAmount, RegisterID dest)
+    {
+        m_assembler.rotr_wInsn(dest, dest, shiftAmount);
+        m_assembler.maskRegister<32>(dest);
+    }
+
+    void rotateRight32(RegisterID src, TrustedImm32 imm, RegisterID dest)
+    {
+        if (!(imm.m_value & 0x1f)) [[unlikely]]
+            return move(src, dest);
+        m_assembler.rotri_wInsn(dest, src, imm.m_value & 0x1f);
+        m_assembler.maskRegister<32>(dest);
+    }
+
+    void rotateRight32(RegisterID src, RegisterID shiftAmount, RegisterID dest)
+    {
+        m_assembler.rotr_wInsn(dest, src, shiftAmount);
+        m_assembler.maskRegister<32>(dest);
+    }
+
+    void rotateRight64(TrustedImm32 imm, RegisterID dest)
+    {
+        if (!(imm.m_value & 0x3f)) [[unlikely]]
+            return;
+        m_assembler.rotri_dInsn(dest, dest, imm.m_value & 0x3f);
+    }
+
+    void rotateRight64(RegisterID shiftAmount, RegisterID dest)
+    {
+        m_assembler.rotr_dInsn(dest, dest, shiftAmount);
+    }
+
+    void rotateRight64(RegisterID src, TrustedImm32 imm, RegisterID dest)
+    {
+        if (!(imm.m_value & 0x3f)) [[unlikely]]
+            return move(src, dest);
+        m_assembler.rotri_dInsn(dest, src, imm.m_value & 0x3f);
+    }
+
+    void rotateRight64(RegisterID src, RegisterID shiftAmount, RegisterID dest)
+    {
+        m_assembler.rotr_dInsn(dest, src, shiftAmount);
+    }
 
     void load8(Address address, RegisterID dest)
     {
@@ -902,6 +913,25 @@ public:
         loadImmediate(TrustedImmPtr(address), temp.memory());
         m_assembler.ld_bInsn(dest, temp.memory(), Imm::I12<0>());
         m_assembler.maskRegister<32>(dest);
+    }
+
+    void load8SignedExtendTo64(Address address, RegisterID dest)
+    {
+        auto resolution = resolveAddress(address, lazyTemp<Memory>());
+        m_assembler.ld_bInsn(dest, resolution.base, Imm::I12(resolution.offset));
+    }
+
+    void load8SignedExtendTo64(BaseIndex address, RegisterID dest)
+    {
+        auto resolution = resolveAddress(address, lazyTemp<Memory>());
+        m_assembler.ld_bInsn(dest, resolution.base, Imm::I12(resolution.offset));
+    }
+
+    void load8SignedExtendTo64(const void* address, RegisterID dest)
+    {
+        auto temp = temps<Memory>();
+        loadImmediate(TrustedImmPtr(address), temp.memory());
+        m_assembler.ld_bInsn(dest, temp.memory(), Imm::I12<0>());
     }
 
     void load16(Address address, RegisterID dest)
@@ -964,6 +994,25 @@ public:
         m_assembler.maskRegister<32>(dest);
     }
 
+    void load16SignedExtendTo64(Address address, RegisterID dest)
+    {
+        auto resolution = resolveAddress(address, lazyTemp<Memory>());
+        m_assembler.ld_hInsn(dest, resolution.base, Imm::I12(resolution.offset));
+    }
+
+    void load16SignedExtendTo64(BaseIndex address, RegisterID dest)
+    {
+        auto resolution = resolveAddress(address, lazyTemp<Memory>());
+        m_assembler.ld_hInsn(dest, resolution.base, Imm::I12(resolution.offset));
+    }
+
+    void load16SignedExtendTo64(const void* address, RegisterID dest)
+    {
+        auto temp = temps<Memory>();
+        loadImmediate(TrustedImmPtr(address), temp.memory());
+        m_assembler.ld_hInsn(dest, temp.memory(), Imm::I12<0>());
+    }
+
     void load32(Address address, RegisterID dest)
     {
         auto resolution = resolveAddress(address, lazyTemp<Memory>());
@@ -981,6 +1030,25 @@ public:
         auto temp = temps<Memory>();
         loadImmediate(TrustedImmPtr(address), temp.memory());
         m_assembler.ld_wuInsn(dest, temp.memory(), Imm::I12<0>());
+    }
+
+    void load32SignedExtendTo64(Address address, RegisterID dest)
+    {
+        auto resolution = resolveAddress(address, lazyTemp<Memory>());
+        m_assembler.ld_wInsn(dest, resolution.base, Imm::I12(resolution.offset));
+    }
+
+    void load32SignedExtendTo64(BaseIndex address, RegisterID dest)
+    {
+        auto resolution = resolveAddress(address, lazyTemp<Memory>());
+        m_assembler.ld_wInsn(dest, resolution.base, Imm::I12(resolution.offset));
+    }
+
+    void load32SignedExtendTo64(const void* address, RegisterID dest)
+    {
+        auto temp = temps<Memory>();
+        loadImmediate(TrustedImmPtr(address), temp.memory());
+        m_assembler.ld_wInsn(dest, temp.memory(), Imm::I12<0>());
     }
 
     void load32WithUnalignedHalfWords(BaseIndex address, RegisterID dest)
@@ -1326,6 +1394,28 @@ public:
         store64(temp.data(), dest);
     }
 
+    void transfer8(Address src, Address dest)
+    {
+        auto temp = temps<Data>();
+        load8(src, temp.data());
+        store8(temp.data(), dest);
+    }
+
+    void transfer16(Address src, Address dest)
+    {
+        auto temp = temps<Data>();
+        load16(src, temp.data());
+        store16(temp.data(), dest);
+    }
+
+    void transferVector(Address src, Address dest)
+    {
+        if (src == dest)
+            return;
+        transfer64(src, dest);
+        transfer64(src.withOffset(8), dest.withOffset(8));
+    }
+
     void transferPtr(Address src, Address dest)
     {
         transfer64(src, dest);
@@ -1343,6 +1433,88 @@ public:
         auto temp = temps<Data>();
         load64(src, temp.data());
         store64(temp.data(), dest);
+    }
+
+    void transfer8(Address src, BaseIndex dest)
+    {
+        auto temp = temps<Data>();
+        load8(src, temp.data());
+        store8(temp.data(), dest);
+    }
+
+    void transfer8(BaseIndex src, Address dest)
+    {
+        auto temp = temps<Data>();
+        load8(src, temp.data());
+        store8(temp.data(), dest);
+    }
+
+    void transfer16(Address src, BaseIndex dest)
+    {
+        auto temp = temps<Data>();
+        load16(src, temp.data());
+        store16(temp.data(), dest);
+    }
+
+    void transfer16(BaseIndex src, Address dest)
+    {
+        auto temp = temps<Data>();
+        load16(src, temp.data());
+        store16(temp.data(), dest);
+    }
+
+    void transfer32(Address src, BaseIndex dest)
+    {
+        auto temp = temps<Data>();
+        load32(src, temp.data());
+        store32(temp.data(), dest);
+    }
+
+    void transfer32(BaseIndex src, Address dest)
+    {
+        auto temp = temps<Data>();
+        load32(src, temp.data());
+        store32(temp.data(), dest);
+    }
+
+    void transfer64(Address src, BaseIndex dest)
+    {
+        auto temp = temps<Data>();
+        load64(src, temp.data());
+        store64(temp.data(), dest);
+    }
+
+    void transfer64(BaseIndex src, Address dest)
+    {
+        auto temp = temps<Data>();
+        load64(src, temp.data());
+        store64(temp.data(), dest);
+    }
+
+    void transferVector(BaseIndex src, BaseIndex dest)
+    {
+        if (src == dest)
+            return;
+        transfer64(src, dest);
+        transfer64(src.withOffset(8), dest.withOffset(8));
+    }
+
+    void transferVector(Address src, BaseIndex dest)
+    {
+        auto temp = temps<Data>();
+        load64(src, temp.data());
+        store64(temp.data(), dest);
+        load64(src.withOffset(8), temp.data());
+        store64(temp.data(), dest.withOffset(8));
+    }
+
+    void transferVector(BaseIndex src, Address dest)
+    {
+        auto temp = temps<Data>();
+        load64(src, temp.data());
+        store64(temp.data(), dest);
+        load64(src.withOffset(8), temp.data());
+        store64(temp.data(), dest.withOffset(8));
     }
 
     void transferPtr(BaseIndex src, BaseIndex dest)
@@ -1384,34 +1556,29 @@ public:
 
     void zeroExtend8To32(RegisterID src, RegisterID dest)
     {
-        m_assembler.slli_dInsn(dest, src, 56);
-        m_assembler.srli_dInsn(dest, dest, 56);
+        m_assembler.bstrpick_dInsn(dest, src, 7, 0);
     }
 
     void zeroExtend16To32(RegisterID src, RegisterID dest)
     {
-        m_assembler.slli_dInsn(dest, src, 48);
-        m_assembler.srli_dInsn(dest, dest, 48);
+        m_assembler.bstrpick_dInsn(dest, src, 15, 0);
     }
 
     void zeroExtend32ToWord(RegisterID src, RegisterID dest)
     {
-        m_assembler.slli_dInsn(dest, src, 32);
-        m_assembler.srli_dInsn(dest, dest, 32);
+        m_assembler.bstrpick_dInsn(dest, src, 31, 0);
     }
 
     void signExtend8To32(RegisterID src, RegisterID dest)
     {
-        m_assembler.slli_dInsn(dest, src, 56);
-        m_assembler.srai_dInsn(dest, dest, 24);
-        m_assembler.srli_dInsn(dest, dest, 32);
+        m_assembler.ext_w_bInsn(dest, src);
+        m_assembler.bstrpick_dInsn(dest, dest, 31, 0);
     }
 
     void signExtend16To32(RegisterID src, RegisterID dest)
     {
-        m_assembler.slli_dInsn(dest, src, 48);
-        m_assembler.srai_dInsn(dest, dest, 16);
-        m_assembler.srli_dInsn(dest, dest, 32);
+        m_assembler.ext_w_hInsn(dest, src);
+        m_assembler.bstrpick_dInsn(dest, dest, 31, 0);
     }
 
     void zeroExtend8To64(RegisterID src, RegisterID dest)
@@ -1426,14 +1593,12 @@ public:
 
     void signExtend8To64(RegisterID src, RegisterID dest)
     {
-        signExtend8To32(src, dest);
-        signExtend32To64(dest, dest);
+        m_assembler.ext_w_bInsn(dest, src);
     }
 
     void signExtend16To64(RegisterID src, RegisterID dest)
     {
-        signExtend16To32(src, dest);
-        signExtend32To64(dest, dest);
+        m_assembler.ext_w_hInsn(dest, src);
     }
 
     void signExtend32ToPtr(RegisterID src, RegisterID dest)
@@ -1914,7 +2079,7 @@ public:
 
     void moveFloat(FPRegisterID src, FPRegisterID dest)
     {
-        m_assembler.fcopysignInsn<32>(dest, src, src);
+        m_assembler.fmovInsn<32>(dest, src);
     }
 
     void moveFloatTo32(FPRegisterID src, RegisterID dest)
@@ -1939,7 +2104,7 @@ public:
 
     void moveDouble(FPRegisterID src, FPRegisterID dest)
     {
-        m_assembler.fcopysignInsn<64>(dest, src, src);
+        m_assembler.fmovInsn<64>(dest, src);
     }
 
     void moveDoubleTo64(FPRegisterID src, RegisterID dest)
@@ -1966,81 +2131,1133 @@ public:
     MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(countPopulation32);
     MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(countPopulation64);
 
-    // The LSX and LASX are not yet implemented
-    static bool supportsLSX()  { return false; }
+    // LSX provides 128-bit vector registers aliased with the FPR file.
+    static bool supportsLSX()  { return true; }
     static bool supportsLASX() { return false; }
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(moveVector);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(loadVector);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(storeVector);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorReplaceLaneInt64);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorReplaceLaneInt32);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorReplaceLaneInt16);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorReplaceLaneInt8);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorReplaceLaneFloat64);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorReplaceLaneFloat32);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorExtractLaneInt64);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorExtractLaneInt32);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorExtractLaneSignedInt16);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorExtractLaneUnsignedInt16);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorExtractLaneSignedInt8);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorExtractLaneUnsignedInt8);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorExtractLaneFloat64);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorExtractLaneFloat32);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorDupElementInt8);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorDupElementInt16);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorDupElementInt32);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorDupElementInt64);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorDupElementFloat32);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorDupElementFloat64);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorSplatInt8);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorSplatInt16);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorSplatInt32);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorSplatInt64);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorSplatFloat32);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorSplatFloat64);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(compareFloatingPointVector);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(compareIntegerVector);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(compareIntegerVectorWithZero);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorAdd);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorSub);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorAddSat);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorSubSat);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorMul);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorDiv);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorMin);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorMax);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorPmin);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorPmax);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorNarrow);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorBitwiseSelect);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorNot);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorAnd);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorAndnot);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorOr);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorXor);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorAbs);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorNeg);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorPopcnt);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorCeil);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorFloor);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorTrunc);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorTruncSat);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorConvert);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorConvertLow);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorNearest);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorSqrt);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorExtendLow);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorExtendHigh);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorPromote);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorDemote);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorAnyTrue);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorAllTrue);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorBitmask);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorExtaddPairwise);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorAvgRound);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorMulSat);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorDotProduct);
-    MACRO_ASSEMBLER_LOONGARCH64_TEMPLATED_NOOP_METHOD(vectorSwizzle);
+
+    void moveVector(FPRegisterID src, FPRegisterID dest)
+    {
+        if (src != dest)
+            m_assembler.vor_vInsn(dest, src, src);
+    }
+
+    void moveZeroToVector(FPRegisterID dest)
+    {
+        m_assembler.vxor_vInsn(dest, dest, dest);
+    }
+
+    void move128ToVector(v128_t value, FPRegisterID dest)
+    {
+        if (bitEquals(value, vectorAllZeros())) {
+            moveZeroToVector(dest);
+            return;
+        }
+        move(TrustedImm64(value.u64x2[0]), scratchRegister());
+        m_assembler.vreplgr2vr_dInsn(dest, scratchRegister());
+        if (value.u64x2[1] != value.u64x2[0]) {
+            move(TrustedImm64(value.u64x2[1]), scratchRegister());
+            m_assembler.vinsgr2vr_dInsn(dest, scratchRegister(), 1);
+        }
+    }
+
+    void loadVector(Address address, FPRegisterID dest)
+    {
+        auto resolution = resolveAddress(address, lazyTemp<Memory>());
+        m_assembler.vldInsn(dest, resolution.base, resolution.offset);
+    }
+
+    void loadVector(BaseIndex address, FPRegisterID dest)
+    {
+        auto resolution = resolveAddress(address, lazyTemp<Memory>());
+        m_assembler.vldInsn(dest, resolution.base, resolution.offset);
+    }
+
+    void loadVector(TrustedImmPtr address, FPRegisterID dest)
+    {
+        auto temp = temps<Memory>();
+        loadImmediate(address, temp.memory());
+        m_assembler.vldInsn(dest, temp.memory(), 0);
+    }
+
+    void storeVector(FPRegisterID src, Address address)
+    {
+        auto resolution = resolveAddress(address, lazyTemp<Memory>());
+        m_assembler.vstInsn(src, resolution.base, resolution.offset);
+    }
+
+    void storeVector(FPRegisterID src, BaseIndex address)
+    {
+        auto resolution = resolveAddress(address, lazyTemp<Memory>());
+        m_assembler.vstInsn(src, resolution.base, resolution.offset);
+    }
+
+    void storeVector(FPRegisterID src, TrustedImmPtr address)
+    {
+        auto temp = temps<Memory>();
+        loadImmediate(address, temp.memory());
+        m_assembler.vstInsn(src, temp.memory(), 0);
+    }
+
+    void vectorReplaceLaneInt64(TrustedImm32 lane, RegisterID src, FPRegisterID dest) { m_assembler.vinsgr2vr_dInsn(dest, src, lane.m_value); }
+    void vectorReplaceLaneInt32(TrustedImm32 lane, RegisterID src, FPRegisterID dest) { m_assembler.vinsgr2vr_wInsn(dest, src, lane.m_value); }
+    void vectorReplaceLaneInt16(TrustedImm32 lane, RegisterID src, FPRegisterID dest) { m_assembler.vinsgr2vr_hInsn(dest, src, lane.m_value); }
+    void vectorReplaceLaneInt8(TrustedImm32 lane, RegisterID src, FPRegisterID dest) { m_assembler.vinsgr2vr_bInsn(dest, src, lane.m_value); }
+
+    void vectorReplaceLaneFloat64(TrustedImm32 lane, FPRegisterID src, FPRegisterID dest)
+    {
+        RELEASE_ASSERT(lane.m_value < 2);
+        m_assembler.vextrins_dInsn(dest, src, lane.m_value << 4);
+    }
+
+    void vectorReplaceLaneFloat32(TrustedImm32 lane, FPRegisterID src, FPRegisterID dest)
+    {
+        RELEASE_ASSERT(lane.m_value < 4);
+        m_assembler.vextrins_wInsn(dest, src, lane.m_value << 4);
+    }
+
+    void vectorExtractLaneInt64(TrustedImm32 lane, FPRegisterID src, RegisterID dest) { m_assembler.vpickve2gr_dInsn(dest, src, lane.m_value); }
+    void vectorExtractLaneInt32(TrustedImm32 lane, FPRegisterID src, RegisterID dest) { m_assembler.vpickve2gr_wInsn(dest, src, lane.m_value); }
+    void vectorExtractLaneSignedInt16(TrustedImm32 lane, FPRegisterID src, RegisterID dest) { m_assembler.vpickve2gr_hInsn(dest, src, lane.m_value); }
+    void vectorExtractLaneUnsignedInt16(TrustedImm32 lane, FPRegisterID src, RegisterID dest) { m_assembler.vpickve2gr_huInsn(dest, src, lane.m_value); }
+    void vectorExtractLaneSignedInt8(TrustedImm32 lane, FPRegisterID src, RegisterID dest) { m_assembler.vpickve2gr_bInsn(dest, src, lane.m_value); }
+    void vectorExtractLaneUnsignedInt8(TrustedImm32 lane, FPRegisterID src, RegisterID dest) { m_assembler.vpickve2gr_buInsn(dest, src, lane.m_value); }
+
+    void vectorExtractLaneFloat64(TrustedImm32 lane, FPRegisterID src, FPRegisterID dest)
+    {
+        RELEASE_ASSERT(lane.m_value < 2);
+        m_assembler.vreplvei_dInsn(dest, src, lane.m_value);
+    }
+
+    void vectorExtractLaneFloat32(TrustedImm32 lane, FPRegisterID src, FPRegisterID dest)
+    {
+        RELEASE_ASSERT(lane.m_value < 4);
+        m_assembler.vreplvei_wInsn(dest, src, lane.m_value);
+    }
+
+    void vectorReplaceLane(SIMDLane simdLane, TrustedImm32 lane, RegisterID src, FPRegisterID dest)
+    {
+        switch (simdLane) {
+        case SIMDLane::i8x16: vectorReplaceLaneInt8(lane, src, dest); return;
+        case SIMDLane::i16x8: vectorReplaceLaneInt16(lane, src, dest); return;
+        case SIMDLane::i32x4: vectorReplaceLaneInt32(lane, src, dest); return;
+        case SIMDLane::i64x2: vectorReplaceLaneInt64(lane, src, dest); return;
+        default: RELEASE_ASSERT_NOT_REACHED();
+        }
+    }
+
+    void vectorReplaceLane(SIMDLane simdLane, TrustedImm32 lane, FPRegisterID src, FPRegisterID dest)
+    {
+        switch (simdLane) {
+        case SIMDLane::f32x4: vectorReplaceLaneFloat32(lane, src, dest); return;
+        case SIMDLane::f64x2: vectorReplaceLaneFloat64(lane, src, dest); return;
+        default: RELEASE_ASSERT_NOT_REACHED();
+        }
+    }
+
+    void vectorExtractLane(SIMDLane simdLane, SIMDSignMode signMode, TrustedImm32 lane, FPRegisterID src, RegisterID dest)
+    {
+        switch (simdLane) {
+        case SIMDLane::i8x16:
+            signMode == SIMDSignMode::Signed ? vectorExtractLaneSignedInt8(lane, src, dest) : vectorExtractLaneUnsignedInt8(lane, src, dest);
+            return;
+        case SIMDLane::i16x8:
+            signMode == SIMDSignMode::Signed ? vectorExtractLaneSignedInt16(lane, src, dest) : vectorExtractLaneUnsignedInt16(lane, src, dest);
+            return;
+        case SIMDLane::i32x4:
+            vectorExtractLaneInt32(lane, src, dest);
+            return;
+        case SIMDLane::i64x2:
+            vectorExtractLaneInt64(lane, src, dest);
+            return;
+        default:
+            RELEASE_ASSERT_NOT_REACHED();
+        }
+    }
+
+    void vectorExtractLane(SIMDLane simdLane, TrustedImm32 lane, FPRegisterID src, FPRegisterID dest)
+    {
+        switch (simdLane) {
+        case SIMDLane::f32x4: vectorExtractLaneFloat32(lane, src, dest); return;
+        case SIMDLane::f64x2: vectorExtractLaneFloat64(lane, src, dest); return;
+        default: RELEASE_ASSERT_NOT_REACHED();
+        }
+    }
+
+    void vectorDupElementInt8(TrustedImm32 lane, FPRegisterID src, FPRegisterID dest)
+    {
+        m_assembler.vreplvei_bInsn(dest, src, lane.m_value);
+    }
+
+    void vectorDupElementInt16(TrustedImm32 lane, FPRegisterID src, FPRegisterID dest)
+    {
+        m_assembler.vreplvei_hInsn(dest, src, lane.m_value);
+    }
+
+    void vectorDupElementInt32(TrustedImm32 lane, FPRegisterID src, FPRegisterID dest)
+    {
+        m_assembler.vreplvei_wInsn(dest, src, lane.m_value);
+    }
+
+    void vectorDupElementInt64(TrustedImm32 lane, FPRegisterID src, FPRegisterID dest)
+    {
+        m_assembler.vreplvei_dInsn(dest, src, lane.m_value);
+    }
+
+    void vectorDupElementFloat32(TrustedImm32 lane, FPRegisterID src, FPRegisterID dest)
+    {
+        m_assembler.vreplvei_wInsn(dest, src, lane.m_value);
+    }
+
+    void vectorDupElementFloat64(TrustedImm32 lane, FPRegisterID src, FPRegisterID dest)
+    {
+        m_assembler.vreplvei_dInsn(dest, src, lane.m_value);
+    }
+
+    void vectorSplat(SIMDLane lane, RegisterID src, FPRegisterID dest)
+    {
+        ASSERT(scalarTypeIsIntegral(lane));
+        switch (lane) {
+        case SIMDLane::i8x16: m_assembler.vreplgr2vr_bInsn(dest, src); return;
+        case SIMDLane::i16x8: m_assembler.vreplgr2vr_hInsn(dest, src); return;
+        case SIMDLane::i32x4: m_assembler.vreplgr2vr_wInsn(dest, src); return;
+        case SIMDLane::i64x2: m_assembler.vreplgr2vr_dInsn(dest, src); return;
+        default: RELEASE_ASSERT_NOT_REACHED();
+        }
+    }
+
+    void vectorSplat(SIMDLane lane, FPRegisterID src, FPRegisterID dest)
+    {
+        ASSERT(scalarTypeIsFloatingPoint(lane));
+        if (lane == SIMDLane::f32x4)
+            m_assembler.vreplvei_wInsn(dest, src, 0);
+        else
+            m_assembler.vreplvei_dInsn(dest, src, 0);
+    }
+
+    void vectorSplatInt8(RegisterID src, FPRegisterID dest) { vectorSplat(SIMDLane::i8x16, src, dest); }
+    void vectorSplatInt16(RegisterID src, FPRegisterID dest) { vectorSplat(SIMDLane::i16x8, src, dest); }
+    void vectorSplatInt32(RegisterID src, FPRegisterID dest) { vectorSplat(SIMDLane::i32x4, src, dest); }
+    void vectorSplatInt64(RegisterID src, FPRegisterID dest) { vectorSplat(SIMDLane::i64x2, src, dest); }
+    void vectorSplatFloat32(FPRegisterID src, FPRegisterID dest) { vectorSplat(SIMDLane::f32x4, src, dest); }
+    void vectorSplatFloat64(FPRegisterID src, FPRegisterID dest) { vectorSplat(SIMDLane::f64x2, src, dest); }
+
+    void compareFloatingPointVector(DoubleCondition cond, SIMDInfo simdInfo, FPRegisterID left, FPRegisterID right, FPRegisterID dest)
+    {
+        RELEASE_ASSERT(scalarTypeIsFloatingPoint(simdInfo.lane));
+        bool isFloat = simdInfo.lane == SIMDLane::f32x4;
+        switch (cond) {
+        case DoubleEqualAndOrdered:
+            isFloat ? m_assembler.vfcmp_ceq_sInsn(dest, left, right) : m_assembler.vfcmp_ceq_dInsn(dest, left, right);
+            return;
+        case DoubleNotEqualOrUnordered:
+            isFloat ? m_assembler.vfcmp_cune_sInsn(dest, left, right) : m_assembler.vfcmp_cune_dInsn(dest, left, right);
+            return;
+        case DoubleLessThanAndOrdered:
+            isFloat ? m_assembler.vfcmp_clt_sInsn(dest, left, right) : m_assembler.vfcmp_clt_dInsn(dest, left, right);
+            return;
+        case DoubleLessThanOrEqualAndOrdered:
+            isFloat ? m_assembler.vfcmp_cle_sInsn(dest, left, right) : m_assembler.vfcmp_cle_dInsn(dest, left, right);
+            return;
+        case DoubleGreaterThanAndOrdered:
+            isFloat ? m_assembler.vfcmp_clt_sInsn(dest, right, left) : m_assembler.vfcmp_clt_dInsn(dest, right, left);
+            return;
+        case DoubleGreaterThanOrEqualAndOrdered:
+            isFloat ? m_assembler.vfcmp_cle_sInsn(dest, right, left) : m_assembler.vfcmp_cle_dInsn(dest, right, left);
+            return;
+        default:
+            RELEASE_ASSERT_NOT_REACHED();
+        }
+    }
+
+    void emitVectorEq(SIMDLane lane, FPRegisterID left, FPRegisterID right, FPRegisterID dest)
+    {
+        switch (lane) {
+        case SIMDLane::i8x16: m_assembler.vseq_bInsn(dest, left, right); return;
+        case SIMDLane::i16x8: m_assembler.vseq_hInsn(dest, left, right); return;
+        case SIMDLane::i32x4: m_assembler.vseq_wInsn(dest, left, right); return;
+        case SIMDLane::i64x2: m_assembler.vseq_dInsn(dest, left, right); return;
+        default: RELEASE_ASSERT_NOT_REACHED();
+        }
+    }
+
+    void emitVectorLessThan(SIMDInfo simdInfo, FPRegisterID left, FPRegisterID right, FPRegisterID dest)
+    {
+        RELEASE_ASSERT(scalarTypeIsIntegral(simdInfo.lane));
+        RELEASE_ASSERT(simdInfo.signMode != SIMDSignMode::None);
+        if (simdInfo.signMode == SIMDSignMode::Unsigned) {
+            switch (simdInfo.lane) {
+            case SIMDLane::i8x16: m_assembler.vslt_buInsn(dest, left, right); return;
+            case SIMDLane::i16x8: m_assembler.vslt_huInsn(dest, left, right); return;
+            case SIMDLane::i32x4: m_assembler.vslt_wuInsn(dest, left, right); return;
+            case SIMDLane::i64x2: m_assembler.vslt_duInsn(dest, left, right); return;
+            default: RELEASE_ASSERT_NOT_REACHED();
+            }
+        }
+        switch (simdInfo.lane) {
+        case SIMDLane::i8x16: m_assembler.vslt_bInsn(dest, left, right); return;
+        case SIMDLane::i16x8: m_assembler.vslt_hInsn(dest, left, right); return;
+        case SIMDLane::i32x4: m_assembler.vslt_wInsn(dest, left, right); return;
+        case SIMDLane::i64x2: m_assembler.vslt_dInsn(dest, left, right); return;
+        default: RELEASE_ASSERT_NOT_REACHED();
+        }
+    }
+
+    void compareIntegerVector(RelationalCondition cond, SIMDInfo simdInfo, FPRegisterID left, FPRegisterID right, FPRegisterID dest)
+    {
+        RELEASE_ASSERT(scalarTypeIsIntegral(simdInfo.lane));
+        auto equal = [&] { emitVectorEq(simdInfo.lane, left, right, dest); };
+        auto lessSigned = [&] (FPRegisterID a, FPRegisterID b) { emitVectorLessThan({ simdInfo.lane, SIMDSignMode::Signed }, a, b, dest); };
+        auto lessUnsigned = [&] (FPRegisterID a, FPRegisterID b) { emitVectorLessThan({ simdInfo.lane, SIMDSignMode::Unsigned }, a, b, dest); };
+        switch (cond) {
+        case Equal:
+            equal();
+            return;
+        case NotEqual:
+            equal();
+            vectorNot(SIMDInfo { SIMDLane::v128, SIMDSignMode::None }, dest, dest);
+            return;
+        case LessThan:
+            lessSigned(left, right);
+            return;
+        case GreaterThan:
+            lessSigned(right, left);
+            return;
+        case Below:
+            lessUnsigned(left, right);
+            return;
+        case Above:
+            lessUnsigned(right, left);
+            return;
+        case LessThanOrEqual:
+            lessSigned(right, left);
+            vectorNot(SIMDInfo { SIMDLane::v128, SIMDSignMode::None }, dest, dest);
+            return;
+        case GreaterThanOrEqual:
+            lessSigned(left, right);
+            vectorNot(SIMDInfo { SIMDLane::v128, SIMDSignMode::None }, dest, dest);
+            return;
+        case BelowOrEqual:
+            lessUnsigned(right, left);
+            vectorNot(SIMDInfo { SIMDLane::v128, SIMDSignMode::None }, dest, dest);
+            return;
+        case AboveOrEqual:
+            lessUnsigned(left, right);
+            vectorNot(SIMDInfo { SIMDLane::v128, SIMDSignMode::None }, dest, dest);
+            return;
+        default:
+            RELEASE_ASSERT_NOT_REACHED();
+        }
+    }
+
+    void compareIntegerVectorWithZero(RelationalCondition cond, SIMDInfo simdInfo, FPRegisterID vector, FPRegisterID dest)
+    {
+        FPRegisterID zero = vector == fpTempRegister ? fpTempRegister2 : fpTempRegister;
+        moveZeroToVector(zero);
+        compareIntegerVector(cond, simdInfo, vector, zero, dest);
+    }
+
+    void vectorAdd(SIMDInfo simdInfo, FPRegisterID left, FPRegisterID right, FPRegisterID dest)
+    {
+        if (scalarTypeIsFloatingPoint(simdInfo.lane)) {
+            simdInfo.lane == SIMDLane::f32x4 ? m_assembler.vfadd_sInsn(dest, left, right) : m_assembler.vfadd_dInsn(dest, left, right);
+            return;
+        }
+        switch (simdInfo.lane) {
+        case SIMDLane::i8x16: m_assembler.vadd_bInsn(dest, left, right); return;
+        case SIMDLane::i16x8: m_assembler.vadd_hInsn(dest, left, right); return;
+        case SIMDLane::i32x4: m_assembler.vadd_wInsn(dest, left, right); return;
+        case SIMDLane::i64x2: m_assembler.vadd_dInsn(dest, left, right); return;
+        default: RELEASE_ASSERT_NOT_REACHED();
+        }
+    }
+
+    void vectorSub(SIMDInfo simdInfo, FPRegisterID left, FPRegisterID right, FPRegisterID dest)
+    {
+        if (scalarTypeIsFloatingPoint(simdInfo.lane)) {
+            simdInfo.lane == SIMDLane::f32x4 ? m_assembler.vfsub_sInsn(dest, left, right) : m_assembler.vfsub_dInsn(dest, left, right);
+            return;
+        }
+        switch (simdInfo.lane) {
+        case SIMDLane::i8x16: m_assembler.vsub_bInsn(dest, left, right); return;
+        case SIMDLane::i16x8: m_assembler.vsub_hInsn(dest, left, right); return;
+        case SIMDLane::i32x4: m_assembler.vsub_wInsn(dest, left, right); return;
+        case SIMDLane::i64x2: m_assembler.vsub_dInsn(dest, left, right); return;
+        default: RELEASE_ASSERT_NOT_REACHED();
+        }
+    }
+
+    void vectorAddSat(SIMDInfo simdInfo, FPRegisterID left, FPRegisterID right, FPRegisterID dest)
+    {
+        ASSERT(simdInfo.signMode != SIMDSignMode::None);
+        switch (simdInfo.lane) {
+        case SIMDLane::i8x16:
+            simdInfo.signMode == SIMDSignMode::Signed ? m_assembler.vsadd_bInsn(dest, left, right) : m_assembler.vsadd_buInsn(dest, left, right);
+            return;
+        case SIMDLane::i16x8:
+            simdInfo.signMode == SIMDSignMode::Signed ? m_assembler.vsadd_hInsn(dest, left, right) : m_assembler.vsadd_huInsn(dest, left, right);
+            return;
+        default:
+            RELEASE_ASSERT_NOT_REACHED();
+        }
+    }
+
+    void vectorSubSat(SIMDInfo simdInfo, FPRegisterID left, FPRegisterID right, FPRegisterID dest)
+    {
+        ASSERT(simdInfo.signMode != SIMDSignMode::None);
+        switch (simdInfo.lane) {
+        case SIMDLane::i8x16:
+            simdInfo.signMode == SIMDSignMode::Signed ? m_assembler.vssub_bInsn(dest, left, right) : m_assembler.vssub_buInsn(dest, left, right);
+            return;
+        case SIMDLane::i16x8:
+            simdInfo.signMode == SIMDSignMode::Signed ? m_assembler.vssub_hInsn(dest, left, right) : m_assembler.vssub_huInsn(dest, left, right);
+            return;
+        default:
+            RELEASE_ASSERT_NOT_REACHED();
+        }
+    }
+
+    void vectorMul(SIMDInfo simdInfo, FPRegisterID left, FPRegisterID right, FPRegisterID dest)
+    {
+        if (scalarTypeIsFloatingPoint(simdInfo.lane)) {
+            simdInfo.lane == SIMDLane::f32x4 ? m_assembler.vfmul_sInsn(dest, left, right) : m_assembler.vfmul_dInsn(dest, left, right);
+            return;
+        }
+        switch (simdInfo.lane) {
+        case SIMDLane::i8x16: m_assembler.vmul_bInsn(dest, left, right); return;
+        case SIMDLane::i16x8: m_assembler.vmul_hInsn(dest, left, right); return;
+        case SIMDLane::i32x4: m_assembler.vmul_wInsn(dest, left, right); return;
+        case SIMDLane::i64x2: m_assembler.vmul_dInsn(dest, left, right); return;
+        default: RELEASE_ASSERT_NOT_REACHED();
+        }
+    }
+
+    void vectorDiv(SIMDInfo simdInfo, FPRegisterID left, FPRegisterID right, FPRegisterID dest)
+    {
+        ASSERT(scalarTypeIsFloatingPoint(simdInfo.lane));
+        simdInfo.lane == SIMDLane::f32x4 ? m_assembler.vfdiv_sInsn(dest, left, right) : m_assembler.vfdiv_dInsn(dest, left, right);
+    }
+
+    void vectorMin(SIMDInfo simdInfo, FPRegisterID left, FPRegisterID right, FPRegisterID dest)
+    {
+        if (scalarTypeIsFloatingPoint(simdInfo.lane)) {
+            // Preserve left before computing into dest. BBQ commonly passes dest == left.
+            moveVector(left, fpTempRegister);
+            simdInfo.lane == SIMDLane::f32x4 ? m_assembler.vfmin_sInsn(dest, left, right) : m_assembler.vfmin_dInsn(dest, left, right);
+            simdInfo.lane == SIMDLane::f32x4 ? m_assembler.vfcmp_cune_sInsn(fpTempRegister, fpTempRegister, fpTempRegister) : m_assembler.vfcmp_cune_dInsn(fpTempRegister, fpTempRegister, fpTempRegister);
+            simdInfo.lane == SIMDLane::f32x4 ? m_assembler.vfcmp_cune_sInsn(fpTempRegister2, right, right) : m_assembler.vfcmp_cune_dInsn(fpTempRegister2, right, right);
+            m_assembler.vor_vInsn(fpTempRegister2, fpTempRegister, fpTempRegister2);
+            move128ToVector(simdInfo.lane == SIMDLane::f32x4 ? v128_t { 0x7fc000007fc00000ULL, 0x7fc000007fc00000ULL } : v128_t { 0x7ff8000000000000ULL, 0x7ff8000000000000ULL }, fpTempRegister);
+            m_assembler.vbitsel_vInsn(dest, dest, fpTempRegister, fpTempRegister2);
+            return;
+        }
+        ASSERT(simdInfo.signMode != SIMDSignMode::None);
+        switch (simdInfo.lane) {
+        case SIMDLane::i8x16: simdInfo.signMode == SIMDSignMode::Signed ? m_assembler.vmin_bInsn(dest, left, right) : m_assembler.vmin_buInsn(dest, left, right); return;
+        case SIMDLane::i16x8: simdInfo.signMode == SIMDSignMode::Signed ? m_assembler.vmin_hInsn(dest, left, right) : m_assembler.vmin_huInsn(dest, left, right); return;
+        case SIMDLane::i32x4: simdInfo.signMode == SIMDSignMode::Signed ? m_assembler.vmin_wInsn(dest, left, right) : m_assembler.vmin_wuInsn(dest, left, right); return;
+        case SIMDLane::i64x2: simdInfo.signMode == SIMDSignMode::Signed ? m_assembler.vmin_dInsn(dest, left, right) : m_assembler.vmin_duInsn(dest, left, right); return;
+        default: RELEASE_ASSERT_NOT_REACHED();
+        }
+    }
+
+    void vectorMax(SIMDInfo simdInfo, FPRegisterID left, FPRegisterID right, FPRegisterID dest)
+    {
+        if (scalarTypeIsFloatingPoint(simdInfo.lane)) {
+            // Preserve left before computing into dest. BBQ commonly passes dest == left.
+            moveVector(left, fpTempRegister);
+            simdInfo.lane == SIMDLane::f32x4 ? m_assembler.vfmax_sInsn(dest, left, right) : m_assembler.vfmax_dInsn(dest, left, right);
+            simdInfo.lane == SIMDLane::f32x4 ? m_assembler.vfcmp_cune_sInsn(fpTempRegister, fpTempRegister, fpTempRegister) : m_assembler.vfcmp_cune_dInsn(fpTempRegister, fpTempRegister, fpTempRegister);
+            simdInfo.lane == SIMDLane::f32x4 ? m_assembler.vfcmp_cune_sInsn(fpTempRegister2, right, right) : m_assembler.vfcmp_cune_dInsn(fpTempRegister2, right, right);
+            m_assembler.vor_vInsn(fpTempRegister2, fpTempRegister, fpTempRegister2);
+            move128ToVector(simdInfo.lane == SIMDLane::f32x4 ? v128_t { 0x7fc000007fc00000ULL, 0x7fc000007fc00000ULL } : v128_t { 0x7ff8000000000000ULL, 0x7ff8000000000000ULL }, fpTempRegister);
+            m_assembler.vbitsel_vInsn(dest, dest, fpTempRegister, fpTempRegister2);
+            return;
+        }
+        ASSERT(simdInfo.signMode != SIMDSignMode::None);
+        switch (simdInfo.lane) {
+        case SIMDLane::i8x16: simdInfo.signMode == SIMDSignMode::Signed ? m_assembler.vmax_bInsn(dest, left, right) : m_assembler.vmax_buInsn(dest, left, right); return;
+        case SIMDLane::i16x8: simdInfo.signMode == SIMDSignMode::Signed ? m_assembler.vmax_hInsn(dest, left, right) : m_assembler.vmax_huInsn(dest, left, right); return;
+        case SIMDLane::i32x4: simdInfo.signMode == SIMDSignMode::Signed ? m_assembler.vmax_wInsn(dest, left, right) : m_assembler.vmax_wuInsn(dest, left, right); return;
+        case SIMDLane::i64x2: simdInfo.signMode == SIMDSignMode::Signed ? m_assembler.vmax_dInsn(dest, left, right) : m_assembler.vmax_duInsn(dest, left, right); return;
+        default: RELEASE_ASSERT_NOT_REACHED();
+        }
+    }
+
+    void vectorPmin(SIMDInfo simdInfo, FPRegisterID left, FPRegisterID right, FPRegisterID dest)
+    {
+        vectorPmin(simdInfo, left, right, dest, left == fpTempRegister || right == fpTempRegister ? fpTempRegister2 : fpTempRegister);
+    }
+
+    void vectorPmax(SIMDInfo simdInfo, FPRegisterID left, FPRegisterID right, FPRegisterID dest)
+    {
+        vectorPmax(simdInfo, left, right, dest, left == fpTempRegister || right == fpTempRegister ? fpTempRegister2 : fpTempRegister);
+    }
+
+    void vectorPmin(SIMDInfo simdInfo, FPRegisterID left, FPRegisterID right, FPRegisterID dest, FPRegisterID scratch)
+    {
+        ASSERT(scalarTypeIsFloatingPoint(simdInfo.lane));
+        ASSERT(left != scratch);
+        ASSERT(right != scratch);
+        simdInfo.lane == SIMDLane::f32x4 ? m_assembler.vfcmp_clt_sInsn(scratch, right, left) : m_assembler.vfcmp_clt_dInsn(scratch, right, left);
+        m_assembler.vbitsel_vInsn(dest, left, right, scratch);
+    }
+
+    void vectorPmax(SIMDInfo simdInfo, FPRegisterID left, FPRegisterID right, FPRegisterID dest, FPRegisterID scratch)
+    {
+        ASSERT(scalarTypeIsFloatingPoint(simdInfo.lane));
+        ASSERT(left != scratch);
+        ASSERT(right != scratch);
+        simdInfo.lane == SIMDLane::f32x4 ? m_assembler.vfcmp_clt_sInsn(scratch, left, right) : m_assembler.vfcmp_clt_dInsn(scratch, left, right);
+        m_assembler.vbitsel_vInsn(dest, left, right, scratch);
+    }
+    void vectorNarrow(SIMDInfo simdInfo, FPRegisterID lower, FPRegisterID upper, FPRegisterID dest, FPRegisterID scratch)
+    {
+        ASSERT(simdInfo.signMode != SIMDSignMode::None);
+        FPRegisterID preservedLower = lower;
+        if (dest == lower) {
+            ASSERT(scratch != InvalidFPRReg);
+            ASSERT(scratch != upper);
+            moveVector(lower, scratch);
+            preservedLower = scratch;
+        }
+        switch (simdInfo.lane) {
+        case SIMDLane::i16x8:
+            moveVector(upper, dest);
+            simdInfo.signMode == SIMDSignMode::Signed ? m_assembler.vssrani_b_hInsn(dest, preservedLower, 0) : m_assembler.vssrani_bu_hInsn(dest, preservedLower, 0);
+            return;
+        case SIMDLane::i32x4:
+            moveVector(upper, dest);
+            simdInfo.signMode == SIMDSignMode::Signed ? m_assembler.vssrani_h_wInsn(dest, preservedLower, 0) : m_assembler.vssrani_hu_wInsn(dest, preservedLower, 0);
+            return;
+        default:
+            RELEASE_ASSERT_NOT_REACHED();
+        }
+    }
+
+    void vectorBitwiseSelect(FPRegisterID left, FPRegisterID right, FPRegisterID inputBitsAndDest)
+    {
+        m_assembler.vbitsel_vInsn(inputBitsAndDest, right, left, inputBitsAndDest);
+    }
+
+    void vectorSwizzle(FPRegisterID a, FPRegisterID control, FPRegisterID dest)
+    {
+        moveZeroToVector(fpTempRegister2);
+        m_assembler.vshuf_bInsn(dest, fpTempRegister2, a, control);
+    }
+
+    void vectorSwizzleStrict(FPRegisterID a, FPRegisterID control, FPRegisterID dest)
+    {
+        vectorSwizzle(a, control, dest);
+        moveZeroToVector(fpTempRegister2);
+        m_assembler.vslti_buInsn(fpTempRegister, control, 16);
+        m_assembler.vbitsel_vInsn(dest, fpTempRegister2, dest, fpTempRegister);
+    }
+
+    void vectorSwizzle2(FPRegisterID a, FPRegisterID b, FPRegisterID control, FPRegisterID dest)
+    {
+        m_assembler.vshuf_bInsn(dest, b, a, control);
+    }
+
+    void vectorNot(SIMDInfo simdInfo, FPRegisterID input, FPRegisterID dest)
+    {
+        ASSERT_UNUSED(simdInfo, simdInfo.lane == SIMDLane::v128);
+        m_assembler.vnor_vInsn(dest, input, input);
+    }
+
+    void vectorAnd(SIMDInfo simdInfo, FPRegisterID left, FPRegisterID right, FPRegisterID dest)
+    {
+        ASSERT_UNUSED(simdInfo, simdInfo.lane == SIMDLane::v128);
+        m_assembler.vand_vInsn(dest, left, right);
+    }
+
+    void vectorAndnot(SIMDInfo simdInfo, FPRegisterID left, FPRegisterID right, FPRegisterID dest)
+    {
+        ASSERT_UNUSED(simdInfo, simdInfo.lane == SIMDLane::v128);
+        vectorNot(simdInfo, right, fpTempRegister);
+        vectorAnd(simdInfo, left, fpTempRegister, dest);
+    }
+
+    void vectorOr(SIMDInfo simdInfo, FPRegisterID left, FPRegisterID right, FPRegisterID dest)
+    {
+        ASSERT_UNUSED(simdInfo, simdInfo.lane == SIMDLane::v128);
+        m_assembler.vor_vInsn(dest, left, right);
+    }
+
+    void vectorXor(SIMDInfo simdInfo, FPRegisterID left, FPRegisterID right, FPRegisterID dest)
+    {
+        ASSERT_UNUSED(simdInfo, simdInfo.lane == SIMDLane::v128);
+        m_assembler.vxor_vInsn(dest, left, right);
+    }
+
+    void vectorAbs(SIMDInfo simdInfo, FPRegisterID input, FPRegisterID dest)
+    {
+        if (scalarTypeIsFloatingPoint(simdInfo.lane)) {
+            move128ToVector(simdInfo.lane == SIMDLane::f32x4 ? v128_t { 0x7fffffff7fffffffULL, 0x7fffffff7fffffffULL } : v128_t { 0x7fffffffffffffffULL, 0x7fffffffffffffffULL }, fpTempRegister);
+            vectorAnd(SIMDInfo { SIMDLane::v128, SIMDSignMode::None }, input, fpTempRegister, dest);
+            return;
+        }
+        switch (simdInfo.lane) {
+        case SIMDLane::i8x16: m_assembler.vneg_bInsn(fpTempRegister, input); break;
+        case SIMDLane::i16x8: m_assembler.vneg_hInsn(fpTempRegister, input); break;
+        case SIMDLane::i32x4: m_assembler.vneg_wInsn(fpTempRegister, input); break;
+        case SIMDLane::i64x2: m_assembler.vneg_dInsn(fpTempRegister, input); break;
+        default: RELEASE_ASSERT_NOT_REACHED();
+        }
+        vectorMax({ simdInfo.lane, SIMDSignMode::Signed }, input, fpTempRegister, dest);
+    }
+
+    void vectorNeg(SIMDInfo simdInfo, FPRegisterID input, FPRegisterID dest)
+    {
+        if (scalarTypeIsFloatingPoint(simdInfo.lane)) {
+            move128ToVector(simdInfo.lane == SIMDLane::f32x4 ? v128_t { 0x8000000080000000ULL, 0x8000000080000000ULL } : v128_t { 0x8000000000000000ULL, 0x8000000000000000ULL }, fpTempRegister);
+            vectorXor(SIMDInfo { SIMDLane::v128, SIMDSignMode::None }, input, fpTempRegister, dest);
+            return;
+        }
+        switch (simdInfo.lane) {
+        case SIMDLane::i8x16: m_assembler.vneg_bInsn(dest, input); return;
+        case SIMDLane::i16x8: m_assembler.vneg_hInsn(dest, input); return;
+        case SIMDLane::i32x4: m_assembler.vneg_wInsn(dest, input); return;
+        case SIMDLane::i64x2: m_assembler.vneg_dInsn(dest, input); return;
+        default: RELEASE_ASSERT_NOT_REACHED();
+        }
+    }
+
+    void vectorPopcnt(SIMDInfo simdInfo, FPRegisterID input, FPRegisterID dest)
+    {
+        ASSERT_UNUSED(simdInfo, simdInfo.lane == SIMDLane::i8x16);
+        m_assembler.vpcnt_bInsn(dest, input);
+    }
+
+    void vectorCeil(SIMDInfo simdInfo, FPRegisterID input, FPRegisterID dest)
+    {
+        ASSERT(scalarTypeIsFloatingPoint(simdInfo.lane));
+        simdInfo.lane == SIMDLane::f32x4 ? m_assembler.vfrintrpInsn<32>(dest, input) : m_assembler.vfrintrpInsn<64>(dest, input);
+    }
+
+    void vectorFloor(SIMDInfo simdInfo, FPRegisterID input, FPRegisterID dest)
+    {
+        ASSERT(scalarTypeIsFloatingPoint(simdInfo.lane));
+        simdInfo.lane == SIMDLane::f32x4 ? m_assembler.vfrintrmInsn<32>(dest, input) : m_assembler.vfrintrmInsn<64>(dest, input);
+    }
+
+    void vectorTrunc(SIMDInfo simdInfo, FPRegisterID input, FPRegisterID dest)
+    {
+        ASSERT(scalarTypeIsFloatingPoint(simdInfo.lane));
+        simdInfo.lane == SIMDLane::f32x4 ? m_assembler.vfrintrzInsn<32>(dest, input) : m_assembler.vfrintrzInsn<64>(dest, input);
+    }
+
+    void vectorTruncSat(SIMDInfo simdInfo, FPRegisterID input, FPRegisterID dest)
+    {
+        ASSERT(scalarTypeIsFloatingPoint(simdInfo.lane));
+        ASSERT(simdInfo.signMode != SIMDSignMode::None);
+        switch (simdInfo.lane) {
+        case SIMDLane::f32x4:
+            simdInfo.signMode == SIMDSignMode::Signed ? m_assembler.vftintrz_w_sInsn(dest, input) : m_assembler.vftintrz_wu_sInsn(dest, input);
+            return;
+        case SIMDLane::f64x2:
+            if (simdInfo.signMode == SIMDSignMode::Signed) {
+                moveZeroToVector(fpTempRegister);
+                m_assembler.vftintrz_w_dInsn(dest, fpTempRegister, input);
+            } else {
+                moveZeroToVector(fpTempRegister2);
+                m_assembler.vfcmp_clt_dInsn(fpTempRegister, fpTempRegister2, input);
+                m_assembler.vbitsel_vInsn(fpTempRegister2, fpTempRegister2, input, fpTempRegister);
+                m_assembler.vftintrz_lu_dInsn(fpTempRegister, fpTempRegister2);
+                moveZeroToVector(dest);
+                m_assembler.vssrlni_wu_dInsn(dest, fpTempRegister, 0);
+            }
+            return;
+        default:
+            RELEASE_ASSERT_NOT_REACHED();
+        }
+    }
+
+    void vectorConvert(SIMDInfo simdInfo, FPRegisterID input, FPRegisterID dest)
+    {
+        ASSERT(simdInfo.lane == SIMDLane::i32x4);
+        ASSERT(simdInfo.signMode != SIMDSignMode::None);
+        simdInfo.signMode == SIMDSignMode::Signed ? m_assembler.vffint_s_wInsn(dest, input) : m_assembler.vffint_s_wuInsn(dest, input);
+    }
+
+    void vectorConvertLow(SIMDInfo simdInfo, FPRegisterID input, FPRegisterID dest)
+    {
+        ASSERT(simdInfo.lane == SIMDLane::i32x4);
+        ASSERT(simdInfo.signMode != SIMDSignMode::None);
+        if (simdInfo.signMode == SIMDSignMode::Signed)
+            m_assembler.vffintl_d_wInsn(dest, input);
+        else {
+            vectorExtendLow({ SIMDLane::i64x2, SIMDSignMode::Unsigned }, input, dest);
+            m_assembler.vffint_d_luInsn(dest, dest);
+        }
+    }
+
+    void vectorNearest(SIMDInfo simdInfo, FPRegisterID input, FPRegisterID dest)
+    {
+        ASSERT(scalarTypeIsFloatingPoint(simdInfo.lane));
+        simdInfo.lane == SIMDLane::f32x4 ? m_assembler.vfrintrneInsn<32>(dest, input) : m_assembler.vfrintrneInsn<64>(dest, input);
+    }
+
+    void vectorSqrt(SIMDInfo simdInfo, FPRegisterID input, FPRegisterID dest)
+    {
+        ASSERT(scalarTypeIsFloatingPoint(simdInfo.lane));
+        simdInfo.lane == SIMDLane::f32x4 ? m_assembler.vfsqrt_sInsn(dest, input) : m_assembler.vfsqrt_dInsn(dest, input);
+    }
+
+    void vectorExtendLow(SIMDInfo simdInfo, FPRegisterID input, FPRegisterID dest)
+    {
+        ASSERT(simdInfo.signMode != SIMDSignMode::None);
+        switch (simdInfo.lane) {
+        case SIMDLane::i16x8:
+            simdInfo.signMode == SIMDSignMode::Signed ? m_assembler.vsllwil_h_bInsn(dest, input, 0) : m_assembler.vsllwil_hu_buInsn(dest, input, 0);
+            return;
+        case SIMDLane::i32x4:
+            simdInfo.signMode == SIMDSignMode::Signed ? m_assembler.vsllwil_w_hInsn(dest, input, 0) : m_assembler.vsllwil_wu_huInsn(dest, input, 0);
+            return;
+        case SIMDLane::i64x2:
+            simdInfo.signMode == SIMDSignMode::Signed ? m_assembler.vsllwil_d_wInsn(dest, input, 0) : m_assembler.vsllwil_du_wuInsn(dest, input, 0);
+            return;
+        default:
+            RELEASE_ASSERT_NOT_REACHED();
+        }
+    }
+
+    void vectorExtendHigh(SIMDInfo simdInfo, FPRegisterID input, FPRegisterID dest)
+    {
+        ASSERT(simdInfo.signMode != SIMDSignMode::None);
+        switch (simdInfo.lane) {
+        case SIMDLane::i16x8:
+            simdInfo.signMode == SIMDSignMode::Signed ? m_assembler.vexth_h_bInsn(dest, input) : m_assembler.vexth_hu_buInsn(dest, input);
+            return;
+        case SIMDLane::i32x4:
+            simdInfo.signMode == SIMDSignMode::Signed ? m_assembler.vexth_w_hInsn(dest, input) : m_assembler.vexth_wu_huInsn(dest, input);
+            return;
+        case SIMDLane::i64x2:
+            simdInfo.signMode == SIMDSignMode::Signed ? m_assembler.vexth_d_wInsn(dest, input) : m_assembler.vexth_du_wuInsn(dest, input);
+            return;
+        default:
+            RELEASE_ASSERT_NOT_REACHED();
+        }
+    }
+    void vectorPromote(SIMDInfo simdInfo, FPRegisterID input, FPRegisterID dest)
+    {
+        ASSERT_UNUSED(simdInfo, simdInfo.lane == SIMDLane::f32x4);
+        m_assembler.vfcvtl_d_sInsn(dest, input);
+    }
+
+    void vectorDemote(SIMDInfo simdInfo, FPRegisterID input, FPRegisterID dest)
+    {
+        ASSERT_UNUSED(simdInfo, simdInfo.lane == SIMDLane::f64x2);
+        if (dest == input) {
+            moveVector(input, fpTempRegister);
+            input = fpTempRegister;
+        }
+        moveZeroToVector(dest);
+        m_assembler.vfcvt_s_dInsn(dest, dest, input);
+    }
+
+    void vectorAnyTrue(FPRegisterID input, RegisterID dest)
+    {
+        vectorAnyTrue(input, dest, scratchRegister());
+    }
+
+    void vectorAnyTrue(FPRegisterID input, RegisterID dest, RegisterID scratch)
+    {
+        ASSERT(dest != scratch);
+        m_assembler.vpickve2gr_dInsn(dest, input, 0);
+        m_assembler.vpickve2gr_dInsn(scratch, input, 1);
+        m_assembler.orInsn(dest, dest, scratch);
+        test64(ResultCondition::NonZero, dest, dest, dest);
+    }
+
+    void vectorAllTrue(SIMDInfo simdInfo, FPRegisterID input, RegisterID dest)
+    {
+        vectorAllTrue(simdInfo, input, dest, fpTempRegister);
+    }
+
+    void vectorAllTrue(SIMDInfo simdInfo, FPRegisterID input, RegisterID dest, FPRegisterID)
+    {
+        ASSERT(scalarTypeIsIntegral(simdInfo.lane));
+        switch (simdInfo.lane) {
+        case SIMDLane::i8x16: m_assembler.vsetallnez_bInsn(LOONGARCH64Registers::fcc0, input); break;
+        case SIMDLane::i16x8: m_assembler.vsetallnez_hInsn(LOONGARCH64Registers::fcc0, input); break;
+        case SIMDLane::i32x4: m_assembler.vsetallnez_wInsn(LOONGARCH64Registers::fcc0, input); break;
+        case SIMDLane::i64x2: m_assembler.vsetallnez_dInsn(LOONGARCH64Registers::fcc0, input); break;
+        default: RELEASE_ASSERT_NOT_REACHED();
+        }
+        m_assembler.movcf2grInsn(dest, LOONGARCH64Registers::fcc0);
+    }
+
+    void vectorBitmask(SIMDInfo simdInfo, FPRegisterID input, RegisterID dest)
+    {
+        vectorBitmask(simdInfo, input, dest, fpTempRegister);
+    }
+
+    void vectorBitmask(SIMDInfo simdInfo, FPRegisterID input, RegisterID dest, FPRegisterID scratch)
+    {
+        switch (simdInfo.lane) {
+        case SIMDLane::i8x16:
+            m_assembler.vmskltz_bInsn(scratch, input);
+            break;
+        case SIMDLane::i16x8:
+            m_assembler.vmskltz_hInsn(scratch, input);
+            break;
+        case SIMDLane::i32x4:
+            m_assembler.vmskltz_wInsn(scratch, input);
+            break;
+        case SIMDLane::i64x2:
+            m_assembler.vmskltz_dInsn(scratch, input);
+            break;
+        default:
+            RELEASE_ASSERT_NOT_REACHED();
+        }
+        m_assembler.vpickve2gr_dInsn(dest, scratch, 0);
+        m_assembler.bstrpick_dInsn(dest, dest, 31, 0);
+    }
+
+    void vectorExtaddPairwise(SIMDInfo simdInfo, FPRegisterID input, FPRegisterID dest)
+    {
+        ASSERT(simdInfo.signMode != SIMDSignMode::None);
+        switch (simdInfo.lane) {
+        case SIMDLane::i8x16:
+            simdInfo.signMode == SIMDSignMode::Signed ? m_assembler.vhaddw_h_bInsn(dest, input, input) : m_assembler.vhaddw_hu_buInsn(dest, input, input);
+            return;
+        case SIMDLane::i16x8:
+            simdInfo.signMode == SIMDSignMode::Signed ? m_assembler.vhaddw_w_hInsn(dest, input, input) : m_assembler.vhaddw_wu_huInsn(dest, input, input);
+            return;
+        default:
+            RELEASE_ASSERT_NOT_REACHED();
+        }
+    }
+    void vectorAvgRound(SIMDInfo simdInfo, FPRegisterID a, FPRegisterID b, FPRegisterID dest)
+    {
+        ASSERT(simdInfo.signMode == SIMDSignMode::Unsigned);
+        switch (simdInfo.lane) {
+        case SIMDLane::i8x16:
+            m_assembler.vavgr_buInsn(dest, a, b);
+            return;
+        case SIMDLane::i16x8:
+            m_assembler.vavgr_huInsn(dest, a, b);
+            return;
+        default:
+            RELEASE_ASSERT_NOT_REACHED();
+        }
+    }
+    void vectorMulSat(FPRegisterID left, FPRegisterID right, FPRegisterID dest)
+    {
+        m_assembler.vmulwev_w_hInsn(fpTempRegister, left, right);
+        m_assembler.vmulwod_w_hInsn(fpTempRegister2, left, right);
+        moveZeroToVector(dest);
+        m_assembler.vssrarni_h_wInsn(dest, fpTempRegister, 15);
+        moveZeroToVector(fpTempRegister);
+        m_assembler.vssrarni_h_wInsn(fpTempRegister, fpTempRegister2, 15);
+        m_assembler.vilvl_hInsn(dest, fpTempRegister, dest);
+    }
+    void vectorDotProduct(FPRegisterID left, FPRegisterID right, FPRegisterID dest)
+    {
+        m_assembler.vmulwev_w_hInsn(fpTempRegister, left, right);
+        m_assembler.vmulwod_w_hInsn(fpTempRegister2, left, right);
+        m_assembler.vadd_wInsn(dest, fpTempRegister, fpTempRegister2);
+    }
+    void vectorMulLow(SIMDInfo simdInfo, FPRegisterID left, FPRegisterID right, FPRegisterID dest, FPRegisterID)
+    {
+        ASSERT(simdInfo.signMode != SIMDSignMode::None);
+        switch (simdInfo.lane) {
+        case SIMDLane::i16x8:
+            m_assembler.vilvl_bInsn(fpTempRegister, left, left);
+            m_assembler.vilvl_bInsn(fpTempRegister2, right, right);
+            simdInfo.signMode == SIMDSignMode::Signed ? m_assembler.vmulwev_h_bInsn(dest, fpTempRegister, fpTempRegister2) : m_assembler.vmulwev_h_buInsn(dest, fpTempRegister, fpTempRegister2);
+            return;
+        case SIMDLane::i32x4:
+            m_assembler.vilvl_hInsn(fpTempRegister, left, left);
+            m_assembler.vilvl_hInsn(fpTempRegister2, right, right);
+            simdInfo.signMode == SIMDSignMode::Signed ? m_assembler.vmulwev_w_hInsn(dest, fpTempRegister, fpTempRegister2) : m_assembler.vmulwev_w_huInsn(dest, fpTempRegister, fpTempRegister2);
+            return;
+        case SIMDLane::i64x2:
+            m_assembler.vilvl_wInsn(fpTempRegister, left, left);
+            m_assembler.vilvl_wInsn(fpTempRegister2, right, right);
+            simdInfo.signMode == SIMDSignMode::Signed ? m_assembler.vmulwev_d_wInsn(dest, fpTempRegister, fpTempRegister2) : m_assembler.vmulwev_d_wuInsn(dest, fpTempRegister, fpTempRegister2);
+            return;
+        default: RELEASE_ASSERT_NOT_REACHED();
+        }
+    }
+
+    void vectorMulHigh(SIMDInfo simdInfo, FPRegisterID left, FPRegisterID right, FPRegisterID dest, FPRegisterID)
+    {
+        ASSERT(simdInfo.signMode != SIMDSignMode::None);
+        switch (simdInfo.lane) {
+        case SIMDLane::i16x8:
+            m_assembler.vilvh_bInsn(fpTempRegister, left, left);
+            m_assembler.vilvh_bInsn(fpTempRegister2, right, right);
+            simdInfo.signMode == SIMDSignMode::Signed ? m_assembler.vmulwev_h_bInsn(dest, fpTempRegister, fpTempRegister2) : m_assembler.vmulwev_h_buInsn(dest, fpTempRegister, fpTempRegister2);
+            return;
+        case SIMDLane::i32x4:
+            m_assembler.vilvh_hInsn(fpTempRegister, left, left);
+            m_assembler.vilvh_hInsn(fpTempRegister2, right, right);
+            simdInfo.signMode == SIMDSignMode::Signed ? m_assembler.vmulwev_w_hInsn(dest, fpTempRegister, fpTempRegister2) : m_assembler.vmulwev_w_huInsn(dest, fpTempRegister, fpTempRegister2);
+            return;
+        case SIMDLane::i64x2:
+            m_assembler.vilvh_wInsn(fpTempRegister, left, left);
+            m_assembler.vilvh_wInsn(fpTempRegister2, right, right);
+            simdInfo.signMode == SIMDSignMode::Signed ? m_assembler.vmulwev_d_wInsn(dest, fpTempRegister, fpTempRegister2) : m_assembler.vmulwev_d_wuInsn(dest, fpTempRegister, fpTempRegister2);
+            return;
+        default: RELEASE_ASSERT_NOT_REACHED();
+        }
+    }
+    void vectorRelaxedMin(SIMDInfo simdInfo, FPRegisterID left, FPRegisterID right, FPRegisterID dest)
+    {
+        ASSERT(scalarTypeIsFloatingPoint(simdInfo.lane));
+        vectorMin(simdInfo, left, right, dest);
+    }
+
+    void vectorRelaxedMax(SIMDInfo simdInfo, FPRegisterID left, FPRegisterID right, FPRegisterID dest)
+    {
+        ASSERT(scalarTypeIsFloatingPoint(simdInfo.lane));
+        vectorMax(simdInfo, left, right, dest);
+    }
+    void vectorRelaxedQ15Mulr(FPRegisterID left, FPRegisterID right, FPRegisterID dest) { vectorMulSat(left, right, dest); }
+    void vectorRelaxedDotI8x16I7x16(FPRegisterID left, FPRegisterID right, FPRegisterID dest, FPRegisterID scratch)
+    {
+        ASSERT(scratch != dest);
+        ASSERT(scratch != left);
+        ASSERT(scratch != right);
+        ASSERT(fpTempRegister != dest);
+        ASSERT(fpTempRegister != left);
+        ASSERT(fpTempRegister != right);
+        ASSERT(fpTempRegister != scratch);
+        moveZeroToVector(scratch);
+        m_assembler.vmaddwev_h_bu_bInsn(scratch, right, left);
+        moveZeroToVector(fpTempRegister);
+        m_assembler.vmaddwod_h_bu_bInsn(fpTempRegister, right, left);
+        m_assembler.vsadd_hInsn(dest, fpTempRegister, scratch);
+    }
+    void vectorRelaxedDotI8x16I7x16Add(FPRegisterID left, FPRegisterID right, FPRegisterID addend, FPRegisterID dest, FPRegisterID scratch1, FPRegisterID scratch2)
+    {
+        ASSERT(scratch1 != scratch2);
+        ASSERT(scratch1 != dest);
+        ASSERT(scratch1 != left);
+        ASSERT(scratch1 != right);
+        ASSERT(scratch1 != addend);
+        ASSERT(scratch2 != dest);
+        ASSERT(scratch2 != left);
+        ASSERT(scratch2 != right);
+        ASSERT(scratch2 != addend);
+        vectorRelaxedDotI8x16I7x16(left, right, scratch1, scratch2);
+        m_assembler.vhaddw_w_hInsn(scratch1, scratch1, scratch1);
+        m_assembler.vadd_wInsn(dest, scratch1, addend);
+    }
+    void vectorFusedMulAdd(SIMDInfo simdInfo, FPRegisterID mul1, FPRegisterID mul2, FPRegisterID addend, FPRegisterID dest, FPRegisterID scratch)
+    {
+        ASSERT(scalarTypeIsFloatingPoint(simdInfo.lane));
+        ASSERT(scratch != mul1);
+        ASSERT(scratch != mul2);
+        moveVector(addend, scratch);
+        if (simdInfo.lane == SIMDLane::f32x4)
+            m_assembler.vfmadd_sInsn(scratch, mul1, mul2, scratch);
+        else
+            m_assembler.vfmadd_dInsn(scratch, mul1, mul2, scratch);
+        moveVector(scratch, dest);
+    }
+
+    void vectorFusedNegMulAdd(SIMDInfo simdInfo, FPRegisterID mul1, FPRegisterID mul2, FPRegisterID addend, FPRegisterID dest, FPRegisterID scratch)
+    {
+        ASSERT(scalarTypeIsFloatingPoint(simdInfo.lane));
+        ASSERT(scratch != mul1);
+        ASSERT(scratch != mul2);
+        moveVector(addend, scratch);
+        if (simdInfo.lane == SIMDLane::f32x4)
+            m_assembler.vfnmsub_sInsn(scratch, mul1, mul2, scratch);
+        else
+            m_assembler.vfnmsub_dInsn(scratch, mul1, mul2, scratch);
+        moveVector(scratch, dest);
+    }
+
+    void vectorUshl(SIMDInfo simdInfo, FPRegisterID input, FPRegisterID shift, FPRegisterID dest)
+    {
+        switch (simdInfo.lane) {
+        case SIMDLane::i8x16: m_assembler.vsll_bInsn(dest, input, shift); return;
+        case SIMDLane::i16x8: m_assembler.vsll_hInsn(dest, input, shift); return;
+        case SIMDLane::i32x4: m_assembler.vsll_wInsn(dest, input, shift); return;
+        case SIMDLane::i64x2: m_assembler.vsll_dInsn(dest, input, shift); return;
+        default: RELEASE_ASSERT_NOT_REACHED();
+        }
+    }
+
+    void vectorSshl(SIMDInfo simdInfo, FPRegisterID input, FPRegisterID shift, FPRegisterID dest)
+    {
+        vectorUshl(simdInfo, input, shift, dest);
+    }
+
+    void vectorUshr(SIMDInfo simdInfo, FPRegisterID input, FPRegisterID shift, FPRegisterID dest)
+    {
+        switch (simdInfo.lane) {
+        case SIMDLane::i8x16: m_assembler.vsrl_bInsn(dest, input, shift); return;
+        case SIMDLane::i16x8: m_assembler.vsrl_hInsn(dest, input, shift); return;
+        case SIMDLane::i32x4: m_assembler.vsrl_wInsn(dest, input, shift); return;
+        case SIMDLane::i64x2: m_assembler.vsrl_dInsn(dest, input, shift); return;
+        default: RELEASE_ASSERT_NOT_REACHED();
+        }
+    }
+
+    void vectorSshr(SIMDInfo simdInfo, FPRegisterID input, FPRegisterID shift, FPRegisterID dest)
+    {
+        switch (simdInfo.lane) {
+        case SIMDLane::i8x16: m_assembler.vsra_bInsn(dest, input, shift); return;
+        case SIMDLane::i16x8: m_assembler.vsra_hInsn(dest, input, shift); return;
+        case SIMDLane::i32x4: m_assembler.vsra_wInsn(dest, input, shift); return;
+        case SIMDLane::i64x2: m_assembler.vsra_dInsn(dest, input, shift); return;
+        default: RELEASE_ASSERT_NOT_REACHED();
+        }
+    }
+
+    void vectorShl8(SIMDInfo simdInfo, FPRegisterID input, TrustedImm32 shift, FPRegisterID dest)
+    {
+        switch (simdInfo.lane) {
+        case SIMDLane::i8x16: m_assembler.vslli_bInsn(dest, input, shift.m_value); return;
+        case SIMDLane::i16x8: m_assembler.vslli_hInsn(dest, input, shift.m_value); return;
+        case SIMDLane::i32x4: m_assembler.vslli_wInsn(dest, input, shift.m_value); return;
+        case SIMDLane::i64x2: m_assembler.vslli_dInsn(dest, input, shift.m_value); return;
+        default: RELEASE_ASSERT_NOT_REACHED();
+        }
+    }
+
+    void vectorUshr8(SIMDInfo simdInfo, FPRegisterID input, TrustedImm32 shift, FPRegisterID dest)
+    {
+        switch (simdInfo.lane) {
+        case SIMDLane::i8x16: m_assembler.vsrli_bInsn(dest, input, shift.m_value); return;
+        case SIMDLane::i16x8: m_assembler.vsrli_hInsn(dest, input, shift.m_value); return;
+        case SIMDLane::i32x4: m_assembler.vsrli_wInsn(dest, input, shift.m_value); return;
+        case SIMDLane::i64x2: m_assembler.vsrli_dInsn(dest, input, shift.m_value); return;
+        default: RELEASE_ASSERT_NOT_REACHED();
+        }
+    }
+
+    void vectorSshr8(SIMDInfo simdInfo, FPRegisterID input, TrustedImm32 shift, FPRegisterID dest)
+    {
+        switch (simdInfo.lane) {
+        case SIMDLane::i8x16: m_assembler.vsrai_bInsn(dest, input, shift.m_value); return;
+        case SIMDLane::i16x8: m_assembler.vsrai_hInsn(dest, input, shift.m_value); return;
+        case SIMDLane::i32x4: m_assembler.vsrai_wInsn(dest, input, shift.m_value); return;
+        case SIMDLane::i64x2: m_assembler.vsrai_dInsn(dest, input, shift.m_value); return;
+        default: RELEASE_ASSERT_NOT_REACHED();
+        }
+    }
+
+    void vectorLoad8Splat(Address address, FPRegisterID dest)
+    {
+        auto resolution = resolveAddress(address, lazyTemp<Memory>());
+        if (canEncodeSIMDScaledOffset(resolution.offset, 12, 0)) {
+            m_assembler.vldrepl_bInsn(dest, resolution.base, resolution.offset);
+            return;
+        }
+        load8(address, scratchRegister());
+        vectorSplatInt8(scratchRegister(), dest);
+    }
+
+    void vectorLoad8Splat(Address address, FPRegisterID dest, FPRegisterID)
+    {
+        vectorLoad8Splat(address, dest);
+    }
+
+    void vectorLoad16Splat(Address address, FPRegisterID dest)
+    {
+        auto resolution = resolveAddress(address, lazyTemp<Memory>());
+        if (canEncodeSIMDScaledOffset(resolution.offset, 11, 1)) {
+            m_assembler.vldrepl_hInsn(dest, resolution.base, resolution.offset);
+            return;
+        }
+        load16(address, scratchRegister());
+        vectorSplatInt16(scratchRegister(), dest);
+    }
+
+    void vectorLoad32Splat(Address address, FPRegisterID dest)
+    {
+        auto resolution = resolveAddress(address, lazyTemp<Memory>());
+        if (canEncodeSIMDScaledOffset(resolution.offset, 10, 2)) {
+            m_assembler.vldrepl_wInsn(dest, resolution.base, resolution.offset);
+            return;
+        }
+        load32(address, scratchRegister());
+        vectorSplatInt32(scratchRegister(), dest);
+    }
+
+    void vectorLoad64Splat(Address address, FPRegisterID dest)
+    {
+        auto resolution = resolveAddress(address, lazyTemp<Memory>());
+        if (canEncodeSIMDScaledOffset(resolution.offset, 9, 3)) {
+            m_assembler.vldrepl_dInsn(dest, resolution.base, resolution.offset);
+            return;
+        }
+        load64(address, scratchRegister());
+        vectorSplatInt64(scratchRegister(), dest);
+    }
+
+    void vectorLoad8Lane(Address address, TrustedImm32 lane, FPRegisterID dest)
+    {
+        load8(address, scratchRegister());
+        vectorReplaceLaneInt8(lane, scratchRegister(), dest);
+    }
+
+    void vectorLoad16Lane(Address address, TrustedImm32 lane, FPRegisterID dest)
+    {
+        load16(address, scratchRegister());
+        vectorReplaceLaneInt16(lane, scratchRegister(), dest);
+    }
+
+    void vectorLoad32Lane(Address address, TrustedImm32 lane, FPRegisterID dest)
+    {
+        load32(address, scratchRegister());
+        vectorReplaceLaneInt32(lane, scratchRegister(), dest);
+    }
+
+    void vectorLoad64Lane(Address address, TrustedImm32 lane, FPRegisterID dest)
+    {
+        load64(address, scratchRegister());
+        vectorReplaceLaneInt64(lane, scratchRegister(), dest);
+    }
+
+    void vectorStore8Lane(FPRegisterID val, Address address, TrustedImm32 lane)
+    {
+        auto resolution = resolveAddress(address, lazyTemp<Memory>());
+        if (canEncodeSIMDScaledOffset(resolution.offset, 8, 0)) {
+            m_assembler.vstelm_bInsn(val, resolution.base, resolution.offset, lane.m_value);
+            return;
+        }
+        vectorExtractLaneUnsignedInt8(lane, val, scratchRegister());
+        store8(scratchRegister(), address);
+    }
+
+    void vectorStore16Lane(FPRegisterID val, Address address, TrustedImm32 lane)
+    {
+        auto resolution = resolveAddress(address, lazyTemp<Memory>());
+        if (canEncodeSIMDScaledOffset(resolution.offset, 8, 1)) {
+            m_assembler.vstelm_hInsn(val, resolution.base, resolution.offset, lane.m_value);
+            return;
+        }
+        vectorExtractLaneUnsignedInt16(lane, val, scratchRegister());
+        store16(scratchRegister(), address);
+    }
+
+    void vectorStore32Lane(FPRegisterID val, Address address, TrustedImm32 lane)
+    {
+        auto resolution = resolveAddress(address, lazyTemp<Memory>());
+        if (canEncodeSIMDScaledOffset(resolution.offset, 8, 2)) {
+            m_assembler.vstelm_wInsn(val, resolution.base, resolution.offset, lane.m_value);
+            return;
+        }
+        vectorExtractLaneInt32(lane, val, scratchRegister());
+        store32(scratchRegister(), address);
+    }
+
+    void vectorStore64Lane(FPRegisterID val, Address address, TrustedImm32 lane)
+    {
+        auto resolution = resolveAddress(address, lazyTemp<Memory>());
+        if (canEncodeSIMDScaledOffset(resolution.offset, 8, 3)) {
+            m_assembler.vstelm_dInsn(val, resolution.base, resolution.offset, lane.m_value);
+            return;
+        }
+        vectorExtractLaneInt64(lane, val, scratchRegister());
+        store64(scratchRegister(), address);
+    }
 
     template<PtrTag resultTag, PtrTag locationTag>
     static CodePtr<resultTag> readCallTarget(CodeLocationCall<locationTag> call)
@@ -2243,10 +3460,11 @@ public:
 
     void compare32(RelationalCondition cond, RegisterID lhs, TrustedImm32 imm, RegisterID dest)
     {
-        auto temp = temps<Data, Memory>();
+        auto temp = temps<Data, Data2, Memory>();
         m_assembler.signExtend<32>(temp.memory(), lhs);
-        loadImmediate(imm, temp.data());
-        compareFinalize(cond, temp.memory(), temp.data(), dest);
+        RegisterID immRegister = dataTempRegisterForAvoiding(temp.memory());
+        loadImmediate(imm, immRegister);
+        compareFinalize(cond, temp.memory(), immRegister, dest);
     }
 
     void compare32(RelationalCondition cond, Address address, RegisterID rhs, RegisterID dest)
@@ -2265,16 +3483,16 @@ public:
 
     void compare64(RelationalCondition cond, RegisterID lhs, TrustedImm32 imm, RegisterID dest)
     {
-        auto temp = temps<Data>();
-        loadImmediate(imm, temp.data());
-        compareFinalize(cond, lhs, temp.data(), dest);
+        RegisterID immRegister = dataTempRegisterForAvoiding(lhs);
+        loadImmediate(imm, immRegister);
+        compareFinalize(cond, lhs, immRegister, dest);
     }
 
     void compare64(RelationalCondition cond, RegisterID lhs, TrustedImm64 imm, RegisterID dest)
     {
-        auto temp = temps<Data>();
-        loadImmediate(imm, temp.data());
-        compareFinalize(cond, lhs, temp.data(), dest);
+        RegisterID immRegister = dataTempRegisterForAvoiding(lhs);
+        loadImmediate(imm, immRegister);
+        compareFinalize(cond, lhs, immRegister, dest);
     }
 
     void test8(ResultCondition cond, Address address, TrustedImm32 imm, RegisterID dest)
@@ -2470,16 +3688,16 @@ public:
 
     Jump branch64(RelationalCondition cond, RegisterID lhs, TrustedImm32 imm)
     {
-        auto temp = temps<Data>();
-        loadImmediate(imm, temp.data());
-        return makeBranch(cond, lhs, temp.data());
+        RegisterID immRegister = dataTempRegisterForAvoiding(lhs);
+        loadImmediate(imm, immRegister);
+        return makeBranch(cond, lhs, immRegister);
     }
 
     Jump branch64(RelationalCondition cond, RegisterID lhs, TrustedImm64 imm)
     {
-        auto temp = temps<Data>();
-        loadImmediate(imm, temp.data());
-        return makeBranch(cond, lhs, temp.data());
+        RegisterID immRegister = dataTempRegisterForAvoiding(lhs);
+        loadImmediate(imm, immRegister);
+        return makeBranch(cond, lhs, immRegister);
     }
 
     Jump branch64(RelationalCondition cond, RegisterID left, Imm64 right)
@@ -2597,7 +3815,15 @@ public:
         if (cond == Overflow)
             return branchForArithmeticOverflow<32, ArithmeticOperation::Addition>(op1, op2, dest);
 
-        auto temp = temps<Data>();
+        auto temp = temps<Data, Data2>();
+        if (cond == Carry) {
+            m_assembler.zeroExtend<32>(temp.data2(), op1);
+            m_assembler.add_wInsn(temp.data(), op1, op2);
+            m_assembler.maskRegister<32>(dest, temp.data());
+            m_assembler.sltuInsn(temp.data(), dest, temp.data2());
+            return makeBranch(NotEqual, temp.data(), LOONGARCH64Registers::zero);
+        }
+
         m_assembler.add_wInsn(temp.data(), op1, op2);
         m_assembler.maskRegister<32>(dest, temp.data());
         return branchTestFinalize(cond, temp.data());
@@ -2613,7 +3839,16 @@ public:
         if (cond == Overflow)
             return branchForArithmeticOverflow<32, ArithmeticOperation::Addition>(op1, imm, dest);
 
-        auto temp = temps<Data>();
+        auto temp = temps<Data, Data2>();
+        if (cond == Carry) {
+            m_assembler.zeroExtend<32>(temp.data2(), op1);
+            loadImmediate(imm, temp.data());
+            m_assembler.add_wInsn(temp.data(), op1, temp.data());
+            m_assembler.maskRegister<32>(dest, temp.data());
+            m_assembler.sltuInsn(temp.data(), dest, temp.data2());
+            return makeBranch(NotEqual, temp.data(), LOONGARCH64Registers::zero);
+        }
+
         if (!Imm::I12Type::isSImm<12>(imm.m_value)) {
             loadImmediate(imm, temp.data());
             m_assembler.add_wInsn(temp.data(), op1, temp.data());
@@ -2631,6 +3866,14 @@ public:
 
         if (cond == Overflow)
             return branchForArithmeticOverflow<32, ArithmeticOperation::Addition>(dest, temp.memory(), dest);
+
+        if (cond == Carry) {
+            m_assembler.zeroExtend<32>(temp.data(), dest);
+            m_assembler.add_wInsn(temp.memory(), dest, temp.memory());
+            m_assembler.maskRegister<32>(dest, temp.memory());
+            m_assembler.sltuInsn(temp.data(), dest, temp.data());
+            return makeBranch(NotEqual, temp.data(), LOONGARCH64Registers::zero);
+        }
 
         m_assembler.add_wInsn(temp.data(), dest, temp.memory());
         m_assembler.maskRegister<32>(dest, temp.data());
@@ -2695,6 +3938,14 @@ public:
         if (cond == Overflow)
             return branchForArithmeticOverflow<64, ArithmeticOperation::Addition>(op1, op2, dest);
 
+        if (cond == Carry) {
+            auto temp = temps<Data, Data2>();
+            move(op1, temp.data2());
+            m_assembler.add_dInsn(dest, op1, op2);
+            m_assembler.sltuInsn(temp.data(), dest, temp.data2());
+            return makeBranch(NotEqual, temp.data(), LOONGARCH64Registers::zero);
+        }
+
         m_assembler.add_dInsn(dest, op1, op2);
         return branchTestFinalize(cond, dest);
     }
@@ -2709,8 +3960,16 @@ public:
         if (cond == Overflow)
             return branchForArithmeticOverflow<64, ArithmeticOperation::Addition>(op1, imm, dest);
 
+        auto temp = temps<Data, Data2>();
+        if (cond == Carry) {
+            move(op1, temp.data2());
+            loadImmediate(imm, temp.data());
+            m_assembler.add_dInsn(dest, op1, temp.data());
+            m_assembler.sltuInsn(temp.data(), dest, temp.data2());
+            return makeBranch(NotEqual, temp.data(), LOONGARCH64Registers::zero);
+        }
+
         if (!Imm::I12Type::isSImm<12>(imm.m_value)) {
-            auto temp = temps<Data>();
             loadImmediate(imm, temp.data());
             m_assembler.add_dInsn(dest, op1, temp.data());
         } else
@@ -2990,31 +4249,31 @@ public:
 
     Jump branchTest64(ResultCondition cond, RegisterID lhs, RegisterID rhs)
     {
-        auto temp = temps<Data>();
-        m_assembler.andInsn(temp.data(), lhs, rhs);
-        return branchTestFinalize(cond, temp.data());
+        RegisterID resultRegister = dataTempRegisterForAvoiding(lhs);
+        m_assembler.andInsn(resultRegister, lhs, rhs);
+        return branchTestFinalize(cond, resultRegister);
     }
 
     Jump branchTest64(ResultCondition cond, RegisterID lhs, TrustedImm32 imm = TrustedImm32(-1))
     {
-        auto temp = temps<Data>();
+        RegisterID resultRegister = dataTempRegisterForAvoiding(lhs);
         if (!Imm::I12Type::isUImm<12>(imm.m_value)) {
-            loadImmediate(imm, temp.data());
-            m_assembler.andInsn(temp.data(), lhs, temp.data());
+            loadImmediate(imm, resultRegister);
+            m_assembler.andInsn(resultRegister, lhs, resultRegister);
         } else
-            m_assembler.andiInsn(temp.data(), lhs, Imm::I12((uint32_t)imm.m_value));
-        return branchTestFinalize(cond, temp.data());
+            m_assembler.andiInsn(resultRegister, lhs, Imm::I12((uint32_t)imm.m_value));
+        return branchTestFinalize(cond, resultRegister);
     }
 
     Jump branchTest64(ResultCondition cond, RegisterID lhs, TrustedImm64 imm)
     {
-        auto temp = temps<Data>();
+        RegisterID resultRegister = dataTempRegisterForAvoiding(lhs);
         if (!Imm::I12Type::isUImm<12>(imm.m_value)) {
-            loadImmediate(imm, temp.data());
-            m_assembler.andInsn(temp.data(), lhs, temp.data());
+            loadImmediate(imm, resultRegister);
+            m_assembler.andInsn(resultRegister, lhs, resultRegister);
         } else
-            m_assembler.andiInsn(temp.data(), lhs, Imm::I12((uint32_t)imm.m_value));
-        return branchTestFinalize(cond, temp.data());
+            m_assembler.andiInsn(resultRegister, lhs, Imm::I12((uint32_t)imm.m_value));
+        return branchTestFinalize(cond, resultRegister);
     }
 
     Jump branchTest64(ResultCondition cond, Address address, RegisterID rhs)
@@ -3629,6 +4888,15 @@ public:
         convertInt64ToDouble(temp.data(), dest);
     }
 
+    void convertUInt32ToFloat(RegisterID src, FPRegisterID dest)
+    {
+        auto temp = temps<Data>();
+        RELEASE_ASSERT(src != temp.data());
+        m_assembler.slli_dInsn(temp.data(), src, 32);
+        m_assembler.srli_dInsn(temp.data(), temp.data(), 32);
+        convertInt64ToFloat(temp.data(), dest);
+    }
+
     void convertInt64ToFloat(RegisterID src, FPRegisterID dest)
     {
         m_assembler.movgr2fr_dInsn(dest, src);
@@ -3697,29 +4965,9 @@ public:
 
     void truncateFloatToUint32(FPRegisterID src, RegisterID dest)
     {
-        auto temp = temps<Data>();
-        RELEASE_ASSERT(src != fpTempRegister && src != fpTempRegister2 && dest != temp.data());
-        m_assembler.addi_dInsn(LOONGARCH64Registers::sp, LOONGARCH64Registers::sp, Imm::I12<-4>());
-        m_assembler.lu12i_wInsn(temp.data(), Imm::I20<323584>());
-        m_assembler.lu32i_dInsn(temp.data(), Imm::I20<203521>());
-        m_assembler.lu52i_dInsn(temp.data(), temp.data(), Imm::I12<944>());
-        m_assembler.st_dInsn(temp.data(), LOONGARCH64Registers::sp, Imm::I12<0>());
-        // fpTempRegister2 = 0x3b031b014f000000 = 2.14748365e+09
-        m_assembler.fld_sInsn(fpTempRegister2, LOONGARCH64Registers::sp, Imm::I12<0>());
-        m_assembler.fcmp_sleInsn<32>(fcc0, fpTempRegister2, src);
-        m_assembler.bcnezInsn(fcc0, 16 /* DON'T forget to modify 16 if changed the context below */);
-        {
-            m_assembler.ftintrz_wInsn<32>(fpTempRegister, src);
-            m_assembler.movfr2grInsn<32>(dest, fpTempRegister);
-            m_assembler.bInsn(28 /* DON'T forget to modify 28 if changed the context below */);
-        }
-        m_assembler.fmovInsn<32>(fpTempRegister, src); // keep src
-        m_assembler.fsubInsn<32>(fpTempRegister, fpTempRegister, fpTempRegister2);
-        m_assembler.ftintrz_wInsn<32>(fpTempRegister, fpTempRegister);
-        m_assembler.movfr2grInsn<32>(dest, fpTempRegister);
-        m_assembler.lu12i_wInsn(temp.data(), Imm::I20<-524288>()); // temp.data() = 0xffffffff80000000
-        m_assembler.orInsn(dest, dest, temp.data());
-        m_assembler.addi_dInsn(LOONGARCH64Registers::sp, LOONGARCH64Registers::sp, Imm::I12<4>());
+        RELEASE_ASSERT(src != fpTempRegister);
+        m_assembler.vftintrz_wu_sInsn(fpTempRegister, src);
+        m_assembler.vpickve2gr_wuInsn(dest, fpTempRegister, 0);
     }
 
     void truncateFloatToInt64(FPRegisterID src, RegisterID dest)
@@ -3730,31 +4978,10 @@ public:
 
     void truncateFloatToUint64(FPRegisterID src, RegisterID dest)
     {
-        auto temp = temps<Data>();
-        RELEASE_ASSERT(src != fpTempRegister && src != fpTempRegister2 && dest != temp.data());
-        m_assembler.addi_dInsn(LOONGARCH64Registers::sp, LOONGARCH64Registers::sp, Imm::I12<-4>());
-        m_assembler.lu12i_wInsn(temp.data(), Imm::I20<389120>());
-        m_assembler.lu32i_dInsn(temp.data(), Imm::I20<203521>());
-        m_assembler.lu52i_dInsn(temp.data(), temp.data(), Imm::I12<944>());
-        m_assembler.st_dInsn(temp.data(), LOONGARCH64Registers::sp, Imm::I12<0>());
-        // fpTempRegister2 = 0x3b031b015f000000 = 9.22337204e+18
-        m_assembler.fld_sInsn(fpTempRegister2, LOONGARCH64Registers::sp, Imm::I12<0>());
-        m_assembler.fcmp_sleInsn<32>(fcc0, fpTempRegister2, src);
-        m_assembler.bcnezInsn(fcc0, 16 /* DON'T forget to modify 16 if changed the context below */);
-        {
-            m_assembler.ftintrz_lInsn<32>(fpTempRegister, src);
-            m_assembler.movfr2grInsn<64>(dest, fpTempRegister);
-            m_assembler.bInsn(36 /* DON'T forget to modify 36 if changed the context below */);
-        }
-        m_assembler.fmovInsn<32>(fpTempRegister, src); // keep src
-        m_assembler.fsubInsn<32>(fpTempRegister, fpTempRegister, fpTempRegister2);
-        m_assembler.ftintrz_lInsn<32>(fpTempRegister, fpTempRegister);
-        m_assembler.movfr2grInsn<64>(dest, fpTempRegister);
-        m_assembler.lu12i_wInsn(temp.data(), Imm::I20<-524288>());
-        m_assembler.lu32i_dInsn(temp.data(), Imm::I20<0>());
-        m_assembler.slli_dInsn(temp.data(), temp.data(), 32); // temp.data() = 0x8000000000000000
-        m_assembler.orInsn(dest, dest, temp.data());
-        m_assembler.addi_dInsn(LOONGARCH64Registers::sp, LOONGARCH64Registers::sp, Imm::I12<4>());
+        RELEASE_ASSERT(src != fpTempRegister);
+        m_assembler.fcvt_d_sInsn(fpTempRegister, src);
+        m_assembler.vftintrz_lu_dInsn(fpTempRegister, fpTempRegister);
+        m_assembler.vpickve2gr_dInsn(dest, fpTempRegister, 0);
     }
 
     void truncateFloatToUint64(FPRegisterID src, RegisterID dest, FPRegisterID, FPRegisterID)
@@ -3771,8 +4998,9 @@ public:
 
     void truncateDoubleToUint32(FPRegisterID src, RegisterID dest)
     {
-        m_assembler.ftintrz_lInsn<64>(fpTempRegister, src);
-        m_assembler.movfr2grInsn<64>(dest, fpTempRegister);
+        RELEASE_ASSERT(src != fpTempRegister);
+        m_assembler.vftintrz_lu_dInsn(fpTempRegister, src);
+        m_assembler.vpickve2gr_dInsn(dest, fpTempRegister, 0);
         m_assembler.maskRegister<32>(dest);
     }
 
@@ -3784,29 +5012,9 @@ public:
 
     void truncateDoubleToUint64(FPRegisterID src, RegisterID dest)
     {
-        auto temp = temps<Data>();
-        RELEASE_ASSERT(src != fpTempRegister && src != fpTempRegister2 && dest != temp.data());
-        m_assembler.addi_dInsn(LOONGARCH64Registers::sp, LOONGARCH64Registers::sp, Imm::I12<-4>());
-        m_assembler.lu52i_dInsn(temp.data(), LOONGARCH64Registers::zero, Imm::I12<1086>());
-        m_assembler.st_dInsn(temp.data(), LOONGARCH64Registers::sp, Imm::I12<0>());
-        // fpTempRegister2 = 0x43e0000000000000 = 9.2233720368547758e+18
-        m_assembler.fld_dInsn(fpTempRegister2, LOONGARCH64Registers::sp, Imm::I12<0>());
-        m_assembler.fcmp_sleInsn<64>(fcc0, fpTempRegister2, src);
-        m_assembler.bcnezInsn(fcc0, 16 /* DON'T forget to modify 16 if changed the context below */);
-        {
-            m_assembler.ftintrz_lInsn<64>(fpTempRegister, src);
-            m_assembler.movfr2grInsn<64>(dest, fpTempRegister);
-            m_assembler.bInsn(36 /* DON'T forget to modify 36 if changed the context below */);
-        }
-        m_assembler.fmovInsn<64>(fpTempRegister, src); // keep src
-        m_assembler.fsubInsn<64>(fpTempRegister, fpTempRegister, fpTempRegister2);
-        m_assembler.ftintrz_lInsn<64>(fpTempRegister, fpTempRegister);
-        m_assembler.movfr2grInsn<64>(dest, fpTempRegister);
-        m_assembler.lu12i_wInsn(temp.data(), Imm::I20<-524288>());
-        m_assembler.lu32i_dInsn(temp.data(), Imm::I20<0>());
-        m_assembler.slli_dInsn(temp.data(), temp.data(), 32); // temp.data() = 0x8000000000000000
-        m_assembler.orInsn(dest, dest, temp.data());
-        m_assembler.addi_dInsn(LOONGARCH64Registers::sp, LOONGARCH64Registers::sp, Imm::I12<4>());
+        RELEASE_ASSERT(src != fpTempRegister);
+        m_assembler.vftintrz_lu_dInsn(fpTempRegister, src);
+        m_assembler.vpickve2gr_dInsn(dest, fpTempRegister, 0);
     }
 
     void truncateDoubleToUint64(FPRegisterID src, RegisterID dest, FPRegisterID, FPRegisterID)
@@ -4463,6 +5671,19 @@ public:
         m_assembler.addi_dInsn(dest, falseSrc, Imm::I12<0>());
     }
 
+    void moveConditionally32(RelationalCondition cond, RegisterID lhs, TrustedImm32 imm, TrustedImm32 trueSrc, RegisterID falseSrc, RegisterID dest)
+    {
+        auto temp = temps<Data, Data2, Memory>();
+        m_assembler.signExtend<32>(temp.data(), lhs);
+        loadImmediate(imm, temp.memory());
+        loadImmediate(trueSrc, temp.data2());
+
+        branchForMoveConditionally(invert(cond), temp.data(), temp.memory(), 12);
+        m_assembler.addi_dInsn(dest, temp.data2(), Imm::I12<0>());
+        m_assembler.bInsn(8);
+        m_assembler.addi_dInsn(dest, falseSrc, Imm::I12<0>());
+    }
+
     void moveConditionally64(RelationalCondition cond, RegisterID lhs, RegisterID rhs, RegisterID src, RegisterID dest)
     {
         branchForMoveConditionally(invert(cond), lhs, rhs, 8);
@@ -4635,9 +5856,9 @@ public:
         m_assembler.signExtend<32>(temp.memory(), rhs);
 
         branchForMoveConditionally(invert(cond), temp.data(), temp.memory(), 12);
-        m_assembler.fcopysignInsn<64>(dest, trueSrc, trueSrc);
+        m_assembler.fmovInsn<64>(dest, trueSrc);
         m_assembler.bInsn(8);
-        m_assembler.fcopysignInsn<64>(dest, falseSrc, falseSrc);
+        m_assembler.fmovInsn<64>(dest, falseSrc);
     }
 
     void moveDoubleConditionally32(RelationalCondition cond, RegisterID lhs, TrustedImm32 imm, FPRegisterID trueSrc, FPRegisterID falseSrc, FPRegisterID dest)
@@ -4647,17 +5868,17 @@ public:
         loadImmediate(imm, temp.memory());
 
         branchForMoveConditionally(invert(cond), temp.data(), temp.memory(), 12);
-        m_assembler.fcopysignInsn<64>(dest, trueSrc, trueSrc);
+        m_assembler.fmovInsn<64>(dest, trueSrc);
         m_assembler.bInsn(8);
-        m_assembler.fcopysignInsn<64>(dest, falseSrc, falseSrc);
+        m_assembler.fmovInsn<64>(dest, falseSrc);
     }
 
     void moveDoubleConditionally64(RelationalCondition cond, RegisterID lhs, RegisterID rhs, FPRegisterID trueSrc, FPRegisterID falseSrc, FPRegisterID dest)
     {
         branchForMoveConditionally(invert(cond), lhs, rhs, 12);
-        m_assembler.fcopysignInsn<64>(dest, trueSrc, trueSrc);
+        m_assembler.fmovInsn<64>(dest, trueSrc);
         m_assembler.bInsn(8);
-        m_assembler.fcopysignInsn<64>(dest, falseSrc, falseSrc);
+        m_assembler.fmovInsn<64>(dest, falseSrc);
     }
 
     void moveDoubleConditionally64(RelationalCondition cond, RegisterID lhs, TrustedImm32 imm, FPRegisterID trueSrc, FPRegisterID falseSrc, FPRegisterID dest)
@@ -4665,50 +5886,50 @@ public:
         auto temp = temps<Data>();
         loadImmediate(imm, temp.data());
         branchForMoveConditionally(invert(cond), lhs, temp.data(), 12);
-        m_assembler.fcopysignInsn<64>(dest, trueSrc, trueSrc);
+        m_assembler.fmovInsn<64>(dest, trueSrc);
         m_assembler.bInsn(8);
-        m_assembler.fcopysignInsn<64>(dest, falseSrc, falseSrc);
+        m_assembler.fmovInsn<64>(dest, falseSrc);
     }
 
     void moveDoubleConditionallyFloat(DoubleCondition cond, FPRegisterID lhs, FPRegisterID rhs, FPRegisterID trueSrc, FPRegisterID falseSrc, FPRegisterID dest)
     {
         Jump invcondBranch = branchFP<32, true>(cond, lhs, rhs);
-        m_assembler.fcopysignInsn<64>(dest, trueSrc, trueSrc);
+        m_assembler.fmovInsn<64>(dest, trueSrc);
         Jump end = jump();
         invcondBranch.link(this);
-        m_assembler.fcopysignInsn<64>(dest, falseSrc, falseSrc);
+        m_assembler.fmovInsn<64>(dest, falseSrc);
         end.link(this);
     }
 
     void moveDoubleConditionallyDouble(DoubleCondition cond, FPRegisterID lhs, FPRegisterID rhs, FPRegisterID trueSrc, FPRegisterID falseSrc, FPRegisterID dest)
     {
         Jump invcondBranch = branchFP<64, true>(cond, lhs, rhs);
-        m_assembler.fcopysignInsn<64>(dest, trueSrc, trueSrc);
+        m_assembler.fmovInsn<64>(dest, trueSrc);
         Jump end = jump();
         invcondBranch.link(this);
         m_assembler.dbarInsn(0x0);
-        m_assembler.fcopysignInsn<64>(dest, falseSrc, falseSrc);
+        m_assembler.fmovInsn<64>(dest, falseSrc);
         end.link(this);
     }
 
     void moveDoubleConditionallyFloatWithZero(DoubleCondition cond, FPRegisterID left, FPRegisterID thenCase, FPRegisterID elseCase, FPRegisterID dest)
     {
         Jump invcondBranch = branchFPWithZero<32, true>(cond, left);
-        m_assembler.fcopysignInsn<64>(dest, thenCase, thenCase);
+        m_assembler.fmovInsn<64>(dest, thenCase);
         Jump end = jump();
         invcondBranch.link(this);
-        m_assembler.fcopysignInsn<64>(dest, elseCase, elseCase);
+        m_assembler.fmovInsn<64>(dest, elseCase);
         end.link(this);
     }
 
     void moveDoubleConditionallyDoubleWithZero(DoubleCondition cond, FPRegisterID left, FPRegisterID thenCase, FPRegisterID elseCase, FPRegisterID dest)
     {
         Jump invcondBranch = branchFPWithZero<64, true>(cond, left);
-        m_assembler.fcopysignInsn<64>(dest, thenCase, thenCase);
+        m_assembler.fmovInsn<64>(dest, thenCase);
         Jump end = jump();
         invcondBranch.link(this);
         m_assembler.dbarInsn(0x0);
-        m_assembler.fcopysignInsn<64>(dest, elseCase, elseCase);
+        m_assembler.fmovInsn<64>(dest, elseCase);
         end.link(this);
     }
 
@@ -4720,9 +5941,9 @@ public:
         testFinalize(cond, temp.data(), temp.data());
 
         m_assembler.beqInsn(temp.data(), LOONGARCH64Registers::zero, 12);
-        m_assembler.fcopysignInsn<64>(dest, trueSrc, trueSrc);
+        m_assembler.fmovInsn<64>(dest, trueSrc);
         m_assembler.bInsn(8);
-        m_assembler.fcopysignInsn<64>(dest, falseSrc, falseSrc);
+        m_assembler.fmovInsn<64>(dest, falseSrc);
     }
 
     void moveDoubleConditionallyTest32(ResultCondition cond, RegisterID value, TrustedImm32 mask, FPRegisterID trueSrc, FPRegisterID falseSrc, FPRegisterID dest)
@@ -4734,9 +5955,9 @@ public:
         testFinalize(cond, temp.data(), temp.data());
 
         m_assembler.beqInsn(temp.data(), LOONGARCH64Registers::zero, 12);
-        m_assembler.fcopysignInsn<64>(dest, trueSrc, trueSrc);
+        m_assembler.fmovInsn<64>(dest, trueSrc);
         m_assembler.bInsn(8);
-        m_assembler.fcopysignInsn<64>(dest, falseSrc, falseSrc);
+        m_assembler.fmovInsn<64>(dest, falseSrc);
     }
 
     void moveDoubleConditionallyTest64(ResultCondition cond, RegisterID value, RegisterID mask, FPRegisterID trueSrc, FPRegisterID falseSrc, FPRegisterID dest)
@@ -4746,9 +5967,9 @@ public:
         testFinalize(cond, temp.data(), temp.data());
 
         m_assembler.beqInsn(temp.data(), LOONGARCH64Registers::zero, 12);
-        m_assembler.fcopysignInsn<64>(dest, trueSrc, trueSrc);
+        m_assembler.fmovInsn<64>(dest, trueSrc);
         m_assembler.bInsn(8);
-        m_assembler.fcopysignInsn<64>(dest, falseSrc, falseSrc);
+        m_assembler.fmovInsn<64>(dest, falseSrc);
     }
 
     void moveDoubleConditionallyTest64(ResultCondition cond, RegisterID value, TrustedImm32 mask, FPRegisterID trueSrc, FPRegisterID falseSrc, FPRegisterID dest)
@@ -4759,9 +5980,9 @@ public:
         testFinalize(cond, temp.data(), temp.data());
 
         m_assembler.beqInsn(temp.data(), LOONGARCH64Registers::zero, 12);
-        m_assembler.fcopysignInsn<64>(dest, trueSrc, trueSrc);
+        m_assembler.fmovInsn<64>(dest, trueSrc);
         m_assembler.bInsn(8);
-        m_assembler.fcopysignInsn<64>(dest, falseSrc, falseSrc);
+        m_assembler.fmovInsn<64>(dest, falseSrc);
     }
 
     void convertDoubleToFloat16(FPRegisterID src, FPRegisterID dest)
@@ -4896,6 +6117,15 @@ private:
         RegisterID base;
         int32_t offset;
     };
+
+    static bool canEncodeSIMDScaledOffset(int32_t offset, unsigned bits, unsigned scale)
+    {
+        ASSERT(bits > 0 && bits < 32);
+        if (offset & ((1U << scale) - 1))
+            return false;
+        int32_t encodedOffset = offset >> scale;
+        return encodedOffset >= -(1 << (bits - 1)) && encodedOffset < (1 << (bits - 1));
+    }
 
     template<typename RegisterType>
     AddressResolution resolveAddress(BaseIndex address, RegisterType destination)

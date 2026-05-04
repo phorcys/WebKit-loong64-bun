@@ -79,6 +79,10 @@ typedef enum : int8_t {
 namespace LOONGARCH64Instructions {
 
 enum class Opcode22 : unsigned {
+    CLZ_W_OP           = 0b0000000000000000000101,
+    CTZ_W_OP           = 0b0000000000000000000111,
+    CLZ_D_OP           = 0b0000000000000000001001,
+    CTZ_D_OP           = 0b0000000000000000001011,
     FABS_S_OP          = 0b0000000100010100000001,
     FABS_D_OP          = 0b0000000100010100000010,
     FNEG_S_OP          = 0b0000000100010100000101,
@@ -142,6 +146,8 @@ enum class Opcode17 : unsigned {
     SLL_D_OP           = 0b00000000000110001,
     SRL_D_OP           = 0b00000000000110010,
     SRA_D_OP           = 0b00000000000110011,
+    ROTR_W_OP          = 0b00000000000110110,
+    ROTR_D_OP          = 0b00000000000110111,
     MUL_W_OP           = 0b00000000000111000,
     MULH_W_OP          = 0b00000000000111001,
     MULH_WU_OP         = 0b00000000000111010,
@@ -200,6 +206,7 @@ enum class Opcode14 : unsigned {
     SLLI_OP            = 0b00000000010000,
     SRLI_OP            = 0b00000000010001,
     SRAI_OP            = 0b00000000010010,
+    ROTRI_OP           = 0b00000000010011,
 };
 
 enum class Opcode12 : unsigned {
@@ -1053,6 +1060,22 @@ struct ANDI : I12RRTypeBase<Opcode10::ANDI_OP, RegistersBase::GG> {
     static constexpr const char* name = "andi";
 };
 
+struct CLZ_W : RRTypeBase<Opcode22::CLZ_W_OP, RegistersBase::GG> {
+    static constexpr const char* name = "clz.w";
+};
+
+struct CTZ_W : RRTypeBase<Opcode22::CTZ_W_OP, RegistersBase::GG> {
+    static constexpr const char* name = "ctz.w";
+};
+
+struct CLZ_D : RRTypeBase<Opcode22::CLZ_D_OP, RegistersBase::GG> {
+    static constexpr const char* name = "clz.d";
+};
+
+struct CTZ_D : RRTypeBase<Opcode22::CTZ_D_OP, RegistersBase::GG> {
+    static constexpr const char* name = "ctz.d";
+};
+
 struct SLLI_D : I8RRTypeBase<Opcode14::SLLI_OP, RegistersBase::GG> {
     static constexpr const char* name = "slli.d";
 };
@@ -1063,6 +1086,10 @@ struct SRAI_D : I8RRTypeBase<Opcode14::SRAI_OP, RegistersBase::GG> {
 
 struct SRLI_D : I8RRTypeBase<Opcode14::SRLI_OP, RegistersBase::GG> {
     static constexpr const char* name = "srli.d";
+};
+
+struct ROTRI_D : I8RRTypeBase<Opcode14::ROTRI_OP, RegistersBase::GG> {
+    static constexpr const char* name = "rotri.d";
 };
 
 struct ADD_D : RRRTypeBase<Opcode17::ADD_D_OP, RegistersBase::GGG> {
@@ -1095,6 +1122,14 @@ struct SRL_D : RRRTypeBase<Opcode17::SRL_D_OP, RegistersBase::GGG> {
 
 struct SRA_D : RRRTypeBase<Opcode17::SRA_D_OP, RegistersBase::GGG> {
     static constexpr const char* name = "sra.d";
+};
+
+struct ROTR_W : RRRTypeBase<Opcode17::ROTR_W_OP, RegistersBase::GGG> {
+    static constexpr const char* name = "rotr.w";
+};
+
+struct ROTR_D : RRRTypeBase<Opcode17::ROTR_D_OP, RegistersBase::GGG> {
+    static constexpr const char* name = "rotr.d";
 };
 
 struct OR : RRRTypeBase<Opcode17::OR_OP, RegistersBase::GGG> {
@@ -1203,6 +1238,10 @@ struct SRAI_W : I8RRTypeBase<Opcode14::SRAI_OP, RegistersBase::GG> {
 
 struct SRLI_W : I8RRTypeBase<Opcode14::SRLI_OP, RegistersBase::GG> {
     static constexpr const char* name = "srli.w";
+};
+
+struct ROTRI_W : I8RRTypeBase<Opcode14::ROTRI_OP, RegistersBase::GG> {
+    static constexpr const char* name = "rotri.w";
 };
 
 struct ADD_W : RRRTypeBase<Opcode17::ADD_W_OP, RegistersBase::GGG> {
@@ -1970,6 +2009,30 @@ public:
         ASSERT_WITH_MESSAGE(I8Immediate::isUImm<6>(shamt), "not a unsigned 6-bit int");
         insn(LOONGARCH64Instructions::SRAI_D::construct(rj, rd, I8Immediate((0b01 << 6) | shamt)));
     }
+    void rotri_dInsn(RegisterID rd, RegisterID rj, int32_t shamt)
+    {
+        ASSERT_WITH_MESSAGE(I8Immediate::isUImm<6>(shamt), "not a unsigned 6-bit int");
+        insn(LOONGARCH64Instructions::ROTRI_D::construct(rj, rd, I8Immediate((0b01 << 6) | shamt)));
+    }
+    void clz_wInsn(RegisterID rd, RegisterID rj) { insn(LOONGARCH64Instructions::CLZ_W::construct(rj, rd)); }
+    void ctz_wInsn(RegisterID rd, RegisterID rj) { insn(LOONGARCH64Instructions::CTZ_W::construct(rj, rd)); }
+    void clz_dInsn(RegisterID rd, RegisterID rj) { insn(LOONGARCH64Instructions::CLZ_D::construct(rj, rd)); }
+    void ctz_dInsn(RegisterID rd, RegisterID rj) { insn(LOONGARCH64Instructions::CTZ_D::construct(rj, rd)); }
+    void revb_2hInsn(RegisterID rd, RegisterID rj) { insn(0x00003000 | (LOONGARCH64Instructions::registerValue(rj) << 5) | LOONGARCH64Instructions::registerValue(rd)); }
+    void revb_2wInsn(RegisterID rd, RegisterID rj) { insn(0x00003800 | (LOONGARCH64Instructions::registerValue(rj) << 5) | LOONGARCH64Instructions::registerValue(rd)); }
+    void revb_dInsn(RegisterID rd, RegisterID rj) { insn(0x00003c00 | (LOONGARCH64Instructions::registerValue(rj) << 5) | LOONGARCH64Instructions::registerValue(rd)); }
+    void ext_w_bInsn(RegisterID rd, RegisterID rj) { insn(0x00005c00 | (LOONGARCH64Instructions::registerValue(rj) << 5) | LOONGARCH64Instructions::registerValue(rd)); }
+    void ext_w_hInsn(RegisterID rd, RegisterID rj) { insn(0x00005800 | (LOONGARCH64Instructions::registerValue(rj) << 5) | LOONGARCH64Instructions::registerValue(rd)); }
+    void bstrpick_dInsn(RegisterID rd, RegisterID rj, unsigned msb, unsigned lsb)
+    {
+        RELEASE_ASSERT(msb < 64 && lsb <= msb);
+        insn(0x00c00000 | (msb << 16) | (lsb << 10) | (LOONGARCH64Instructions::registerValue(rj) << 5) | LOONGARCH64Instructions::registerValue(rd));
+    }
+    void bstrins_dInsn(RegisterID rd, RegisterID rj, unsigned msb, unsigned lsb)
+    {
+        RELEASE_ASSERT(msb < 64 && lsb <= msb);
+        insn(0x00800000 | (msb << 16) | (lsb << 10) | (LOONGARCH64Instructions::registerValue(rj) << 5) | LOONGARCH64Instructions::registerValue(rd));
+    }
     void add_dInsn(RegisterID rd, RegisterID rj, RegisterID rk) { insn(LOONGARCH64Instructions::ADD_D::construct(rk, rj, rd)); }
     void sub_dInsn(RegisterID rd, RegisterID rj, RegisterID rk) { insn(LOONGARCH64Instructions::SUB_D::construct(rk, rj, rd)); }
     void sll_dInsn(RegisterID rd, RegisterID rj, RegisterID rk) { insn(LOONGARCH64Instructions::SLL_D::construct(rk, rj, rd)); }
@@ -1978,6 +2041,8 @@ public:
     void xorInsn(RegisterID rd, RegisterID rj, RegisterID rk) { insn(LOONGARCH64Instructions::XOR::construct(rk, rj, rd)); }
     void srl_dInsn(RegisterID rd, RegisterID rj, RegisterID rk) { insn(LOONGARCH64Instructions::SRL_D::construct(rk, rj, rd)); }
     void sra_dInsn(RegisterID rd, RegisterID rj, RegisterID rk) { insn(LOONGARCH64Instructions::SRA_D::construct(rk, rj, rd)); }
+    void rotr_wInsn(RegisterID rd, RegisterID rj, RegisterID rk) { insn(LOONGARCH64Instructions::ROTR_W::construct(rk, rj, rd)); }
+    void rotr_dInsn(RegisterID rd, RegisterID rj, RegisterID rk) { insn(LOONGARCH64Instructions::ROTR_D::construct(rk, rj, rd)); }
     void orInsn(RegisterID rd, RegisterID rj, RegisterID rk) { insn(LOONGARCH64Instructions::OR::construct(rk, rj, rd)); }
     void andInsn(RegisterID rd, RegisterID rj, RegisterID rk) { insn(LOONGARCH64Instructions::AND::construct(rk, rj, rd)); }
     void breakInsn(uint16_t imm) { insn(LOONGARCH64Instructions::BREAK::construct(I15Immediate(imm))); }
@@ -1997,6 +2062,11 @@ public:
     {
         ASSERT_WITH_MESSAGE(I8Immediate::isUImm<5>(shamt), "not a unsigned 5-bit int");
         insn(LOONGARCH64Instructions::SRAI_W::construct(rj, rd, I8Immediate((0b001 << 5) | shamt)));
+    }
+    void rotri_wInsn(RegisterID rd, RegisterID rj, int32_t shamt)
+    {
+        ASSERT_WITH_MESSAGE(I8Immediate::isUImm<5>(shamt), "not a unsigned 5-bit int");
+        insn(LOONGARCH64Instructions::ROTRI_W::construct(rj, rd, I8Immediate((0b001 << 5) | shamt)));
     }
     void add_wInsn(RegisterID rd, RegisterID rj, RegisterID rk) { insn(LOONGARCH64Instructions::ADD_W::construct(rk, rj, rd)); }
     void sub_wInsn(RegisterID rd, RegisterID rj, RegisterID rk) { insn(LOONGARCH64Instructions::SUB_W::construct(rk, rj, rd)); }
@@ -2254,6 +2324,254 @@ public:
 
     void vor_vInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(LOONGARCH64Instructions::VOR_V::construct(vk, vj, vd)); }
 
+    void vldInsn(FPRegisterID vd, RegisterID rj, int32_t offset) { insn(lsxVRJImmInsn(0x2c000000, vd, rj, offset, 12)); }
+    void vstInsn(FPRegisterID vd, RegisterID rj, int32_t offset) { insn(lsxVRJImmInsn(0x2c400000, vd, rj, offset, 12)); }
+    void vldrepl_bInsn(FPRegisterID vd, RegisterID rj, int32_t offset) { insn(lsxVRJScaledImmInsn(0x30800000, vd, rj, offset, 12, 0)); }
+    void vldrepl_hInsn(FPRegisterID vd, RegisterID rj, int32_t offset) { insn(lsxVRJScaledImmInsn(0x30400000, vd, rj, offset, 11, 1)); }
+    void vldrepl_wInsn(FPRegisterID vd, RegisterID rj, int32_t offset) { insn(lsxVRJScaledImmInsn(0x30200000, vd, rj, offset, 10, 2)); }
+    void vldrepl_dInsn(FPRegisterID vd, RegisterID rj, int32_t offset) { insn(lsxVRJScaledImmInsn(0x30100000, vd, rj, offset, 9, 3)); }
+    void vstelm_bInsn(FPRegisterID vd, RegisterID rj, int32_t offset, uint8_t lane) { RELEASE_ASSERT(lane < 16); insn(lsxVRJScaledImmInsn(0x31800000, vd, rj, offset, 8, 0) | (uint32_t(lane) << 18)); }
+    void vstelm_hInsn(FPRegisterID vd, RegisterID rj, int32_t offset, uint8_t lane) { RELEASE_ASSERT(lane < 8); insn(lsxVRJScaledImmInsn(0x31400000, vd, rj, offset, 8, 1) | (uint32_t(lane) << 18)); }
+    void vstelm_wInsn(FPRegisterID vd, RegisterID rj, int32_t offset, uint8_t lane) { RELEASE_ASSERT(lane < 4); insn(lsxVRJScaledImmInsn(0x31200000, vd, rj, offset, 8, 2) | (uint32_t(lane) << 18)); }
+    void vstelm_dInsn(FPRegisterID vd, RegisterID rj, int32_t offset, uint8_t lane) { RELEASE_ASSERT(lane < 2); insn(lsxVRJScaledImmInsn(0x31100000, vd, rj, offset, 8, 3) | (uint32_t(lane) << 18)); }
+
+    void vadd_bInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x700a0000, vd, vj, vk)); }
+    void vadd_hInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x700a8000, vd, vj, vk)); }
+    void vadd_wInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x700b0000, vd, vj, vk)); }
+    void vadd_dInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x700b8000, vd, vj, vk)); }
+    void vsub_bInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x700c0000, vd, vj, vk)); }
+    void vsub_hInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x700c8000, vd, vj, vk)); }
+    void vsub_wInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x700d0000, vd, vj, vk)); }
+    void vsub_dInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x700d8000, vd, vj, vk)); }
+    void vsadd_bInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70460000, vd, vj, vk)); }
+    void vsadd_hInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70468000, vd, vj, vk)); }
+    void vssub_bInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70480000, vd, vj, vk)); }
+    void vssub_hInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70488000, vd, vj, vk)); }
+    void vsadd_buInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x704a0000, vd, vj, vk)); }
+    void vsadd_huInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x704a8000, vd, vj, vk)); }
+    void vssub_buInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x704c0000, vd, vj, vk)); }
+    void vssub_huInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x704c8000, vd, vj, vk)); }
+    void vmul_bInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70840000, vd, vj, vk)); }
+    void vmul_hInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70848000, vd, vj, vk)); }
+    void vmul_wInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70850000, vd, vj, vk)); }
+    void vmul_dInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70858000, vd, vj, vk)); }
+    void vmuh_bInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70860000, vd, vj, vk)); }
+    void vmuh_hInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70868000, vd, vj, vk)); }
+    void vmuh_wInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70870000, vd, vj, vk)); }
+    void vmuh_buInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70880000, vd, vj, vk)); }
+    void vmuh_huInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70888000, vd, vj, vk)); }
+    void vmuh_wuInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70890000, vd, vj, vk)); }
+    void vmulwev_h_bInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70900000, vd, vj, vk)); }
+    void vmulwev_w_hInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70908000, vd, vj, vk)); }
+    void vmulwev_d_wInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70910000, vd, vj, vk)); }
+    void vmulwod_h_bInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70920000, vd, vj, vk)); }
+    void vmulwod_w_hInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70928000, vd, vj, vk)); }
+    void vmulwod_d_wInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70930000, vd, vj, vk)); }
+    void vmulwev_h_buInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70980000, vd, vj, vk)); }
+    void vmulwev_w_huInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70988000, vd, vj, vk)); }
+    void vmulwev_d_wuInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70990000, vd, vj, vk)); }
+    void vmulwod_h_buInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x709a0000, vd, vj, vk)); }
+    void vmulwod_w_huInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x709a8000, vd, vj, vk)); }
+    void vmulwod_d_wuInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x709b0000, vd, vj, vk)); }
+    void vavgr_buInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x706a0000, vd, vj, vk)); }
+    void vavgr_huInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x706a8000, vd, vj, vk)); }
+    void vmax_bInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70700000, vd, vj, vk)); }
+    void vmax_hInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70708000, vd, vj, vk)); }
+    void vmax_wInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70710000, vd, vj, vk)); }
+    void vmax_dInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70718000, vd, vj, vk)); }
+    void vmin_bInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70720000, vd, vj, vk)); }
+    void vmin_hInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70728000, vd, vj, vk)); }
+    void vmin_wInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70730000, vd, vj, vk)); }
+    void vmin_dInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70738000, vd, vj, vk)); }
+    void vmax_buInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70740000, vd, vj, vk)); }
+    void vmax_huInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70748000, vd, vj, vk)); }
+    void vmax_wuInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70750000, vd, vj, vk)); }
+    void vmax_duInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70758000, vd, vj, vk)); }
+    void vmin_buInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70760000, vd, vj, vk)); }
+    void vmin_huInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70768000, vd, vj, vk)); }
+    void vmin_wuInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70770000, vd, vj, vk)); }
+    void vmin_duInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70778000, vd, vj, vk)); }
+
+    void vfadd_sInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x71308000, vd, vj, vk)); }
+    void vfadd_dInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x71310000, vd, vj, vk)); }
+    void vfsub_sInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x71328000, vd, vj, vk)); }
+    void vfsub_dInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x71330000, vd, vj, vk)); }
+    void vfmul_sInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x71388000, vd, vj, vk)); }
+    void vfmul_dInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x71390000, vd, vj, vk)); }
+    void vfdiv_sInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x713a8000, vd, vj, vk)); }
+    void vfdiv_dInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x713b0000, vd, vj, vk)); }
+    void vfmax_sInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x713c8000, vd, vj, vk)); }
+    void vfmax_dInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x713d0000, vd, vj, vk)); }
+    void vfmin_sInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x713e8000, vd, vj, vk)); }
+    void vfmin_dInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x713f0000, vd, vj, vk)); }
+    void vfsqrt_sInsn(FPRegisterID vd, FPRegisterID vj) { insn(lsxVVInsn(0x729ce400, vd, vj)); }
+    void vfsqrt_dInsn(FPRegisterID vd, FPRegisterID vj) { insn(lsxVVInsn(0x729ce800, vd, vj)); }
+
+    void vseq_bInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70000000, vd, vj, vk)); }
+    void vseq_hInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70008000, vd, vj, vk)); }
+    void vseq_wInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70010000, vd, vj, vk)); }
+    void vseq_dInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70018000, vd, vj, vk)); }
+    void vslt_bInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70060000, vd, vj, vk)); }
+    void vslt_hInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70068000, vd, vj, vk)); }
+    void vslt_wInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70070000, vd, vj, vk)); }
+    void vslt_dInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70078000, vd, vj, vk)); }
+    void vslt_buInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70080000, vd, vj, vk)); }
+    void vslt_huInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70088000, vd, vj, vk)); }
+    void vslt_wuInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70090000, vd, vj, vk)); }
+    void vslt_duInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70098000, vd, vj, vk)); }
+    void vslti_buInsn(FPRegisterID vd, FPRegisterID vj, uint8_t imm) { RELEASE_ASSERT(imm < 32); insn(lsxVVUInsn(0x72880000, vd, vj, imm)); }
+
+    void vfcmp_ceq_sInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x0c520000, vd, vj, vk)); }
+    void vfcmp_ceq_dInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x0c620000, vd, vj, vk)); }
+    void vfcmp_clt_sInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x0c510000, vd, vj, vk)); }
+    void vfcmp_clt_dInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x0c610000, vd, vj, vk)); }
+    void vfcmp_cle_sInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x0c530000, vd, vj, vk)); }
+    void vfcmp_cle_dInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x0c630000, vd, vj, vk)); }
+    void vfcmp_cne_sInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x0c580000, vd, vj, vk)); }
+    void vfcmp_cne_dInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x0c680000, vd, vj, vk)); }
+    void vfcmp_cune_sInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x0c5c0000, vd, vj, vk)); }
+    void vfcmp_cune_dInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x0c6c0000, vd, vj, vk)); }
+    void vfmadd_sInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk, FPRegisterID va) { insn(lsxVVVVInsn(0x09100000, vd, vj, vk, va)); }
+    void vfmadd_dInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk, FPRegisterID va) { insn(lsxVVVVInsn(0x09200000, vd, vj, vk, va)); }
+    void vfnmsub_sInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk, FPRegisterID va) { insn(lsxVVVVInsn(0x09d00000, vd, vj, vk, va)); }
+    void vfnmsub_dInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk, FPRegisterID va) { insn(lsxVVVVInsn(0x09e00000, vd, vj, vk, va)); }
+
+    void vpickev_bInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x711e0000, vd, vj, vk)); }
+    void vpickev_hInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x711e8000, vd, vj, vk)); }
+    void vpickev_wInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x711f0000, vd, vj, vk)); }
+    void vpickod_bInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x71200000, vd, vj, vk)); }
+    void vpickod_hInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x71208000, vd, vj, vk)); }
+    void vpickod_wInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x71210000, vd, vj, vk)); }
+    void vilvl_bInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x711a0000, vd, vj, vk)); }
+    void vilvl_hInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x711a8000, vd, vj, vk)); }
+    void vilvl_wInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x711b0000, vd, vj, vk)); }
+    void vilvh_bInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x711c0000, vd, vj, vk)); }
+    void vilvh_hInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x711c8000, vd, vj, vk)); }
+    void vilvh_wInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x711d0000, vd, vj, vk)); }
+    void vhaddw_h_bInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70540000, vd, vj, vk)); }
+    void vhaddw_w_hInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70548000, vd, vj, vk)); }
+    void vhaddw_hu_buInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70580000, vd, vj, vk)); }
+    void vhaddw_wu_huInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70588000, vd, vj, vk)); }
+    void vaddwev_h_bInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x701e0000, vd, vj, vk)); }
+    void vaddwev_w_hInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x701e8000, vd, vj, vk)); }
+    void vaddwod_h_bInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70220000, vd, vj, vk)); }
+    void vaddwod_w_hInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70228000, vd, vj, vk)); }
+    void vaddwev_h_buInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x702e0000, vd, vj, vk)); }
+    void vaddwev_w_huInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x702e8000, vd, vj, vk)); }
+    void vaddwod_h_buInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70320000, vd, vj, vk)); }
+    void vaddwod_w_huInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70328000, vd, vj, vk)); }
+    void vmaddwev_h_bu_bInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70bc0000, vd, vj, vk)); }
+    void vmaddwod_h_bu_bInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70be0000, vd, vj, vk)); }
+    void vxor_vInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x71270000, vd, vj, vk)); }
+    void vnor_vInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x71278000, vd, vj, vk)); }
+    void vbitsel_vInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk, FPRegisterID va) { insn(0x0d100000 | (LOONGARCH64Instructions::registerValue(va) << 15) | (LOONGARCH64Instructions::registerValue(vk) << 10) | (LOONGARCH64Instructions::registerValue(vj) << 5) | LOONGARCH64Instructions::registerValue(vd)); }
+    void vshuf_bInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk, FPRegisterID va) { insn(0x0d500000 | (LOONGARCH64Instructions::registerValue(va) << 15) | (LOONGARCH64Instructions::registerValue(vk) << 10) | (LOONGARCH64Instructions::registerValue(vj) << 5) | LOONGARCH64Instructions::registerValue(vd)); }
+    void vextrins_wInsn(FPRegisterID vd, FPRegisterID vj, uint8_t imm) { insn(lsxVVUInsn(0x73840000, vd, vj, imm)); }
+    void vextrins_dInsn(FPRegisterID vd, FPRegisterID vj, uint8_t imm) { insn(lsxVVUInsn(0x73800000, vd, vj, imm)); }
+    void vori_bInsn(FPRegisterID vd, FPRegisterID vj, uint8_t imm) { insn(lsxVVUInsn(0x73d40000, vd, vj, imm)); }
+    void vldiInsn(FPRegisterID vd, int32_t imm) { RELEASE_ASSERT(ImmediateBase<13>::isSImm<13>(imm)); insn(0x73e00000 | ((uint32_t(imm) & 0x1fff) << 5) | LOONGARCH64Instructions::registerValue(vd)); }
+
+    void vreplgr2vr_bInsn(FPRegisterID vd, RegisterID rj) { insn(lsxVRInsn(0x729f0000, vd, rj)); }
+    void vreplgr2vr_hInsn(FPRegisterID vd, RegisterID rj) { insn(lsxVRInsn(0x729f0400, vd, rj)); }
+    void vreplgr2vr_wInsn(FPRegisterID vd, RegisterID rj) { insn(lsxVRInsn(0x729f0800, vd, rj)); }
+    void vreplgr2vr_dInsn(FPRegisterID vd, RegisterID rj) { insn(lsxVRInsn(0x729f0c00, vd, rj)); }
+    void vreplvei_bInsn(FPRegisterID vd, FPRegisterID vj, uint8_t lane) { RELEASE_ASSERT(lane < 16); insn(lsxVVUInsn(0x72f78000, vd, vj, lane)); }
+    void vreplvei_hInsn(FPRegisterID vd, FPRegisterID vj, uint8_t lane) { RELEASE_ASSERT(lane < 8); insn(lsxVVUInsn(0x72f7c000, vd, vj, lane)); }
+    void vreplvei_wInsn(FPRegisterID vd, FPRegisterID vj, uint8_t lane) { RELEASE_ASSERT(lane < 4); insn(lsxVVUInsn(0x72f7e000, vd, vj, lane)); }
+    void vreplvei_dInsn(FPRegisterID vd, FPRegisterID vj, uint8_t lane) { RELEASE_ASSERT(lane < 2); insn(lsxVVUInsn(0x72f7f000, vd, vj, lane)); }
+    void vinsgr2vr_bInsn(FPRegisterID vd, RegisterID rj, uint8_t lane) { RELEASE_ASSERT(lane < 16); insn(lsxVRUInsn(0x72eb8000, vd, rj, lane)); }
+    void vinsgr2vr_hInsn(FPRegisterID vd, RegisterID rj, uint8_t lane) { RELEASE_ASSERT(lane < 8); insn(lsxVRUInsn(0x72ebc000, vd, rj, lane)); }
+    void vinsgr2vr_wInsn(FPRegisterID vd, RegisterID rj, uint8_t lane) { RELEASE_ASSERT(lane < 4); insn(lsxVRUInsn(0x72ebe000, vd, rj, lane)); }
+    void vinsgr2vr_dInsn(FPRegisterID vd, RegisterID rj, uint8_t lane) { RELEASE_ASSERT(lane < 2); insn(lsxVRUInsn(0x72ebf000, vd, rj, lane)); }
+    void vpickve2gr_bInsn(RegisterID rd, FPRegisterID vj, uint8_t lane) { RELEASE_ASSERT(lane < 16); insn(lsxRVUInsn(0x72ef8000, rd, vj, lane)); }
+    void vpickve2gr_hInsn(RegisterID rd, FPRegisterID vj, uint8_t lane) { RELEASE_ASSERT(lane < 8); insn(lsxRVUInsn(0x72efc000, rd, vj, lane)); }
+    void vpickve2gr_wInsn(RegisterID rd, FPRegisterID vj, uint8_t lane) { RELEASE_ASSERT(lane < 4); insn(lsxRVUInsn(0x72efe000, rd, vj, lane)); }
+    void vpickve2gr_dInsn(RegisterID rd, FPRegisterID vj, uint8_t lane) { RELEASE_ASSERT(lane < 2); insn(lsxRVUInsn(0x72eff000, rd, vj, lane)); }
+    void vpickve2gr_buInsn(RegisterID rd, FPRegisterID vj, uint8_t lane) { RELEASE_ASSERT(lane < 16); insn(lsxRVUInsn(0x72f38000, rd, vj, lane)); }
+    void vpickve2gr_huInsn(RegisterID rd, FPRegisterID vj, uint8_t lane) { RELEASE_ASSERT(lane < 8); insn(lsxRVUInsn(0x72f3c000, rd, vj, lane)); }
+    void vpickve2gr_wuInsn(RegisterID rd, FPRegisterID vj, uint8_t lane) { RELEASE_ASSERT(lane < 4); insn(lsxRVUInsn(0x72f3e000, rd, vj, lane)); }
+
+    void vpcnt_bInsn(FPRegisterID vd, FPRegisterID vj) { insn(lsxVVInsn(0x729c2000, vd, vj)); }
+    void vmskltz_bInsn(FPRegisterID vd, FPRegisterID vj) { insn(lsxVVInsn(0x729c4000, vd, vj)); }
+    void vmskltz_hInsn(FPRegisterID vd, FPRegisterID vj) { insn(lsxVVInsn(0x729c4400, vd, vj)); }
+    void vmskltz_wInsn(FPRegisterID vd, FPRegisterID vj) { insn(lsxVVInsn(0x729c4800, vd, vj)); }
+    void vmskltz_dInsn(FPRegisterID vd, FPRegisterID vj) { insn(lsxVVInsn(0x729c4c00, vd, vj)); }
+    void vsetnez_vInsn(CFRegisterID cd, FPRegisterID vj) { insn(lsxCVInsn(0x729c9c00, cd, vj)); }
+    void vsetallnez_bInsn(CFRegisterID cd, FPRegisterID vj) { insn(lsxCVInsn(0x729cb000, cd, vj)); }
+    void vsetallnez_hInsn(CFRegisterID cd, FPRegisterID vj) { insn(lsxCVInsn(0x729cb400, cd, vj)); }
+    void vsetallnez_wInsn(CFRegisterID cd, FPRegisterID vj) { insn(lsxCVInsn(0x729cb800, cd, vj)); }
+    void vsetallnez_dInsn(CFRegisterID cd, FPRegisterID vj) { insn(lsxCVInsn(0x729cbc00, cd, vj)); }
+    void vneg_bInsn(FPRegisterID vd, FPRegisterID vj) { insn(lsxVVInsn(0x729c3000, vd, vj)); }
+    void vneg_hInsn(FPRegisterID vd, FPRegisterID vj) { insn(lsxVVInsn(0x729c3400, vd, vj)); }
+    void vneg_wInsn(FPRegisterID vd, FPRegisterID vj) { insn(lsxVVInsn(0x729c3800, vd, vj)); }
+    void vneg_dInsn(FPRegisterID vd, FPRegisterID vj) { insn(lsxVVInsn(0x729c3c00, vd, vj)); }
+
+    void vsll_bInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70e80000, vd, vj, vk)); }
+    void vsll_hInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70e88000, vd, vj, vk)); }
+    void vsll_wInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70e90000, vd, vj, vk)); }
+    void vsll_dInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70e98000, vd, vj, vk)); }
+    void vsrl_bInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70ea0000, vd, vj, vk)); }
+    void vsrl_hInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70ea8000, vd, vj, vk)); }
+    void vsrl_wInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70eb0000, vd, vj, vk)); }
+    void vsrl_dInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70eb8000, vd, vj, vk)); }
+    void vsra_bInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70ec0000, vd, vj, vk)); }
+    void vsra_hInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70ec8000, vd, vj, vk)); }
+    void vsra_wInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70ed0000, vd, vj, vk)); }
+    void vsra_dInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70ed8000, vd, vj, vk)); }
+
+    void vexth_h_bInsn(FPRegisterID vd, FPRegisterID vj) { insn(lsxVVInsn(0x729ee000, vd, vj)); }
+    void vexth_w_hInsn(FPRegisterID vd, FPRegisterID vj) { insn(lsxVVInsn(0x729ee400, vd, vj)); }
+    void vexth_d_wInsn(FPRegisterID vd, FPRegisterID vj) { insn(lsxVVInsn(0x729ee800, vd, vj)); }
+    void vexth_hu_buInsn(FPRegisterID vd, FPRegisterID vj) { insn(lsxVVInsn(0x729ef000, vd, vj)); }
+    void vexth_wu_huInsn(FPRegisterID vd, FPRegisterID vj) { insn(lsxVVInsn(0x729ef400, vd, vj)); }
+    void vexth_du_wuInsn(FPRegisterID vd, FPRegisterID vj) { insn(lsxVVInsn(0x729ef800, vd, vj)); }
+
+    void vsllwil_h_bInsn(FPRegisterID vd, FPRegisterID vj, uint8_t shift) { RELEASE_ASSERT(shift < 8); insn(lsxVVUInsn(0x73082000, vd, vj, shift)); }
+    void vsllwil_w_hInsn(FPRegisterID vd, FPRegisterID vj, uint8_t shift) { RELEASE_ASSERT(shift < 16); insn(lsxVVUInsn(0x73084000, vd, vj, shift)); }
+    void vsllwil_d_wInsn(FPRegisterID vd, FPRegisterID vj, uint8_t shift) { RELEASE_ASSERT(shift < 32); insn(lsxVVUInsn(0x73088000, vd, vj, shift)); }
+    void vsllwil_hu_buInsn(FPRegisterID vd, FPRegisterID vj, uint8_t shift) { RELEASE_ASSERT(shift < 8); insn(lsxVVUInsn(0x730c2000, vd, vj, shift)); }
+    void vsllwil_wu_huInsn(FPRegisterID vd, FPRegisterID vj, uint8_t shift) { RELEASE_ASSERT(shift < 16); insn(lsxVVUInsn(0x730c4000, vd, vj, shift)); }
+    void vsllwil_du_wuInsn(FPRegisterID vd, FPRegisterID vj, uint8_t shift) { RELEASE_ASSERT(shift < 32); insn(lsxVVUInsn(0x730c8000, vd, vj, shift)); }
+
+    void vslli_bInsn(FPRegisterID vd, FPRegisterID vj, uint8_t shift) { RELEASE_ASSERT(shift < 8); insn(lsxVVUInsn(0x732c2000, vd, vj, shift)); }
+    void vslli_hInsn(FPRegisterID vd, FPRegisterID vj, uint8_t shift) { RELEASE_ASSERT(shift < 16); insn(lsxVVUInsn(0x732c4000, vd, vj, shift)); }
+    void vslli_wInsn(FPRegisterID vd, FPRegisterID vj, uint8_t shift) { RELEASE_ASSERT(shift < 32); insn(lsxVVUInsn(0x732c8000, vd, vj, shift)); }
+    void vslli_dInsn(FPRegisterID vd, FPRegisterID vj, uint8_t shift) { RELEASE_ASSERT(shift < 64); insn(lsxVVUInsn(0x732d0000, vd, vj, shift)); }
+    void vsrli_bInsn(FPRegisterID vd, FPRegisterID vj, uint8_t shift) { RELEASE_ASSERT(shift < 8); insn(lsxVVUInsn(0x73302000, vd, vj, shift)); }
+    void vsrli_hInsn(FPRegisterID vd, FPRegisterID vj, uint8_t shift) { RELEASE_ASSERT(shift < 16); insn(lsxVVUInsn(0x73304000, vd, vj, shift)); }
+    void vsrli_wInsn(FPRegisterID vd, FPRegisterID vj, uint8_t shift) { RELEASE_ASSERT(shift < 32); insn(lsxVVUInsn(0x73308000, vd, vj, shift)); }
+    void vsrli_dInsn(FPRegisterID vd, FPRegisterID vj, uint8_t shift) { RELEASE_ASSERT(shift < 64); insn(lsxVVUInsn(0x73310000, vd, vj, shift)); }
+    void vsrai_bInsn(FPRegisterID vd, FPRegisterID vj, uint8_t shift) { RELEASE_ASSERT(shift < 8); insn(lsxVVUInsn(0x73342000, vd, vj, shift)); }
+    void vsrai_hInsn(FPRegisterID vd, FPRegisterID vj, uint8_t shift) { RELEASE_ASSERT(shift < 16); insn(lsxVVUInsn(0x73344000, vd, vj, shift)); }
+    void vsrai_wInsn(FPRegisterID vd, FPRegisterID vj, uint8_t shift) { RELEASE_ASSERT(shift < 32); insn(lsxVVUInsn(0x73348000, vd, vj, shift)); }
+    void vsrai_dInsn(FPRegisterID vd, FPRegisterID vj, uint8_t shift) { RELEASE_ASSERT(shift < 64); insn(lsxVVUInsn(0x73350000, vd, vj, shift)); }
+    void vsat_bInsn(FPRegisterID vd, FPRegisterID vj, uint8_t imm) { RELEASE_ASSERT(imm < 8); insn(lsxVVUInsn(0x73242000, vd, vj, imm)); }
+    void vsat_hInsn(FPRegisterID vd, FPRegisterID vj, uint8_t imm) { RELEASE_ASSERT(imm < 16); insn(lsxVVUInsn(0x73244000, vd, vj, imm)); }
+    void vsat_buInsn(FPRegisterID vd, FPRegisterID vj, uint8_t imm) { RELEASE_ASSERT(imm < 8); insn(lsxVVUInsn(0x73282000, vd, vj, imm)); }
+    void vsat_huInsn(FPRegisterID vd, FPRegisterID vj, uint8_t imm) { RELEASE_ASSERT(imm < 16); insn(lsxVVUInsn(0x73284000, vd, vj, imm)); }
+    void vssrlni_b_hInsn(FPRegisterID vd, FPRegisterID vj, uint8_t shift) { RELEASE_ASSERT(shift < 16); insn(lsxVVUInsn(0x73484000, vd, vj, shift)); }
+    void vssrlni_h_wInsn(FPRegisterID vd, FPRegisterID vj, uint8_t shift) { RELEASE_ASSERT(shift < 32); insn(lsxVVUInsn(0x73488000, vd, vj, shift)); }
+    void vssrlni_bu_hInsn(FPRegisterID vd, FPRegisterID vj, uint8_t shift) { RELEASE_ASSERT(shift < 16); insn(lsxVVUInsn(0x734c4000, vd, vj, shift)); }
+    void vssrlni_hu_wInsn(FPRegisterID vd, FPRegisterID vj, uint8_t shift) { RELEASE_ASSERT(shift < 32); insn(lsxVVUInsn(0x734c8000, vd, vj, shift)); }
+    void vssrani_b_hInsn(FPRegisterID vd, FPRegisterID vj, uint8_t shift) { RELEASE_ASSERT(shift < 16); insn(lsxVVUInsn(0x73604000, vd, vj, shift)); }
+    void vssrani_h_wInsn(FPRegisterID vd, FPRegisterID vj, uint8_t shift) { RELEASE_ASSERT(shift < 32); insn(lsxVVUInsn(0x73608000, vd, vj, shift)); }
+    void vssrani_bu_hInsn(FPRegisterID vd, FPRegisterID vj, uint8_t shift) { RELEASE_ASSERT(shift < 16); insn(lsxVVUInsn(0x73644000, vd, vj, shift)); }
+    void vssrani_hu_wInsn(FPRegisterID vd, FPRegisterID vj, uint8_t shift) { RELEASE_ASSERT(shift < 32); insn(lsxVVUInsn(0x73648000, vd, vj, shift)); }
+    void vssrarni_h_wInsn(FPRegisterID vd, FPRegisterID vj, uint8_t shift) { RELEASE_ASSERT(shift < 32); insn(lsxVVUInsn(0x73688000, vd, vj, shift)); }
+
+    void vfcvt_s_dInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x71468000, vd, vj, vk)); }
+    void vfcvtl_d_sInsn(FPRegisterID vd, FPRegisterID vj) { insn(lsxVVInsn(0x729df000, vd, vj)); }
+    void vffint_s_wInsn(FPRegisterID vd, FPRegisterID vj) { insn(lsxVVInsn(0x729e0000, vd, vj)); }
+    void vffint_s_wuInsn(FPRegisterID vd, FPRegisterID vj) { insn(lsxVVInsn(0x729e0400, vd, vj)); }
+    void vffintl_d_wInsn(FPRegisterID vd, FPRegisterID vj) { insn(lsxVVInsn(0x729e1000, vd, vj)); }
+    void vffint_d_lInsn(FPRegisterID vd, FPRegisterID vj) { insn(lsxVVInsn(0x729e0800, vd, vj)); }
+    void vffint_d_luInsn(FPRegisterID vd, FPRegisterID vj) { insn(lsxVVInsn(0x729e0c00, vd, vj)); }
+    void vftintrz_w_sInsn(FPRegisterID vd, FPRegisterID vj) { insn(lsxVVInsn(0x729e4800, vd, vj)); }
+    void vftintrz_wu_sInsn(FPRegisterID vd, FPRegisterID vj) { insn(lsxVVInsn(0x729e7000, vd, vj)); }
+    void vftintrz_w_dInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x714b0000, vd, vj, vk)); }
+    void vftintrz_lu_dInsn(FPRegisterID vd, FPRegisterID vj) { insn(lsxVVInsn(0x729e7400, vd, vj)); }
+    void vssrlni_wu_dInsn(FPRegisterID vd, FPRegisterID vj, uint8_t shift) { RELEASE_ASSERT(shift < 64); insn(lsxVVUInsn(0x734d0000, vd, vj, shift)); }
+
     template<unsigned fpSize>
     void vfrintrmInsn(FPRegisterID vd, FPRegisterID vj)
     {
@@ -2481,6 +2799,63 @@ public:
     };
 
 protected:
+    static uint32_t lsxVVVInsn(uint32_t base, FPRegisterID vd, FPRegisterID vj, FPRegisterID vk)
+    {
+        return base | (LOONGARCH64Instructions::registerValue(vk) << 10) | (LOONGARCH64Instructions::registerValue(vj) << 5) | LOONGARCH64Instructions::registerValue(vd);
+    }
+
+    static uint32_t lsxVVInsn(uint32_t base, FPRegisterID vd, FPRegisterID vj)
+    {
+        return base | (LOONGARCH64Instructions::registerValue(vj) << 5) | LOONGARCH64Instructions::registerValue(vd);
+    }
+
+    static uint32_t lsxVRInsn(uint32_t base, FPRegisterID vd, RegisterID rj)
+    {
+        return base | (LOONGARCH64Instructions::registerValue(rj) << 5) | LOONGARCH64Instructions::registerValue(vd);
+    }
+
+    static uint32_t lsxVRUInsn(uint32_t base, FPRegisterID vd, RegisterID rj, uint8_t imm)
+    {
+        return base | (uint32_t(imm) << 10) | (LOONGARCH64Instructions::registerValue(rj) << 5) | LOONGARCH64Instructions::registerValue(vd);
+    }
+
+    static uint32_t lsxCVInsn(uint32_t base, CFRegisterID cd, FPRegisterID vj)
+    {
+        return base | (LOONGARCH64Instructions::registerValue(vj) << 5) | LOONGARCH64Instructions::registerValue(cd);
+    }
+
+    static uint32_t lsxVVVVInsn(uint32_t base, FPRegisterID vd, FPRegisterID vj, FPRegisterID vk, FPRegisterID va)
+    {
+        return base | (LOONGARCH64Instructions::registerValue(va) << 15) | (LOONGARCH64Instructions::registerValue(vk) << 10) | (LOONGARCH64Instructions::registerValue(vj) << 5) | LOONGARCH64Instructions::registerValue(vd);
+    }
+
+    static uint32_t lsxRVUInsn(uint32_t base, RegisterID rd, FPRegisterID vj, uint8_t imm)
+    {
+        return base | (uint32_t(imm) << 10) | (LOONGARCH64Instructions::registerValue(vj) << 5) | LOONGARCH64Instructions::registerValue(rd);
+    }
+
+    static uint32_t lsxVVUInsn(uint32_t base, FPRegisterID vd, FPRegisterID vj, uint8_t imm)
+    {
+        return base | (uint32_t(imm) << 10) | (LOONGARCH64Instructions::registerValue(vj) << 5) | LOONGARCH64Instructions::registerValue(vd);
+    }
+
+    static uint32_t lsxVRJImmInsn(uint32_t base, FPRegisterID vd, RegisterID rj, int32_t offset, unsigned bits)
+    {
+        RELEASE_ASSERT(bits == 12);
+        RELEASE_ASSERT(ImmediateBase<12>::isSImm<12>(offset));
+        return base | ((uint32_t(offset) & 0xfff) << 10) | (LOONGARCH64Instructions::registerValue(rj) << 5) | LOONGARCH64Instructions::registerValue(vd);
+    }
+
+    static uint32_t lsxVRJScaledImmInsn(uint32_t base, FPRegisterID vd, RegisterID rj, int32_t offset, unsigned bits, unsigned scale)
+    {
+        RELEASE_ASSERT(!(offset & ((1U << scale) - 1)));
+        int32_t encodedOffset = offset >> scale;
+        RELEASE_ASSERT(bits <= 12);
+        RELEASE_ASSERT(ImmediateBase<12>::isSImm<12>(encodedOffset));
+        RELEASE_ASSERT(encodedOffset >= -(1 << (bits - 1)) && encodedOffset < (1 << (bits - 1)));
+        return base | ((uint32_t(encodedOffset) & ((1U << bits) - 1)) << 10) | (LOONGARCH64Instructions::registerValue(rj) << 5) | LOONGARCH64Instructions::registerValue(vd);
+    }
+
     void insn(uint32_t instruction)
     {
         m_buffer.putInt(instruction);

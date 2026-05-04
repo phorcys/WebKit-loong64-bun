@@ -176,9 +176,14 @@ public:
 
     // Space for callee-saves; Not included in frameSize
     static constexpr unsigned SpillStackSpaceAligned = WTF::roundUpToMultipleOf<stackAlignmentBytes()>(3 * sizeof(UCPURegister));
+#if CPU(LOONGARCH64)
+    static constexpr Width RegisterStackFPRWidth = Width::Width128;
+#else
+    static constexpr Width RegisterStackFPRWidth = Width::Width64;
+#endif
     // Extra space used to return argument register values from cpp before they get filled. Included in frameSize
     static constexpr unsigned RegisterStackSpaceAligned = WTF::roundUpToMultipleOf<stackAlignmentBytes()>(
-        FPRInfo::numberOfArgumentRegisters * bytesForWidth(Width::Width64) + GPRInfo::numberOfArgumentRegisters * sizeof(UCPURegister));
+        FPRInfo::numberOfArgumentRegisters * bytesForWidth(RegisterStackFPRWidth) + GPRInfo::numberOfArgumentRegisters * sizeof(UCPURegister));
 
     unsigned frameSize() const { return m_frameSize; }
     CalleeBits wasmCallee() const { return m_wasmCallee; }

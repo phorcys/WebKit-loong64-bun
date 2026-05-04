@@ -32,6 +32,14 @@
 
 namespace JSC {
 
+#if ENABLE(B3_JIT)
+#define WASM_SIMD_REL_COND(condition) B3::Air::Arg::relCond(MacroAssembler::condition)
+#define WASM_SIMD_DOUBLE_COND(condition) B3::Air::Arg::doubleCond(MacroAssembler::condition)
+#else
+#define WASM_SIMD_REL_COND(condition) Wasm::SIMDRelOp::relCond(MacroAssembler::condition)
+#define WASM_SIMD_DOUBLE_COND(condition) Wasm::SIMDRelOp::doubleCond(MacroAssembler::condition)
+#endif
+
 enum class SIMDLaneOperation : uint8_t {
     Not,
     AddSat,
@@ -125,54 +133,54 @@ enum class SIMDLaneOperation : uint8_t {
 };
 
 #define FOR_EACH_WASM_EXT_SIMD_REL_OP(macro) \
-macro(I8x16Eq,                    0x23,  Equal,               SIMDLane::i8x16,  SIMDSignMode::None,      B3::Air::Arg::relCond(MacroAssembler::Equal)) \
-macro(I8x16Ne,                    0x24,  NotEqual,            SIMDLane::i8x16,  SIMDSignMode::None,      B3::Air::Arg::relCond(MacroAssembler::NotEqual)) \
-macro(I8x16LtS,                   0x25,  LessThan,            SIMDLane::i8x16,  SIMDSignMode::Signed,    B3::Air::Arg::relCond(MacroAssembler::LessThan)) \
-macro(I8x16LtU,                   0x26,  LessThan,            SIMDLane::i8x16,  SIMDSignMode::Unsigned,  B3::Air::Arg::relCond(MacroAssembler::Below)) \
-macro(I8x16GtS,                   0x27,  GreaterThan,         SIMDLane::i8x16,  SIMDSignMode::Signed,    B3::Air::Arg::relCond(MacroAssembler::GreaterThan)) \
-macro(I8x16GtU,                   0x28,  GreaterThan,         SIMDLane::i8x16,  SIMDSignMode::Unsigned,  B3::Air::Arg::relCond(MacroAssembler::Above)) \
-macro(I8x16LeS,                   0x29,  LessThanOrEqual,     SIMDLane::i8x16,  SIMDSignMode::Signed,    B3::Air::Arg::relCond(MacroAssembler::LessThanOrEqual)) \
-macro(I8x16LeU,                   0x2a,  LessThanOrEqual,     SIMDLane::i8x16,  SIMDSignMode::Unsigned,  B3::Air::Arg::relCond(MacroAssembler::BelowOrEqual)) \
-macro(I8x16GeS,                   0x2b,  GreaterThanOrEqual,  SIMDLane::i8x16,  SIMDSignMode::Signed,    B3::Air::Arg::relCond(MacroAssembler::GreaterThanOrEqual)) \
-macro(I8x16GeU,                   0x2c,  GreaterThanOrEqual,  SIMDLane::i8x16,  SIMDSignMode::Unsigned,  B3::Air::Arg::relCond(MacroAssembler::AboveOrEqual)) \
-macro(I16x8Eq,                    0x2d,  Equal,               SIMDLane::i16x8,  SIMDSignMode::None,      B3::Air::Arg::relCond(MacroAssembler::Equal)) \
-macro(I16x8Ne,                    0x2e,  NotEqual,            SIMDLane::i16x8,  SIMDSignMode::None,      B3::Air::Arg::relCond(MacroAssembler::NotEqual)) \
-macro(I16x8LtS,                   0x2f,  LessThan,            SIMDLane::i16x8,  SIMDSignMode::Signed,    B3::Air::Arg::relCond(MacroAssembler::LessThan)) \
-macro(I16x8LtU,                   0x30,  LessThan,            SIMDLane::i16x8,  SIMDSignMode::Unsigned,  B3::Air::Arg::relCond(MacroAssembler::Below)) \
-macro(I16x8GtS,                   0x31,  GreaterThan,         SIMDLane::i16x8,  SIMDSignMode::Signed,    B3::Air::Arg::relCond(MacroAssembler::GreaterThan)) \
-macro(I16x8GtU,                   0x32,  GreaterThan,         SIMDLane::i16x8,  SIMDSignMode::Unsigned,  B3::Air::Arg::relCond(MacroAssembler::Above)) \
-macro(I16x8LeS,                   0x33,  LessThanOrEqual,     SIMDLane::i16x8,  SIMDSignMode::Signed,    B3::Air::Arg::relCond(MacroAssembler::LessThanOrEqual)) \
-macro(I16x8LeU,                   0x34,  LessThanOrEqual,     SIMDLane::i16x8,  SIMDSignMode::Unsigned,  B3::Air::Arg::relCond(MacroAssembler::BelowOrEqual)) \
-macro(I16x8GeS,                   0x35,  GreaterThanOrEqual,  SIMDLane::i16x8,  SIMDSignMode::Signed,    B3::Air::Arg::relCond(MacroAssembler::GreaterThanOrEqual)) \
-macro(I16x8GeU,                   0x36,  GreaterThanOrEqual,  SIMDLane::i16x8,  SIMDSignMode::Unsigned,  B3::Air::Arg::relCond(MacroAssembler::AboveOrEqual)) \
-macro(I32x4Eq,                    0x37,  Equal,               SIMDLane::i32x4,  SIMDSignMode::None,      B3::Air::Arg::relCond(MacroAssembler::Equal)) \
-macro(I32x4Ne,                    0x38,  NotEqual,            SIMDLane::i32x4,  SIMDSignMode::None,      B3::Air::Arg::relCond(MacroAssembler::NotEqual)) \
-macro(I32x4LtS,                   0x39,  LessThan,            SIMDLane::i32x4,  SIMDSignMode::Signed,    B3::Air::Arg::relCond(MacroAssembler::LessThan)) \
-macro(I32x4LtU,                   0x3a,  LessThan,            SIMDLane::i32x4,  SIMDSignMode::Unsigned,  B3::Air::Arg::relCond(MacroAssembler::Below)) \
-macro(I32x4GtS,                   0x3b,  GreaterThan,         SIMDLane::i32x4,  SIMDSignMode::Signed,    B3::Air::Arg::relCond(MacroAssembler::GreaterThan)) \
-macro(I32x4GtU,                   0x3c,  GreaterThan,         SIMDLane::i32x4,  SIMDSignMode::Unsigned,  B3::Air::Arg::relCond(MacroAssembler::Above)) \
-macro(I32x4LeS,                   0x3d,  LessThanOrEqual,     SIMDLane::i32x4,  SIMDSignMode::Signed,    B3::Air::Arg::relCond(MacroAssembler::LessThanOrEqual)) \
-macro(I32x4LeU,                   0x3e,  LessThanOrEqual,     SIMDLane::i32x4,  SIMDSignMode::Unsigned,  B3::Air::Arg::relCond(MacroAssembler::BelowOrEqual)) \
-macro(I32x4GeS,                   0x3f,  GreaterThanOrEqual,  SIMDLane::i32x4,  SIMDSignMode::Signed,    B3::Air::Arg::relCond(MacroAssembler::GreaterThanOrEqual)) \
-macro(I32x4GeU,                   0x40,  GreaterThanOrEqual,  SIMDLane::i32x4,  SIMDSignMode::Unsigned,  B3::Air::Arg::relCond(MacroAssembler::AboveOrEqual)) \
-macro(F32x4Eq,                    0x41,  Equal,               SIMDLane::f32x4,  SIMDSignMode::None,      B3::Air::Arg::doubleCond(MacroAssembler::DoubleEqualAndOrdered)) \
-macro(F32x4Ne,                    0x42,  NotEqual,            SIMDLane::f32x4,  SIMDSignMode::None,      B3::Air::Arg::doubleCond(MacroAssembler::DoubleNotEqualOrUnordered)) \
-macro(F32x4Lt,                    0x43,  LessThan,            SIMDLane::f32x4,  SIMDSignMode::None,      B3::Air::Arg::doubleCond(MacroAssembler::DoubleLessThanAndOrdered)) \
-macro(F32x4Gt,                    0x44,  GreaterThan,         SIMDLane::f32x4,  SIMDSignMode::None,      B3::Air::Arg::doubleCond(MacroAssembler::DoubleGreaterThanAndOrdered)) \
-macro(F32x4Le,                    0x45,  LessThanOrEqual,     SIMDLane::f32x4,  SIMDSignMode::None,      B3::Air::Arg::doubleCond(MacroAssembler::DoubleLessThanOrEqualAndOrdered)) \
-macro(F32x4Ge,                    0x46,  GreaterThanOrEqual,  SIMDLane::f32x4,  SIMDSignMode::None,      B3::Air::Arg::doubleCond(MacroAssembler::DoubleGreaterThanOrEqualAndOrdered)) \
-macro(F64x2Eq,                    0x47,  Equal,               SIMDLane::f64x2,  SIMDSignMode::None,      B3::Air::Arg::doubleCond(MacroAssembler::DoubleEqualAndOrdered)) \
-macro(F64x2Ne,                    0x48,  NotEqual,            SIMDLane::f64x2,  SIMDSignMode::None,      B3::Air::Arg::doubleCond(MacroAssembler::DoubleNotEqualOrUnordered)) \
-macro(F64x2Lt,                    0x49,  LessThan,            SIMDLane::f64x2,  SIMDSignMode::None,      B3::Air::Arg::doubleCond(MacroAssembler::DoubleLessThanAndOrdered)) \
-macro(F64x2Gt,                    0x4a,  GreaterThan,         SIMDLane::f64x2,  SIMDSignMode::None,      B3::Air::Arg::doubleCond(MacroAssembler::DoubleGreaterThanAndOrdered)) \
-macro(F64x2Le,                    0x4b,  LessThanOrEqual,     SIMDLane::f64x2,  SIMDSignMode::None,      B3::Air::Arg::doubleCond(MacroAssembler::DoubleLessThanOrEqualAndOrdered)) \
-macro(F64x2Ge,                    0x4c,  GreaterThanOrEqual,  SIMDLane::f64x2,  SIMDSignMode::None,      B3::Air::Arg::doubleCond(MacroAssembler::DoubleGreaterThanOrEqualAndOrdered)) \
-macro(I64x2Eq,                    0xd6,  Equal,               SIMDLane::i64x2,  SIMDSignMode::None,      B3::Air::Arg::relCond(MacroAssembler::Equal)) \
-macro(I64x2Ne,                    0xd7,  NotEqual,            SIMDLane::i64x2,  SIMDSignMode::None,      B3::Air::Arg::relCond(MacroAssembler::NotEqual)) \
-macro(I64x2LtS,                   0xd8,  LessThan,            SIMDLane::i64x2,  SIMDSignMode::Signed,    B3::Air::Arg::relCond(MacroAssembler::LessThan)) \
-macro(I64x2GtS,                   0xd9,  GreaterThan,         SIMDLane::i64x2,  SIMDSignMode::Signed,    B3::Air::Arg::relCond(MacroAssembler::GreaterThan)) \
-macro(I64x2LeU,                   0xda,  LessThanOrEqual,     SIMDLane::i64x2,  SIMDSignMode::Unsigned,  B3::Air::Arg::relCond(MacroAssembler::LessThanOrEqual)) \
-macro(I64x2GeU,                   0xdb,  GreaterThanOrEqual,  SIMDLane::i64x2,  SIMDSignMode::Unsigned,  B3::Air::Arg::relCond(MacroAssembler::GreaterThanOrEqual))
+macro(I8x16Eq,                    0x23,  Equal,               SIMDLane::i8x16,  SIMDSignMode::None,      WASM_SIMD_REL_COND(Equal)) \
+macro(I8x16Ne,                    0x24,  NotEqual,            SIMDLane::i8x16,  SIMDSignMode::None,      WASM_SIMD_REL_COND(NotEqual)) \
+macro(I8x16LtS,                   0x25,  LessThan,            SIMDLane::i8x16,  SIMDSignMode::Signed,    WASM_SIMD_REL_COND(LessThan)) \
+macro(I8x16LtU,                   0x26,  LessThan,            SIMDLane::i8x16,  SIMDSignMode::Unsigned,  WASM_SIMD_REL_COND(Below)) \
+macro(I8x16GtS,                   0x27,  GreaterThan,         SIMDLane::i8x16,  SIMDSignMode::Signed,    WASM_SIMD_REL_COND(GreaterThan)) \
+macro(I8x16GtU,                   0x28,  GreaterThan,         SIMDLane::i8x16,  SIMDSignMode::Unsigned,  WASM_SIMD_REL_COND(Above)) \
+macro(I8x16LeS,                   0x29,  LessThanOrEqual,     SIMDLane::i8x16,  SIMDSignMode::Signed,    WASM_SIMD_REL_COND(LessThanOrEqual)) \
+macro(I8x16LeU,                   0x2a,  LessThanOrEqual,     SIMDLane::i8x16,  SIMDSignMode::Unsigned,  WASM_SIMD_REL_COND(BelowOrEqual)) \
+macro(I8x16GeS,                   0x2b,  GreaterThanOrEqual,  SIMDLane::i8x16,  SIMDSignMode::Signed,    WASM_SIMD_REL_COND(GreaterThanOrEqual)) \
+macro(I8x16GeU,                   0x2c,  GreaterThanOrEqual,  SIMDLane::i8x16,  SIMDSignMode::Unsigned,  WASM_SIMD_REL_COND(AboveOrEqual)) \
+macro(I16x8Eq,                    0x2d,  Equal,               SIMDLane::i16x8,  SIMDSignMode::None,      WASM_SIMD_REL_COND(Equal)) \
+macro(I16x8Ne,                    0x2e,  NotEqual,            SIMDLane::i16x8,  SIMDSignMode::None,      WASM_SIMD_REL_COND(NotEqual)) \
+macro(I16x8LtS,                   0x2f,  LessThan,            SIMDLane::i16x8,  SIMDSignMode::Signed,    WASM_SIMD_REL_COND(LessThan)) \
+macro(I16x8LtU,                   0x30,  LessThan,            SIMDLane::i16x8,  SIMDSignMode::Unsigned,  WASM_SIMD_REL_COND(Below)) \
+macro(I16x8GtS,                   0x31,  GreaterThan,         SIMDLane::i16x8,  SIMDSignMode::Signed,    WASM_SIMD_REL_COND(GreaterThan)) \
+macro(I16x8GtU,                   0x32,  GreaterThan,         SIMDLane::i16x8,  SIMDSignMode::Unsigned,  WASM_SIMD_REL_COND(Above)) \
+macro(I16x8LeS,                   0x33,  LessThanOrEqual,     SIMDLane::i16x8,  SIMDSignMode::Signed,    WASM_SIMD_REL_COND(LessThanOrEqual)) \
+macro(I16x8LeU,                   0x34,  LessThanOrEqual,     SIMDLane::i16x8,  SIMDSignMode::Unsigned,  WASM_SIMD_REL_COND(BelowOrEqual)) \
+macro(I16x8GeS,                   0x35,  GreaterThanOrEqual,  SIMDLane::i16x8,  SIMDSignMode::Signed,    WASM_SIMD_REL_COND(GreaterThanOrEqual)) \
+macro(I16x8GeU,                   0x36,  GreaterThanOrEqual,  SIMDLane::i16x8,  SIMDSignMode::Unsigned,  WASM_SIMD_REL_COND(AboveOrEqual)) \
+macro(I32x4Eq,                    0x37,  Equal,               SIMDLane::i32x4,  SIMDSignMode::None,      WASM_SIMD_REL_COND(Equal)) \
+macro(I32x4Ne,                    0x38,  NotEqual,            SIMDLane::i32x4,  SIMDSignMode::None,      WASM_SIMD_REL_COND(NotEqual)) \
+macro(I32x4LtS,                   0x39,  LessThan,            SIMDLane::i32x4,  SIMDSignMode::Signed,    WASM_SIMD_REL_COND(LessThan)) \
+macro(I32x4LtU,                   0x3a,  LessThan,            SIMDLane::i32x4,  SIMDSignMode::Unsigned,  WASM_SIMD_REL_COND(Below)) \
+macro(I32x4GtS,                   0x3b,  GreaterThan,         SIMDLane::i32x4,  SIMDSignMode::Signed,    WASM_SIMD_REL_COND(GreaterThan)) \
+macro(I32x4GtU,                   0x3c,  GreaterThan,         SIMDLane::i32x4,  SIMDSignMode::Unsigned,  WASM_SIMD_REL_COND(Above)) \
+macro(I32x4LeS,                   0x3d,  LessThanOrEqual,     SIMDLane::i32x4,  SIMDSignMode::Signed,    WASM_SIMD_REL_COND(LessThanOrEqual)) \
+macro(I32x4LeU,                   0x3e,  LessThanOrEqual,     SIMDLane::i32x4,  SIMDSignMode::Unsigned,  WASM_SIMD_REL_COND(BelowOrEqual)) \
+macro(I32x4GeS,                   0x3f,  GreaterThanOrEqual,  SIMDLane::i32x4,  SIMDSignMode::Signed,    WASM_SIMD_REL_COND(GreaterThanOrEqual)) \
+macro(I32x4GeU,                   0x40,  GreaterThanOrEqual,  SIMDLane::i32x4,  SIMDSignMode::Unsigned,  WASM_SIMD_REL_COND(AboveOrEqual)) \
+macro(F32x4Eq,                    0x41,  Equal,               SIMDLane::f32x4,  SIMDSignMode::None,      WASM_SIMD_DOUBLE_COND(DoubleEqualAndOrdered)) \
+macro(F32x4Ne,                    0x42,  NotEqual,            SIMDLane::f32x4,  SIMDSignMode::None,      WASM_SIMD_DOUBLE_COND(DoubleNotEqualOrUnordered)) \
+macro(F32x4Lt,                    0x43,  LessThan,            SIMDLane::f32x4,  SIMDSignMode::None,      WASM_SIMD_DOUBLE_COND(DoubleLessThanAndOrdered)) \
+macro(F32x4Gt,                    0x44,  GreaterThan,         SIMDLane::f32x4,  SIMDSignMode::None,      WASM_SIMD_DOUBLE_COND(DoubleGreaterThanAndOrdered)) \
+macro(F32x4Le,                    0x45,  LessThanOrEqual,     SIMDLane::f32x4,  SIMDSignMode::None,      WASM_SIMD_DOUBLE_COND(DoubleLessThanOrEqualAndOrdered)) \
+macro(F32x4Ge,                    0x46,  GreaterThanOrEqual,  SIMDLane::f32x4,  SIMDSignMode::None,      WASM_SIMD_DOUBLE_COND(DoubleGreaterThanOrEqualAndOrdered)) \
+macro(F64x2Eq,                    0x47,  Equal,               SIMDLane::f64x2,  SIMDSignMode::None,      WASM_SIMD_DOUBLE_COND(DoubleEqualAndOrdered)) \
+macro(F64x2Ne,                    0x48,  NotEqual,            SIMDLane::f64x2,  SIMDSignMode::None,      WASM_SIMD_DOUBLE_COND(DoubleNotEqualOrUnordered)) \
+macro(F64x2Lt,                    0x49,  LessThan,            SIMDLane::f64x2,  SIMDSignMode::None,      WASM_SIMD_DOUBLE_COND(DoubleLessThanAndOrdered)) \
+macro(F64x2Gt,                    0x4a,  GreaterThan,         SIMDLane::f64x2,  SIMDSignMode::None,      WASM_SIMD_DOUBLE_COND(DoubleGreaterThanAndOrdered)) \
+macro(F64x2Le,                    0x4b,  LessThanOrEqual,     SIMDLane::f64x2,  SIMDSignMode::None,      WASM_SIMD_DOUBLE_COND(DoubleLessThanOrEqualAndOrdered)) \
+macro(F64x2Ge,                    0x4c,  GreaterThanOrEqual,  SIMDLane::f64x2,  SIMDSignMode::None,      WASM_SIMD_DOUBLE_COND(DoubleGreaterThanOrEqualAndOrdered)) \
+macro(I64x2Eq,                    0xd6,  Equal,               SIMDLane::i64x2,  SIMDSignMode::None,      WASM_SIMD_REL_COND(Equal)) \
+macro(I64x2Ne,                    0xd7,  NotEqual,            SIMDLane::i64x2,  SIMDSignMode::None,      WASM_SIMD_REL_COND(NotEqual)) \
+macro(I64x2LtS,                   0xd8,  LessThan,            SIMDLane::i64x2,  SIMDSignMode::Signed,    WASM_SIMD_REL_COND(LessThan)) \
+macro(I64x2GtS,                   0xd9,  GreaterThan,         SIMDLane::i64x2,  SIMDSignMode::Signed,    WASM_SIMD_REL_COND(GreaterThan)) \
+macro(I64x2LeU,                   0xda,  LessThanOrEqual,     SIMDLane::i64x2,  SIMDSignMode::Unsigned,  WASM_SIMD_REL_COND(LessThanOrEqual)) \
+macro(I64x2GeU,                   0xdb,  GreaterThanOrEqual,  SIMDLane::i64x2,  SIMDSignMode::Unsigned,  WASM_SIMD_REL_COND(GreaterThanOrEqual))
 
 
 #define FOR_EACH_WASM_EXT_SIMD_GENERAL_OP(macro) \

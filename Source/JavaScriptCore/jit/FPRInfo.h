@@ -427,6 +427,14 @@ public:
 class FPRInfo {
 public:
     typedef FPRReg RegisterType;
+    // LoongArch64 has 32 FPRs. Keep the allocatable FPRInfo bank to f0..f21,
+    // matching ARM64's split between allocator-visible volatile registers,
+    // MacroAssembler scratch registers, and callee-saves:
+    //   f0..f21  - allocator-managed volatile registers.
+    //   f22/f23  - MacroAssembler scratch registers; excluded through
+    //              RegisterSet::macroClobberedFPRs().
+    //   f24..f31 - callee-saved registers; excluded from simple allocators and
+    //              handled explicitly by tiers that opt into callee-saves.
     static constexpr unsigned numberOfRegisters = 22;
     static constexpr unsigned numberOfArgumentRegisters = 8;
 
@@ -472,7 +480,12 @@ public:
     static constexpr FPRReg argumentFPR7 = LOONGARCH64Registers::f7;
 
     static constexpr FPRReg returnValueFPR = LOONGARCH64Registers::f0;
+    // Explicit scratch users such as wasm may request this register, but it
+    // must not be present in allocator-managed sets.
     static constexpr FPRReg nonPreservedNonArgumentFPR0 = LOONGARCH64Registers::f23;
+
+    static_assert(MacroAssembler::fpTempRegister == LOONGARCH64Registers::f22);
+    static_assert(MacroAssembler::fpTempRegister2 == LOONGARCH64Registers::f23);
 
     static FPRReg toRegister(unsigned index)
     {
