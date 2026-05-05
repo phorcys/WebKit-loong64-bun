@@ -47,8 +47,8 @@ template<typename T>
 concept canMakeExceptionOperationResult =
     std::is_standard_layout_v<T>
     && std::is_trivial_v<T>
-#if CPU(ARM64) || CPU(ARM_THUMB2)
-    && !std::is_floating_point_v<T> // The ARM64 ABI says that this should be returned in x0 instead of d0. Seems unlikely it's worth it to do the extra fmov.
+#if CPU(ARM64) || CPU(ARM_THUMB2) || CPU(LOONGARCH64)
+    && !std::is_floating_point_v<T> // These ABIs do not return { FP value, exception } in the FP return register plus a GPR exception register.
 #endif
     && sizeof(T) <= sizeof(CPURegister);
 

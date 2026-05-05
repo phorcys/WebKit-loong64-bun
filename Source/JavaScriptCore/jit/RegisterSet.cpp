@@ -387,6 +387,9 @@ RegisterSet RegisterSet::ftlCalleeSaveRegisters()
     static_assert(GPRInfo::regCS6 == GPRInfo::jitDataRegister);
     static_assert(GPRInfo::regCS7 == GPRInfo::numberTagRegister);
     static_assert(GPRInfo::regCS8 == GPRInfo::notCellMaskRegister);
+    result.add(GPRInfo::regCS6);
+    result.add(GPRInfo::regCS7);
+    result.add(GPRInfo::regCS8);
     result.add(FPRInfo::fpRegCS0, IgnoreVectors);
     result.add(FPRInfo::fpRegCS1, IgnoreVectors);
     result.add(FPRInfo::fpRegCS2, IgnoreVectors);
