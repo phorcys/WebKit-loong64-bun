@@ -799,7 +799,6 @@ void Options::notifyOptionsChanged()
 
 #if CPU(LOONGARCH64)
     Options::useRegExpJIT() = false;
-    Options::useDFGJIT() = false;
     Options::useFTLJIT() = false;
 #endif
 

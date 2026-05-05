@@ -193,6 +193,7 @@ constexpr bool isRegister32Bit()
 
 inline bool optimizeForARMv7IDIVSupported();
 inline bool optimizeForARM64();
+inline bool optimizeForLOONGARCH64();
 inline bool optimizeForX86();
 inline bool optimizeForX86_64();
 inline bool hasSensibleDoubleToInt();
@@ -235,4 +236,3 @@ constexpr size_t prologueStackPointerDelta()
 #define JSC_CACHE_LINE_ALIGNED alignas(JSC_CACHE_LINE_SIZE)
 
 } // namespace JSC
-

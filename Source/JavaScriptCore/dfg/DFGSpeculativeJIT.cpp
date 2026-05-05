@@ -6161,13 +6161,14 @@ void SpeculativeJIT::compileArithDiv(Node* node)
         
         done.link(this);
         strictInt32Result(eax.gpr(), node);
-#elif HAVE(ARM_IDIV_INSTRUCTIONS) || CPU(ARM64)
+#elif HAVE(ARM_IDIV_INSTRUCTIONS) || CPU(ARM64) || CPU(LOONGARCH64)
         SpeculateInt32Operand op1(this, node->child1());
         SpeculateInt32Operand op2(this, node->child2());
         GPRReg op1GPR = op1.gpr();
         GPRReg op2GPR = op2.gpr();
         GPRTemporary quotient(this);
         GPRTemporary multiplyAnswer(this);
+        JumpList done;
 
         // If the user cares about negative zero, then speculate that we're not about
         // to produce negative zero.
@@ -6179,9 +6180,21 @@ void SpeculativeJIT::compileArithDiv(Node* node)
 
         if (shouldCheckOverflow(node->arithMode()))
             speculationCheck(ExitKind::Overflow, JSValueRegs(), nullptr, branchTest32(Zero, op2GPR));
+        else {
+            Jump denominatorNotZero = branchTest32(NonZero, op2GPR);
+            move(TrustedImm32(0), quotient.gpr());
+            done.append(jump());
+            denominatorNotZero.link(this);
+        }
 
+#if CPU(LOONGARCH64)
+        // LoongArch does not trap on division by zero, but the result is arbitrary.
+        // The unchecked DFG path must explicitly produce zero instead of executing DIV.
+        div32(op1GPR, op2GPR, quotient.gpr());
+#else
         // Note that it is fine that sdiv with 0-divisor. The resulted value is zero (no trap).
         assembler().sdiv<32>(quotient.gpr(), op1GPR, op2GPR);
+#endif
 
         // Check that there was no remainder. If there had been, then we'd be obligated to
         // produce a double result instead.
@@ -6190,6 +6203,7 @@ void SpeculativeJIT::compileArithDiv(Node* node)
             speculationCheck(ExitKind::Overflow, JSValueRegs(), 0, branch32(NotEqual, multiplyAnswer.gpr(), op1GPR));
         }
 
+        done.link(this);
         strictInt32Result(quotient.gpr(), node);
 #else
         RELEASE_ASSERT_NOT_REACHED();
@@ -6495,7 +6509,7 @@ void SpeculativeJIT::compileArithMod(Node* node)
         done.link(this);
         strictInt32Result(edx.gpr(), node);
 
-#elif HAVE(ARM_IDIV_INSTRUCTIONS) || CPU(ARM64)
+#elif HAVE(ARM_IDIV_INSTRUCTIONS) || CPU(ARM64) || CPU(LOONGARCH64)
         GPRTemporary quotientThenRemainder(this);
         GPRReg dividendGPR = op1.gpr();
         GPRReg divisorGPR = op2.gpr();
@@ -6518,7 +6532,7 @@ void SpeculativeJIT::compileArithMod(Node* node)
         // This is doing: x - ((x / y) * y)
         div32(dividendGPR, divisorGPR, quotientThenRemainderGPR);
         // This should only overflow for INT32_MIN % -1 but that will end up with quotientThenRemainderGPR == 0, which will be handled as needed in the negative zero check.
-#if CPU(ARM64)
+#if CPU(ARM64) || CPU(LOONGARCH64)
         multiplySub32(quotientThenRemainderGPR, divisorGPR, dividendGPR, quotientThenRemainderGPR);
 #else
         mul32(quotientThenRemainderGPR, divisorGPR, quotientThenRemainderGPR);
@@ -6600,7 +6614,7 @@ void SpeculativeJIT::compileArithMod(Node* node)
             unlock(op2TempGPR);
 
         strictInt52Result(X86Registers::edx, node);
-#elif CPU(ARM64)
+#elif CPU(ARM64) || CPU(LOONGARCH64)
         GPRTemporary quotient(this);
         GPRTemporary result(this);
 
@@ -6622,8 +6636,7 @@ void SpeculativeJIT::compileArithMod(Node* node)
         }
 
         div64(op1GPR, op2GPR, quotientGPR);
-        mul64(quotientGPR, op2GPR, resultGPR);
-        sub64(op1GPR, resultGPR, resultGPR);
+        multiplySub64(quotientGPR, op2GPR, op1GPR, resultGPR);
 
         if (shouldCheckNegativeZero(node->arithMode())) {
             Jump numeratorPositive = branch64(GreaterThanOrEqual, op1GPR, TrustedImm64(0));
