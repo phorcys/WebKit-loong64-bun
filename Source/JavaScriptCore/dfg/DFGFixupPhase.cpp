@@ -82,7 +82,7 @@ private:
 
     void fixupArithDivInt32(Node* node, Edge& leftChild, Edge& rightChild)
     {
-        if (optimizeForX86() || optimizeForARM64() || optimizeForARMv7IDIVSupported()) {
+        if (optimizeForX86() || optimizeForARM64() || optimizeForARMv7IDIVSupported() || optimizeForLOONGARCH64()) {
             fixIntOrBooleanEdge(leftChild);
             fixIntOrBooleanEdge(rightChild);
             // We need to be careful about skipping overflow check because div / mod can generate non integer values

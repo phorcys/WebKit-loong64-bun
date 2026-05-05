@@ -40,6 +40,11 @@ inline bool optimizeForARM64()
     return isARM64() && Options::useArchitectureSpecificOptimizations();
 }
 
+inline bool optimizeForLOONGARCH64()
+{
+    return isLOONGARCH64() && Options::useArchitectureSpecificOptimizations();
+}
+
 inline bool optimizeForX86()
 {
     return isX86() && Options::useArchitectureSpecificOptimizations();
