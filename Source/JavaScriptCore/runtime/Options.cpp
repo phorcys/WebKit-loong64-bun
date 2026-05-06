@@ -799,7 +799,6 @@ void Options::notifyOptionsChanged()
 
 #if CPU(LOONGARCH64)
     Options::useRegExpJIT() = false;
-    Options::useFTLJIT() = false;
 #endif
 
 #if !CPU(X86_64) && !CPU(ARM64)

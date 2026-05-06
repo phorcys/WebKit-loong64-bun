@@ -1546,6 +1546,18 @@ public:
             }
         }
 
+        if (isLOONGARCH64()) {
+            switch (*width) {
+            case Width8:
+            case Width16:
+            case Width32:
+            case Width64:
+                return LOONGARCH64Assembler::ImmediateBase<12>::isSImm<12>(offset);
+            case Width128:
+                return LOONGARCH64Assembler::ImmediateBase<12>::isSImm<12>(offset) && !(offset & 0xf);
+            }
+        }
+
 #if CPU(ARM_THUMB2)
         switch (opcode) {
         case Move:
@@ -1571,7 +1583,7 @@ public:
             return false;
         if (isX86())
             return true;
-        if (isARM64())
+        if (isARM64() || isLOONGARCH64())
             return !offset;
         if (isARM_THUMB2()) {
             switch (opcode) {
@@ -1590,6 +1602,8 @@ public:
     {
         if (isARM64())
             return isValidSignedImm9(offset);
+        if (isLOONGARCH64())
+            return LOONGARCH64Assembler::ImmediateBase<12>::isSImm<12>(offset);
         return false;
     }
 

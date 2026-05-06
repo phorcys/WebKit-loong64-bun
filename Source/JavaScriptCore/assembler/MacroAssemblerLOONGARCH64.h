@@ -136,7 +136,7 @@ public:
     static bool supportsFloatingPointSqrt() { return true; }
     static bool supportsFloatingPointAbs() { return true; }
     static bool supportsFloatingPointRounding() { return true; }
-    static bool supportsFloat16() { return false; }
+    static bool supportsFloat16() { return true; }
 
     enum RelationalCondition {
         Equal = Assembler::ConditionEQ,
@@ -281,10 +281,15 @@ public:
     void add64(FPRegisterID op1, FPRegisterID op2, FPRegisterID dest)
     {
         auto temp = temps<Data, Data2>();
-        m_assembler.movfr2grInsn<64>(temp.data(), op1);
-        m_assembler.movfr2grInsn<64>(temp.data2(), op2);
-        m_assembler.add_dInsn(temp.data(), temp.data(), temp.data2());
-        m_assembler.movgr2fr_dInsn(dest, temp.data());
+        add64(op1, op2, dest, temp.data(), temp.data2());
+    }
+
+    void add64(FPRegisterID op1, FPRegisterID op2, FPRegisterID dest, RegisterID scratch1, RegisterID scratch2)
+    {
+        m_assembler.movfr2grInsn<64>(scratch1, op1);
+        m_assembler.movfr2grInsn<64>(scratch2, op2);
+        m_assembler.add_dInsn(scratch1, scratch1, scratch2);
+        m_assembler.movgr2fr_dInsn(dest, scratch1);
     }
 
     void add64(TrustedImm32 imm, RegisterID dest)
@@ -465,10 +470,15 @@ public:
     void sub64(FPRegisterID op1, FPRegisterID op2, FPRegisterID dest)
     {
         auto temp = temps<Data, Data2>();
-        m_assembler.movfr2grInsn<64>(temp.data(), op1);
-        m_assembler.movfr2grInsn<64>(temp.data2(), op2);
-        m_assembler.sub_dInsn(temp.data(), temp.data(), temp.data2());
-        m_assembler.movgr2fr_dInsn(dest, temp.data());
+        sub64(op1, op2, dest, temp.data(), temp.data2());
+    }
+
+    void sub64(FPRegisterID op1, FPRegisterID op2, FPRegisterID dest, RegisterID scratch1, RegisterID scratch2)
+    {
+        m_assembler.movfr2grInsn<64>(scratch1, op1);
+        m_assembler.movfr2grInsn<64>(scratch2, op2);
+        m_assembler.sub_dInsn(scratch1, scratch1, scratch2);
+        m_assembler.movgr2fr_dInsn(dest, scratch1);
     }
 
     void sub64(TrustedImm32 imm, RegisterID dest)
@@ -508,6 +518,28 @@ public:
         loadImmediate(imm, temp.data());
         m_assembler.mul_wInsn(dest, temp.data(), rhs);
         m_assembler.maskRegister<32>(dest);
+    }
+
+    void mulHigh32(RegisterID left, RegisterID right, RegisterID dest)
+    {
+        m_assembler.mulh_wInsn(dest, left, right);
+        m_assembler.maskRegister<32>(dest);
+    }
+
+    void uMulHigh32(RegisterID left, RegisterID right, RegisterID dest)
+    {
+        m_assembler.mulh_wuInsn(dest, left, right);
+        m_assembler.zeroExtend<32>(dest);
+    }
+
+    void mulHigh64(RegisterID left, RegisterID right, RegisterID dest)
+    {
+        m_assembler.mulh_dInsn(dest, left, right);
+    }
+
+    void uMulHigh64(RegisterID left, RegisterID right, RegisterID dest)
+    {
+        m_assembler.mulh_duInsn(dest, left, right);
     }
 
     void mod32(RegisterID lhs, RegisterID rhs, RegisterID dest)
@@ -1801,6 +1833,15 @@ public:
         m_assembler.st_wInsn(temp.data(), temp.memory(), Imm::I12<0>());
     }
 
+    void or32(RegisterID src, Address address)
+    {
+        auto temp = temps<Data, Memory>();
+        auto resolution = resolveAddress(address, temp.memory());
+        m_assembler.ld_wInsn(temp.data(), resolution.base, Imm::I12(resolution.offset));
+        m_assembler.orInsn(temp.data(), src, temp.data());
+        m_assembler.st_wInsn(temp.data(), resolution.base, Imm::I12(resolution.offset));
+    }
+
     void or32(TrustedImm32 imm, AbsoluteAddress address)
     {
         auto temp = temps<Data, Memory>();
@@ -2004,6 +2045,17 @@ public:
         auto temp = temps<Data>();
         loadImmediate(TrustedImm32(-1), temp.data());
         m_assembler.xorInsn(dest, src, temp.data());
+    }
+
+    void depend32(RegisterID src, RegisterID dest)
+    {
+        m_assembler.xorInsn(dest, src, src);
+        m_assembler.maskRegister<32>(dest);
+    }
+
+    void depend64(RegisterID src, RegisterID dest)
+    {
+        m_assembler.xorInsn(dest, src, src);
     }
 
     void neg32(RegisterID dest)
@@ -2942,6 +2994,94 @@ public:
             RELEASE_ASSERT_NOT_REACHED();
         }
     }
+    void vectorZipLower(SIMDInfo simdInfo, FPRegisterID n, FPRegisterID m, FPRegisterID dest)
+    {
+        ASSERT(scalarTypeIsIntegral(simdInfo.lane));
+        switch (simdInfo.lane) {
+        case SIMDLane::i8x16: m_assembler.vilvl_bInsn(dest, m, n); return;
+        case SIMDLane::i16x8: m_assembler.vilvl_hInsn(dest, m, n); return;
+        case SIMDLane::i32x4: m_assembler.vilvl_wInsn(dest, m, n); return;
+        case SIMDLane::i64x2: m_assembler.vilvl_dInsn(dest, m, n); return;
+        default: RELEASE_ASSERT_NOT_REACHED();
+        }
+    }
+    void vectorZipHigher(SIMDInfo simdInfo, FPRegisterID n, FPRegisterID m, FPRegisterID dest)
+    {
+        ASSERT(scalarTypeIsIntegral(simdInfo.lane));
+        switch (simdInfo.lane) {
+        case SIMDLane::i8x16: m_assembler.vilvh_bInsn(dest, m, n); return;
+        case SIMDLane::i16x8: m_assembler.vilvh_hInsn(dest, m, n); return;
+        case SIMDLane::i32x4: m_assembler.vilvh_wInsn(dest, m, n); return;
+        case SIMDLane::i64x2: m_assembler.vilvh_dInsn(dest, m, n); return;
+        default: RELEASE_ASSERT_NOT_REACHED();
+        }
+    }
+    void vectorUnzipEven(SIMDInfo simdInfo, FPRegisterID n, FPRegisterID m, FPRegisterID dest)
+    {
+        ASSERT(scalarTypeIsIntegral(simdInfo.lane));
+        switch (simdInfo.lane) {
+        case SIMDLane::i8x16: m_assembler.vpickev_bInsn(dest, m, n); return;
+        case SIMDLane::i16x8: m_assembler.vpickev_hInsn(dest, m, n); return;
+        case SIMDLane::i32x4: m_assembler.vpickev_wInsn(dest, m, n); return;
+        case SIMDLane::i64x2: m_assembler.vpickev_dInsn(dest, m, n); return;
+        default: RELEASE_ASSERT_NOT_REACHED();
+        }
+    }
+    void vectorUnzipOdd(SIMDInfo simdInfo, FPRegisterID n, FPRegisterID m, FPRegisterID dest)
+    {
+        ASSERT(scalarTypeIsIntegral(simdInfo.lane));
+        switch (simdInfo.lane) {
+        case SIMDLane::i8x16: m_assembler.vpickod_bInsn(dest, m, n); return;
+        case SIMDLane::i16x8: m_assembler.vpickod_hInsn(dest, m, n); return;
+        case SIMDLane::i32x4: m_assembler.vpickod_wInsn(dest, m, n); return;
+        case SIMDLane::i64x2: m_assembler.vpickod_dInsn(dest, m, n); return;
+        default: RELEASE_ASSERT_NOT_REACHED();
+        }
+    }
+    void vectorReverse(SIMDInfo simdInfo, TrustedImm32 groupSize, FPRegisterID input, FPRegisterID dest)
+    {
+        ASSERT(scalarTypeIsIntegral(simdInfo.lane));
+        switch (groupSize.m_value) {
+        case 2:
+            switch (simdInfo.lane) {
+            case SIMDLane::i8x16: m_assembler.vshuf4i_bInsn(dest, input, 0xb1); return;
+            default: RELEASE_ASSERT_NOT_REACHED();
+            }
+        case 4:
+            switch (simdInfo.lane) {
+            case SIMDLane::i8x16: m_assembler.vshuf4i_bInsn(fpTempRegister, input, 0x1b); m_assembler.vilvl_wInsn(dest, fpTempRegister, fpTempRegister); return;
+            case SIMDLane::i16x8: m_assembler.vshuf4i_hInsn(dest, input, 0xb1); return;
+            default: RELEASE_ASSERT_NOT_REACHED();
+            }
+        case 8:
+            switch (simdInfo.lane) {
+            case SIMDLane::i8x16: m_assembler.vshuf4i_bInsn(fpTempRegister, input, 0x1b); m_assembler.vshuf4i_dInsn(dest, fpTempRegister, 0x1); return;
+            case SIMDLane::i16x8: m_assembler.vshuf4i_hInsn(fpTempRegister, input, 0x1b); m_assembler.vshuf4i_dInsn(dest, fpTempRegister, 0x1); return;
+            case SIMDLane::i32x4: m_assembler.vshuf4i_wInsn(dest, input, 0xb1); return;
+            default: RELEASE_ASSERT_NOT_REACHED();
+            }
+        default:
+            RELEASE_ASSERT_NOT_REACHED();
+        }
+    }
+    void vectorExtractPair(SIMDInfo simdInfo, TrustedImm32 firstLane, FPRegisterID n, FPRegisterID m, FPRegisterID dest)
+    {
+        ASSERT_UNUSED(simdInfo, simdInfo.lane == SIMDLane::i8x16);
+        RELEASE_ASSERT(firstLane.m_value >= 0 && firstLane.m_value <= 16);
+        if (!firstLane.m_value) {
+            moveVector(m, dest);
+            return;
+        }
+        if (firstLane.m_value == 16) {
+            moveVector(n, dest);
+            return;
+        }
+        v128_t control;
+        for (unsigned i = 0; i < 16; ++i)
+            control.u8x16[i] = firstLane.m_value + i;
+        move128ToVector(control, fpTempRegister);
+        vectorSwizzle2(m, n, fpTempRegister, dest);
+    }
     void vectorMulSat(FPRegisterID left, FPRegisterID right, FPRegisterID dest)
     {
         m_assembler.vmulwev_w_hInsn(fpTempRegister, left, right);
@@ -3623,17 +3763,31 @@ public:
     Jump branch32(RelationalCondition cond, RegisterID lhs, RegisterID rhs)
     {
         auto temp = temps<Data, Memory>();
-        m_assembler.signExtend<32>(temp.data(), lhs);
-        m_assembler.signExtend<32>(temp.memory(), rhs);
-        return makeBranch(cond, temp.data(), temp.memory());
+        return branch32(cond, lhs, rhs, temp.data(), temp.memory());
+    }
+
+    Jump branch32(RelationalCondition cond, RegisterID lhs, RegisterID rhs, RegisterID leftScratch, RegisterID rightScratch)
+    {
+        RELEASE_ASSERT(leftScratch != lhs && leftScratch != rhs);
+        RELEASE_ASSERT(rightScratch != lhs && rightScratch != rhs && rightScratch != leftScratch);
+        prepareBranch32Operand(cond, leftScratch, lhs);
+        prepareBranch32Operand(cond, rightScratch, rhs);
+        return makeBranch(cond, leftScratch, rightScratch);
     }
 
     Jump branch32(RelationalCondition cond, RegisterID lhs, TrustedImm32 imm)
     {
         auto temp = temps<Data, Memory>();
-        m_assembler.signExtend<32>(temp.data(), lhs);
-        loadImmediate(imm, temp.memory());
-        return makeBranch(cond, temp.data(), temp.memory());
+        return branch32(cond, lhs, imm, temp.data(), temp.memory());
+    }
+
+    Jump branch32(RelationalCondition cond, RegisterID lhs, TrustedImm32 imm, RegisterID leftScratch, RegisterID rightScratch)
+    {
+        RELEASE_ASSERT(leftScratch != lhs);
+        RELEASE_ASSERT(rightScratch != lhs && rightScratch != leftScratch);
+        prepareBranch32Operand(cond, leftScratch, lhs);
+        loadBranch32Immediate(cond, imm, rightScratch);
+        return makeBranch(cond, leftScratch, rightScratch);
     }
 
     Jump branch32(RelationalCondition cond, RegisterID lhs, Address address)
@@ -3829,6 +3983,21 @@ public:
         return branchTestFinalize(cond, temp.data());
     }
 
+    Jump branchAdd32(ResultCondition cond, RegisterID op1, RegisterID op2, RegisterID scratch, RegisterID dest)
+    {
+        if (cond != Overflow)
+            return branchAdd32(cond, op1, op2, dest);
+
+        RELEASE_ASSERT(scratch != op1);
+        RELEASE_ASSERT(scratch != op2);
+        RELEASE_ASSERT(scratch != dest);
+
+        m_assembler.add_dInsn(scratch, op1, op2);
+        m_assembler.maskRegister<32>(dest, scratch);
+        m_assembler.signExtend<32>(scratch, scratch);
+        return makeBranch(NotEqual, dest, scratch);
+    }
+
     Jump branchAdd32(ResultCondition cond, TrustedImm32 imm, RegisterID dest)
     {
         return branchAdd32(cond, dest, imm, dest);
@@ -3950,6 +4119,30 @@ public:
         return branchTestFinalize(cond, dest);
     }
 
+    Jump branchAdd64(ResultCondition cond, RegisterID op1, RegisterID op2, RegisterID scratch1, RegisterID scratch2, RegisterID dest)
+    {
+        if (cond != Overflow)
+            return branchAdd64(cond, op1, op2, dest);
+
+        RELEASE_ASSERT(scratch1 != op1 && scratch1 != op2 && scratch1 != dest);
+        RELEASE_ASSERT(scratch2 != op1 && scratch2 != op2 && scratch2 != dest && scratch2 != scratch1);
+
+        if (op1 == dest && op2 == dest) {
+            m_assembler.slli_dInsn(scratch2, dest, 1);
+            m_assembler.xorInsn(scratch1, scratch2, dest);
+            move(scratch2, dest);
+            return makeBranch(LessThan, scratch1, LOONGARCH64Registers::zero);
+        }
+
+        m_assembler.xorInsn(scratch1, op1, op2);
+        loadImmediate(TrustedImm32(-1), scratch2);
+        m_assembler.xorInsn(scratch1, scratch1, scratch2);
+        m_assembler.add_dInsn(dest, op1, op2);
+        m_assembler.xorInsn(scratch2, op1 == dest ? op2 : op1, dest);
+        m_assembler.andInsn(scratch1, scratch1, scratch2);
+        return makeBranch(LessThan, scratch1, LOONGARCH64Registers::zero);
+    }
+
     Jump branchAdd64(ResultCondition cond, TrustedImm32 imm, RegisterID dest)
     {
         return branchAdd64(cond, dest, imm, dest);
@@ -3993,6 +4186,23 @@ public:
         return branchTestFinalize(cond, temp.data());
     }
 
+    Jump branchSub32(ResultCondition cond, RegisterID op1, RegisterID op2, RegisterID scratch, RegisterID dest)
+    {
+        if (cond != Overflow)
+            return branchSub32(cond, op1, op2, dest);
+
+        RELEASE_ASSERT(scratch != op1);
+        RELEASE_ASSERT(scratch != op2);
+        RELEASE_ASSERT(scratch != dest);
+
+        m_assembler.signExtend<32>(scratch, op1);
+        m_assembler.signExtend<32>(dest, op2);
+        m_assembler.sub_dInsn(scratch, scratch, dest);
+        m_assembler.maskRegister<32>(dest, scratch);
+        m_assembler.signExtend<32>(scratch, scratch);
+        return makeBranch(NotEqual, dest, scratch);
+    }
+
     Jump branchSub32(ResultCondition cond, TrustedImm32 imm, RegisterID dest)
     {
         return branchSub32(cond, dest, imm, dest);
@@ -4015,6 +4225,21 @@ public:
 
         m_assembler.sub_dInsn(dest, op1, op2);
         return branchTestFinalize(cond, dest);
+    }
+
+    Jump branchSub64(ResultCondition cond, RegisterID op1, RegisterID op2, RegisterID scratch1, RegisterID scratch2, RegisterID dest)
+    {
+        if (cond != Overflow)
+            return branchSub64(cond, op1, op2, dest);
+
+        RELEASE_ASSERT(scratch1 != op1 && scratch1 != op2 && scratch1 != dest);
+        RELEASE_ASSERT(scratch2 != op1 && scratch2 != op2 && scratch2 != dest && scratch2 != scratch1);
+
+        m_assembler.xorInsn(scratch1, op1, op2);
+        m_assembler.sub_dInsn(dest, op1, op2);
+        m_assembler.xorInsn(scratch2, op1, dest);
+        m_assembler.andInsn(scratch1, scratch1, scratch2);
+        return makeBranch(LessThan, scratch1, LOONGARCH64Registers::zero);
     }
 
     Jump branchSub64(ResultCondition cond, TrustedImm32 imm, RegisterID dest)
@@ -4043,6 +4268,23 @@ public:
         m_assembler.mul_dInsn(temp.data(), temp.memory(), temp.data());
         m_assembler.maskRegister<32>(dest, temp.data());
         return branchTestFinalize(cond, temp.data());
+    }
+
+    Jump branchMul32(ResultCondition cond, RegisterID op1, RegisterID op2, RegisterID scratch, RegisterID dest)
+    {
+        if (cond != Overflow)
+            return branchMul32(cond, op1, op2, dest);
+
+        RELEASE_ASSERT(scratch != op1);
+        RELEASE_ASSERT(scratch != op2);
+        RELEASE_ASSERT(scratch != dest);
+
+        m_assembler.signExtend<32>(scratch, op1);
+        m_assembler.signExtend<32>(dest, op2);
+        m_assembler.mul_dInsn(scratch, scratch, dest);
+        m_assembler.maskRegister<32>(dest, scratch);
+        m_assembler.signExtend<32>(scratch, scratch);
+        return makeBranch(NotEqual, dest, scratch);
     }
 
     Jump branchMul32(ResultCondition cond, TrustedImm32 imm, RegisterID dest)
@@ -4075,6 +4317,20 @@ public:
 
         m_assembler.mul_dInsn(dest, op1, op2);
         return branchTestFinalize(cond, dest);
+    }
+
+    Jump branchMul64(ResultCondition cond, RegisterID op1, RegisterID op2, RegisterID scratch1, RegisterID scratch2, RegisterID dest)
+    {
+        if (cond != Overflow)
+            return branchMul64(cond, op1, op2, dest);
+
+        RELEASE_ASSERT(scratch1 != op1 && scratch1 != op2 && scratch1 != dest);
+        RELEASE_ASSERT(scratch2 != op1 && scratch2 != op2 && scratch2 != dest && scratch2 != scratch1);
+
+        m_assembler.mulh_dInsn(scratch1, op1, op2);
+        m_assembler.mul_dInsn(dest, op1, op2);
+        m_assembler.srai_dInsn(scratch2, dest, 0x3f);
+        return makeBranch(NotEqual, scratch1, scratch2);
     }
 
     Jump branchMul64(ResultCondition cond, TrustedImm32 imm, RegisterID dest)
@@ -4202,6 +4458,14 @@ public:
         return branchTestFinalize(cond, temp.data());
     }
 
+    Jump branchTest32(ResultCondition cond, RegisterID lhs, RegisterID rhs, RegisterID scratch)
+    {
+        m_assembler.zeroExtend<32>(scratch, lhs);
+        m_assembler.andInsn(scratch, scratch, rhs);
+        m_assembler.signExtend<32>(scratch);
+        return branchTestFinalize(cond, scratch);
+    }
+
     Jump branchTest32(ResultCondition cond, RegisterID lhs, TrustedImm32 imm = TrustedImm32(-1))
     {
         auto temp = temps<Data, Memory>();
@@ -4249,9 +4513,21 @@ public:
 
     Jump branchTest64(ResultCondition cond, RegisterID lhs, RegisterID rhs)
     {
+        if (lhs == rhs)
+            return branchTestFinalize(cond, lhs);
+
         RegisterID resultRegister = dataTempRegisterForAvoiding(lhs);
         m_assembler.andInsn(resultRegister, lhs, rhs);
         return branchTestFinalize(cond, resultRegister);
+    }
+
+    Jump branchTest64(ResultCondition cond, RegisterID lhs, RegisterID rhs, RegisterID scratch)
+    {
+        if (lhs == rhs)
+            return branchTestFinalize(cond, lhs);
+
+        m_assembler.andInsn(scratch, lhs, rhs);
+        return branchTestFinalize(cond, scratch);
     }
 
     Jump branchTest64(ResultCondition cond, RegisterID lhs, TrustedImm32 imm = TrustedImm32(-1))
@@ -4409,6 +4685,11 @@ public:
         return branchFP<32>(cond, lhs, rhs);
     }
 
+    Jump branchFloat(DoubleCondition cond, FPRegisterID lhs, FPRegisterID rhs, RegisterID scratch)
+    {
+        return branchFP<32>(cond, lhs, rhs, scratch);
+    }
+
     Jump branchFloatWithZero(DoubleCondition cond, FPRegisterID left)
     {
         return branchFPWithZero<32>(cond, left);
@@ -4417,6 +4698,11 @@ public:
     Jump branchDouble(DoubleCondition cond, FPRegisterID lhs, FPRegisterID rhs)
     {
         return branchFP<64>(cond, lhs, rhs);
+    }
+
+    Jump branchDouble(DoubleCondition cond, FPRegisterID lhs, FPRegisterID rhs, RegisterID scratch)
+    {
+        return branchFP<64>(cond, lhs, rhs, scratch);
     }
 
     Jump branchDoubleWithZero(DoubleCondition cond, FPRegisterID left)
@@ -4605,6 +4891,11 @@ public:
         m_assembler.faddInsn<32>(dest, op1, op2);
     }
 
+    void addFloat(FPRegisterID src, FPRegisterID dest)
+    {
+        addFloat(src, dest, dest);
+    }
+
     void addDouble(FPRegisterID src, FPRegisterID dest)
     {
         addDouble(src, dest, dest);
@@ -4625,6 +4916,11 @@ public:
     void subFloat(FPRegisterID op1, FPRegisterID op2, FPRegisterID dest)
     {
         m_assembler.fsubInsn<32>(dest, op1, op2);
+    }
+
+    void subFloat(FPRegisterID src, FPRegisterID dest)
+    {
+        subFloat(dest, src, dest);
     }
 
     void subDouble(FPRegisterID src, FPRegisterID dest)
@@ -4840,6 +5136,26 @@ public:
         m_assembler.fnegInsn<64>(dest, src);
     }
 
+    void floatMin(FPRegisterID op1, FPRegisterID op2, FPRegisterID dest)
+    {
+        m_assembler.fminInsn<32>(dest, op1, op2);
+    }
+
+    void floatMax(FPRegisterID op1, FPRegisterID op2, FPRegisterID dest)
+    {
+        m_assembler.fmaxInsn<32>(dest, op1, op2);
+    }
+
+    void doubleMin(FPRegisterID op1, FPRegisterID op2, FPRegisterID dest)
+    {
+        m_assembler.fminInsn<64>(dest, op1, op2);
+    }
+
+    void doubleMax(FPRegisterID op1, FPRegisterID op2, FPRegisterID dest)
+    {
+        m_assembler.fmaxInsn<64>(dest, op1, op2);
+    }
+
     void compareFloat(DoubleCondition cond, FPRegisterID lhs, FPRegisterID rhs, RegisterID dest)
     {
         compareFP<32>(cond, lhs, rhs, dest);
@@ -5036,6 +5352,45 @@ public:
         m_assembler.st_dInsn(temp.data(), LOONGARCH64Registers::sp, Imm::I12<0>());
     }
 
+    void pushToSave(RegisterID src)
+    {
+        m_assembler.addi_dInsn(LOONGARCH64Registers::sp, LOONGARCH64Registers::sp, Imm::I12<-16>());
+        m_assembler.st_dInsn(src, LOONGARCH64Registers::sp, Imm::I12<0>());
+    }
+
+    void pushToSaveImmediateWithoutTouchingRegisters(TrustedImm32 imm)
+    {
+        // FTL OSR exit emission cannot clobber allocated registers here. Save a
+        // scratch register in the second slot, use it to materialize the value,
+        // then restore it before returning.
+        RegisterID reg = dataTempRegister;
+        m_assembler.addi_dInsn(LOONGARCH64Registers::sp, LOONGARCH64Registers::sp, Imm::I12<-16>());
+        m_assembler.st_dInsn(reg, LOONGARCH64Registers::sp, Imm::I12<8>());
+        loadImmediate(imm, reg);
+        m_assembler.st_dInsn(reg, LOONGARCH64Registers::sp, Imm::I12<0>());
+        m_assembler.ld_dInsn(reg, LOONGARCH64Registers::sp, Imm::I12<8>());
+    }
+
+    void popToRestore(RegisterID dest)
+    {
+        m_assembler.ld_dInsn(dest, LOONGARCH64Registers::sp, Imm::I12<0>());
+        m_assembler.addi_dInsn(LOONGARCH64Registers::sp, LOONGARCH64Registers::sp, Imm::I12<16>());
+    }
+
+    void pushToSave(FPRegisterID src)
+    {
+        m_assembler.addi_dInsn(LOONGARCH64Registers::sp, LOONGARCH64Registers::sp, Imm::I12<-16>());
+        m_assembler.fst_dInsn(src, LOONGARCH64Registers::sp, Imm::I12<0>());
+    }
+
+    void popToRestore(FPRegisterID dest)
+    {
+        m_assembler.fld_dInsn(dest, LOONGARCH64Registers::sp, Imm::I12<0>());
+        m_assembler.addi_dInsn(LOONGARCH64Registers::sp, LOONGARCH64Registers::sp, Imm::I12<16>());
+    }
+
+    static constexpr ptrdiff_t pushToSaveByteOffset() { return 16; }
+
     void pushPair(RegisterID src1, RegisterID src2)
     {
         m_assembler.addi_dInsn(LOONGARCH64Registers::sp, LOONGARCH64Registers::sp, Imm::I12<-16>());
@@ -5058,17 +5413,14 @@ public:
 
     void abortWithReason(AbortReason reason)
     {
-        auto temp = temps<Data>();
-        loadImmediate(TrustedImm32(reason), temp.data());
+        loadImmediate(TrustedImm32(reason), dataTempRegister);
         m_assembler.breakInsn(0x5);
     }
 
     void abortWithReason(AbortReason reason, intptr_t misc)
     {
-        auto temp = temps<Data, Memory>();
-        loadImmediate(TrustedImm32(reason), temp.data());
-        loadImmediate(TrustedImm64(misc), temp.memory());
-        m_assembler.breakInsn(0x5);
+        loadImmediate(TrustedImm64(misc), memoryTempRegister);
+        abortWithReason(reason);
     }
 
     // Helpful break 0x5 for gdb.
@@ -5640,20 +5992,30 @@ public:
     void moveConditionally32(RelationalCondition cond, RegisterID lhs, RegisterID rhs, RegisterID src, RegisterID dest)
     {
         auto temp = temps<Data, Memory>();
-        m_assembler.signExtend<32>(temp.data(), lhs);
-        m_assembler.signExtend<32>(temp.memory(), rhs);
+        moveConditionally32(cond, lhs, rhs, src, dest, temp.data(), temp.memory());
+    }
 
-        branchForMoveConditionally(invert(cond), temp.data(), temp.memory(), 8);
+    void moveConditionally32(RelationalCondition cond, RegisterID lhs, RegisterID rhs, RegisterID src, RegisterID dest, RegisterID leftScratch, RegisterID rightScratch)
+    {
+        m_assembler.signExtend<32>(leftScratch, lhs);
+        m_assembler.signExtend<32>(rightScratch, rhs);
+
+        branchForMoveConditionally(invert(cond), leftScratch, rightScratch, 8);
         m_assembler.addi_dInsn(dest, src, Imm::I12<0>());
     }
 
     void moveConditionally32(RelationalCondition cond, RegisterID lhs, RegisterID rhs, RegisterID trueSrc, RegisterID falseSrc, RegisterID dest)
     {
         auto temp = temps<Data, Memory>();
-        m_assembler.signExtend<32>(temp.data(), lhs);
-        m_assembler.signExtend<32>(temp.memory(), rhs);
+        moveConditionally32(cond, lhs, rhs, trueSrc, falseSrc, dest, temp.data(), temp.memory());
+    }
 
-        branchForMoveConditionally(invert(cond), temp.data(), temp.memory(), 12);
+    void moveConditionally32(RelationalCondition cond, RegisterID lhs, RegisterID rhs, RegisterID trueSrc, RegisterID falseSrc, RegisterID dest, RegisterID leftScratch, RegisterID rightScratch)
+    {
+        m_assembler.signExtend<32>(leftScratch, lhs);
+        m_assembler.signExtend<32>(rightScratch, rhs);
+
+        branchForMoveConditionally(invert(cond), leftScratch, rightScratch, 12);
         m_assembler.addi_dInsn(dest, trueSrc, Imm::I12<0>());
         m_assembler.bInsn(8);
         m_assembler.addi_dInsn(dest, falseSrc, Imm::I12<0>());
@@ -5662,10 +6024,15 @@ public:
     void moveConditionally32(RelationalCondition cond, RegisterID lhs, TrustedImm32 imm, RegisterID trueSrc, RegisterID falseSrc, RegisterID dest)
     {
         auto temp = temps<Data, Memory>();
-        m_assembler.signExtend<32>(temp.data(), lhs);
-        loadImmediate(imm, temp.memory());
+        moveConditionally32(cond, lhs, imm, trueSrc, falseSrc, dest, temp.data(), temp.memory());
+    }
 
-        branchForMoveConditionally(invert(cond), temp.data(), temp.memory(), 12);
+    void moveConditionally32(RelationalCondition cond, RegisterID lhs, TrustedImm32 imm, RegisterID trueSrc, RegisterID falseSrc, RegisterID dest, RegisterID leftScratch, RegisterID rightScratch)
+    {
+        m_assembler.signExtend<32>(leftScratch, lhs);
+        loadImmediate(imm, rightScratch);
+
+        branchForMoveConditionally(invert(cond), leftScratch, rightScratch, 12);
         m_assembler.addi_dInsn(dest, trueSrc, Imm::I12<0>());
         m_assembler.bInsn(8);
         m_assembler.addi_dInsn(dest, falseSrc, Imm::I12<0>());
@@ -5701,8 +6068,13 @@ public:
     void moveConditionally64(RelationalCondition cond, RegisterID lhs, TrustedImm32 imm, RegisterID trueSrc, RegisterID falseSrc, RegisterID dest)
     {
         auto temp = temps<Data>();
-        loadImmediate(imm, temp.data());
-        branchForMoveConditionally(invert(cond), lhs, temp.data(), 12);
+        moveConditionally64(cond, lhs, imm, trueSrc, falseSrc, dest, temp.data());
+    }
+
+    void moveConditionally64(RelationalCondition cond, RegisterID lhs, TrustedImm32 imm, RegisterID trueSrc, RegisterID falseSrc, RegisterID dest, RegisterID scratch)
+    {
+        loadImmediate(imm, scratch);
+        branchForMoveConditionally(invert(cond), lhs, scratch, 12);
         m_assembler.addi_dInsn(dest, trueSrc, Imm::I12<0>());
         m_assembler.bInsn(8);
         m_assembler.addi_dInsn(dest, falseSrc, Imm::I12<0>());
@@ -5717,7 +6089,13 @@ public:
 
     void moveConditionallyFloat(DoubleCondition cond, FPRegisterID lhs, FPRegisterID rhs, RegisterID trueSrc, RegisterID falseSrc, RegisterID dest)
     {
-        Jump invcondBranch = branchFP<32, true>(cond, lhs, rhs);
+        auto temp = temps<Data>();
+        moveConditionallyFloat(cond, lhs, rhs, trueSrc, falseSrc, dest, temp.data());
+    }
+
+    void moveConditionallyFloat(DoubleCondition cond, FPRegisterID lhs, FPRegisterID rhs, RegisterID trueSrc, RegisterID falseSrc, RegisterID dest, RegisterID scratch)
+    {
+        Jump invcondBranch = branchFP<32, true>(cond, lhs, rhs, scratch);
         m_assembler.addi_dInsn(dest, trueSrc, Imm::I12<0>());
         Jump end = jump();
         invcondBranch.link(this);
@@ -5751,7 +6129,13 @@ public:
 
     void moveConditionallyDouble(DoubleCondition cond, FPRegisterID lhs, FPRegisterID rhs, RegisterID trueSrc, RegisterID falseSrc, RegisterID dest)
     {
-        Jump invcondBranch = branchFP<64, true>(cond, lhs, rhs);
+        auto temp = temps<Data>();
+        moveConditionallyDouble(cond, lhs, rhs, trueSrc, falseSrc, dest, temp.data());
+    }
+
+    void moveConditionallyDouble(DoubleCondition cond, FPRegisterID lhs, FPRegisterID rhs, RegisterID trueSrc, RegisterID falseSrc, RegisterID dest, RegisterID scratch)
+    {
+        Jump invcondBranch = branchFP<64, true>(cond, lhs, rhs, scratch);
         m_assembler.addi_dInsn(dest, trueSrc, Imm::I12<0>());
         Jump end = jump();
         invcondBranch.link(this);
@@ -5790,11 +6174,16 @@ public:
     void moveConditionallyTest32(ResultCondition cond, RegisterID value, RegisterID mask, RegisterID trueSrc, RegisterID falseSrc, RegisterID dest)
     {
         auto temp = temps<Data>();
-        m_assembler.andInsn(temp.data(), value, mask);
-        m_assembler.signExtend<32>(temp.data());
-        testFinalize(cond, temp.data(), temp.data());
+        moveConditionallyTest32(cond, value, mask, trueSrc, falseSrc, dest, temp.data());
+    }
 
-        m_assembler.beqInsn(temp.data(), LOONGARCH64Registers::zero, 12);
+    void moveConditionallyTest32(ResultCondition cond, RegisterID value, RegisterID mask, RegisterID trueSrc, RegisterID falseSrc, RegisterID dest, RegisterID scratch)
+    {
+        m_assembler.andInsn(scratch, value, mask);
+        m_assembler.signExtend<32>(scratch);
+        testFinalize(cond, scratch, scratch);
+
+        m_assembler.beqInsn(scratch, LOONGARCH64Registers::zero, 12);
         m_assembler.addi_dInsn(dest, trueSrc, Imm::I12<0>());
         m_assembler.bInsn(8);
         m_assembler.addi_dInsn(dest, falseSrc, Imm::I12<0>());
@@ -5803,12 +6192,17 @@ public:
     void moveConditionallyTest32(ResultCondition cond, RegisterID value, TrustedImm32 mask, RegisterID trueSrc, RegisterID falseSrc, RegisterID dest)
     {
         auto temp = temps<Data>();
-        loadImmediate(mask, temp.data());
-        m_assembler.andInsn(temp.data(), value, temp.data());
-        m_assembler.signExtend<32>(temp.data());
-        testFinalize(cond, temp.data(), temp.data());
+        moveConditionallyTest32(cond, value, mask, trueSrc, falseSrc, dest, temp.data());
+    }
 
-        m_assembler.beqInsn(temp.data(), LOONGARCH64Registers::zero, 12);
+    void moveConditionallyTest32(ResultCondition cond, RegisterID value, TrustedImm32 mask, RegisterID trueSrc, RegisterID falseSrc, RegisterID dest, RegisterID scratch)
+    {
+        loadImmediate(mask, scratch);
+        m_assembler.andInsn(scratch, value, scratch);
+        m_assembler.signExtend<32>(scratch);
+        testFinalize(cond, scratch, scratch);
+
+        m_assembler.beqInsn(scratch, LOONGARCH64Registers::zero, 12);
         m_assembler.addi_dInsn(dest, trueSrc, Imm::I12<0>());
         m_assembler.bInsn(8);
         m_assembler.addi_dInsn(dest, falseSrc, Imm::I12<0>());
@@ -5827,10 +6221,15 @@ public:
     void moveConditionallyTest64(ResultCondition cond, RegisterID value, RegisterID mask, RegisterID trueSrc, RegisterID falseSrc, RegisterID dest)
     {
         auto temp = temps<Data>();
-        m_assembler.andInsn(temp.data(), value, mask);
-        testFinalize(cond, temp.data(), temp.data());
+        moveConditionallyTest64(cond, value, mask, trueSrc, falseSrc, dest, temp.data());
+    }
 
-        m_assembler.beqInsn(temp.data(), LOONGARCH64Registers::zero, 12);
+    void moveConditionallyTest64(ResultCondition cond, RegisterID value, RegisterID mask, RegisterID trueSrc, RegisterID falseSrc, RegisterID dest, RegisterID scratch)
+    {
+        m_assembler.andInsn(scratch, value, mask);
+        testFinalize(cond, scratch, scratch);
+
+        m_assembler.beqInsn(scratch, LOONGARCH64Registers::zero, 12);
         m_assembler.addi_dInsn(dest, trueSrc, Imm::I12<0>());
         m_assembler.bInsn(8);
         m_assembler.addi_dInsn(dest, falseSrc, Imm::I12<0>());
@@ -5839,11 +6238,16 @@ public:
     void moveConditionallyTest64(ResultCondition cond, RegisterID value, TrustedImm32 mask, RegisterID trueSrc, RegisterID falseSrc, RegisterID dest)
     {
         auto temp = temps<Data>();
-        loadImmediate(mask, temp.data());
-        m_assembler.andInsn(temp.data(), value, temp.data());
-        testFinalize(cond, temp.data(), temp.data());
+        moveConditionallyTest64(cond, value, mask, trueSrc, falseSrc, dest, temp.data());
+    }
 
-        m_assembler.beqInsn(temp.data(), LOONGARCH64Registers::zero, 12);
+    void moveConditionallyTest64(ResultCondition cond, RegisterID value, TrustedImm32 mask, RegisterID trueSrc, RegisterID falseSrc, RegisterID dest, RegisterID scratch)
+    {
+        loadImmediate(mask, scratch);
+        m_assembler.andInsn(scratch, value, scratch);
+        testFinalize(cond, scratch, scratch);
+
+        m_assembler.beqInsn(scratch, LOONGARCH64Registers::zero, 12);
         m_assembler.addi_dInsn(dest, trueSrc, Imm::I12<0>());
         m_assembler.bInsn(8);
         m_assembler.addi_dInsn(dest, falseSrc, Imm::I12<0>());
@@ -5852,10 +6256,15 @@ public:
     void moveDoubleConditionally32(RelationalCondition cond, RegisterID lhs, RegisterID rhs, FPRegisterID trueSrc, FPRegisterID falseSrc, FPRegisterID dest)
     {
         auto temp = temps<Data, Memory>();
-        m_assembler.signExtend<32>(temp.data(), lhs);
-        m_assembler.signExtend<32>(temp.memory(), rhs);
+        moveDoubleConditionally32(cond, lhs, rhs, trueSrc, falseSrc, dest, temp.data(), temp.memory());
+    }
 
-        branchForMoveConditionally(invert(cond), temp.data(), temp.memory(), 12);
+    void moveDoubleConditionally32(RelationalCondition cond, RegisterID lhs, RegisterID rhs, FPRegisterID trueSrc, FPRegisterID falseSrc, FPRegisterID dest, RegisterID leftScratch, RegisterID rightScratch)
+    {
+        m_assembler.signExtend<32>(leftScratch, lhs);
+        m_assembler.signExtend<32>(rightScratch, rhs);
+
+        branchForMoveConditionally(invert(cond), leftScratch, rightScratch, 12);
         m_assembler.fmovInsn<64>(dest, trueSrc);
         m_assembler.bInsn(8);
         m_assembler.fmovInsn<64>(dest, falseSrc);
@@ -5864,10 +6273,15 @@ public:
     void moveDoubleConditionally32(RelationalCondition cond, RegisterID lhs, TrustedImm32 imm, FPRegisterID trueSrc, FPRegisterID falseSrc, FPRegisterID dest)
     {
         auto temp = temps<Data, Memory>();
-        m_assembler.signExtend<32>(temp.data(), lhs);
-        loadImmediate(imm, temp.memory());
+        moveDoubleConditionally32(cond, lhs, imm, trueSrc, falseSrc, dest, temp.data(), temp.memory());
+    }
 
-        branchForMoveConditionally(invert(cond), temp.data(), temp.memory(), 12);
+    void moveDoubleConditionally32(RelationalCondition cond, RegisterID lhs, TrustedImm32 imm, FPRegisterID trueSrc, FPRegisterID falseSrc, FPRegisterID dest, RegisterID leftScratch, RegisterID rightScratch)
+    {
+        m_assembler.signExtend<32>(leftScratch, lhs);
+        loadImmediate(imm, rightScratch);
+
+        branchForMoveConditionally(invert(cond), leftScratch, rightScratch, 12);
         m_assembler.fmovInsn<64>(dest, trueSrc);
         m_assembler.bInsn(8);
         m_assembler.fmovInsn<64>(dest, falseSrc);
@@ -5884,8 +6298,13 @@ public:
     void moveDoubleConditionally64(RelationalCondition cond, RegisterID lhs, TrustedImm32 imm, FPRegisterID trueSrc, FPRegisterID falseSrc, FPRegisterID dest)
     {
         auto temp = temps<Data>();
-        loadImmediate(imm, temp.data());
-        branchForMoveConditionally(invert(cond), lhs, temp.data(), 12);
+        moveDoubleConditionally64(cond, lhs, imm, trueSrc, falseSrc, dest, temp.data());
+    }
+
+    void moveDoubleConditionally64(RelationalCondition cond, RegisterID lhs, TrustedImm32 imm, FPRegisterID trueSrc, FPRegisterID falseSrc, FPRegisterID dest, RegisterID scratch)
+    {
+        loadImmediate(imm, scratch);
+        branchForMoveConditionally(invert(cond), lhs, scratch, 12);
         m_assembler.fmovInsn<64>(dest, trueSrc);
         m_assembler.bInsn(8);
         m_assembler.fmovInsn<64>(dest, falseSrc);
@@ -5893,7 +6312,13 @@ public:
 
     void moveDoubleConditionallyFloat(DoubleCondition cond, FPRegisterID lhs, FPRegisterID rhs, FPRegisterID trueSrc, FPRegisterID falseSrc, FPRegisterID dest)
     {
-        Jump invcondBranch = branchFP<32, true>(cond, lhs, rhs);
+        auto temp = temps<Data>();
+        moveDoubleConditionallyFloat(cond, lhs, rhs, trueSrc, falseSrc, dest, temp.data());
+    }
+
+    void moveDoubleConditionallyFloat(DoubleCondition cond, FPRegisterID lhs, FPRegisterID rhs, FPRegisterID trueSrc, FPRegisterID falseSrc, FPRegisterID dest, RegisterID scratch)
+    {
+        Jump invcondBranch = branchFP<32, true>(cond, lhs, rhs, scratch);
         m_assembler.fmovInsn<64>(dest, trueSrc);
         Jump end = jump();
         invcondBranch.link(this);
@@ -5903,7 +6328,13 @@ public:
 
     void moveDoubleConditionallyDouble(DoubleCondition cond, FPRegisterID lhs, FPRegisterID rhs, FPRegisterID trueSrc, FPRegisterID falseSrc, FPRegisterID dest)
     {
-        Jump invcondBranch = branchFP<64, true>(cond, lhs, rhs);
+        auto temp = temps<Data>();
+        moveDoubleConditionallyDouble(cond, lhs, rhs, trueSrc, falseSrc, dest, temp.data());
+    }
+
+    void moveDoubleConditionallyDouble(DoubleCondition cond, FPRegisterID lhs, FPRegisterID rhs, FPRegisterID trueSrc, FPRegisterID falseSrc, FPRegisterID dest, RegisterID scratch)
+    {
+        Jump invcondBranch = branchFP<64, true>(cond, lhs, rhs, scratch);
         m_assembler.fmovInsn<64>(dest, trueSrc);
         Jump end = jump();
         invcondBranch.link(this);
@@ -5936,11 +6367,16 @@ public:
     void moveDoubleConditionallyTest32(ResultCondition cond, RegisterID value, RegisterID mask, FPRegisterID trueSrc, FPRegisterID falseSrc, FPRegisterID dest)
     {
         auto temp = temps<Data>();
-        m_assembler.andInsn(temp.data(), value, mask);
-        m_assembler.signExtend<32>(temp.data());
-        testFinalize(cond, temp.data(), temp.data());
+        moveDoubleConditionallyTest32(cond, value, mask, trueSrc, falseSrc, dest, temp.data());
+    }
 
-        m_assembler.beqInsn(temp.data(), LOONGARCH64Registers::zero, 12);
+    void moveDoubleConditionallyTest32(ResultCondition cond, RegisterID value, RegisterID mask, FPRegisterID trueSrc, FPRegisterID falseSrc, FPRegisterID dest, RegisterID scratch)
+    {
+        m_assembler.andInsn(scratch, value, mask);
+        m_assembler.signExtend<32>(scratch);
+        testFinalize(cond, scratch, scratch);
+
+        m_assembler.beqInsn(scratch, LOONGARCH64Registers::zero, 12);
         m_assembler.fmovInsn<64>(dest, trueSrc);
         m_assembler.bInsn(8);
         m_assembler.fmovInsn<64>(dest, falseSrc);
@@ -5949,12 +6385,17 @@ public:
     void moveDoubleConditionallyTest32(ResultCondition cond, RegisterID value, TrustedImm32 mask, FPRegisterID trueSrc, FPRegisterID falseSrc, FPRegisterID dest)
     {
         auto temp = temps<Data>();
-        loadImmediate(mask, temp.data());
-        m_assembler.andInsn(temp.data(), value, temp.data());
-        m_assembler.signExtend<32>(temp.data());
-        testFinalize(cond, temp.data(), temp.data());
+        moveDoubleConditionallyTest32(cond, value, mask, trueSrc, falseSrc, dest, temp.data());
+    }
 
-        m_assembler.beqInsn(temp.data(), LOONGARCH64Registers::zero, 12);
+    void moveDoubleConditionallyTest32(ResultCondition cond, RegisterID value, TrustedImm32 mask, FPRegisterID trueSrc, FPRegisterID falseSrc, FPRegisterID dest, RegisterID scratch)
+    {
+        loadImmediate(mask, scratch);
+        m_assembler.andInsn(scratch, value, scratch);
+        m_assembler.signExtend<32>(scratch);
+        testFinalize(cond, scratch, scratch);
+
+        m_assembler.beqInsn(scratch, LOONGARCH64Registers::zero, 12);
         m_assembler.fmovInsn<64>(dest, trueSrc);
         m_assembler.bInsn(8);
         m_assembler.fmovInsn<64>(dest, falseSrc);
@@ -5963,10 +6404,15 @@ public:
     void moveDoubleConditionallyTest64(ResultCondition cond, RegisterID value, RegisterID mask, FPRegisterID trueSrc, FPRegisterID falseSrc, FPRegisterID dest)
     {
         auto temp = temps<Data>();
-        m_assembler.andInsn(temp.data(), value, mask);
-        testFinalize(cond, temp.data(), temp.data());
+        moveDoubleConditionallyTest64(cond, value, mask, trueSrc, falseSrc, dest, temp.data());
+    }
 
-        m_assembler.beqInsn(temp.data(), LOONGARCH64Registers::zero, 12);
+    void moveDoubleConditionallyTest64(ResultCondition cond, RegisterID value, RegisterID mask, FPRegisterID trueSrc, FPRegisterID falseSrc, FPRegisterID dest, RegisterID scratch)
+    {
+        m_assembler.andInsn(scratch, value, mask);
+        testFinalize(cond, scratch, scratch);
+
+        m_assembler.beqInsn(scratch, LOONGARCH64Registers::zero, 12);
         m_assembler.fmovInsn<64>(dest, trueSrc);
         m_assembler.bInsn(8);
         m_assembler.fmovInsn<64>(dest, falseSrc);
@@ -5975,11 +6421,16 @@ public:
     void moveDoubleConditionallyTest64(ResultCondition cond, RegisterID value, TrustedImm32 mask, FPRegisterID trueSrc, FPRegisterID falseSrc, FPRegisterID dest)
     {
         auto temp = temps<Data>();
-        loadImmediate(mask, temp.data());
-        m_assembler.andInsn(temp.data(), value, temp.data());
-        testFinalize(cond, temp.data(), temp.data());
+        moveDoubleConditionallyTest64(cond, value, mask, trueSrc, falseSrc, dest, temp.data());
+    }
 
-        m_assembler.beqInsn(temp.data(), LOONGARCH64Registers::zero, 12);
+    void moveDoubleConditionallyTest64(ResultCondition cond, RegisterID value, TrustedImm32 mask, FPRegisterID trueSrc, FPRegisterID falseSrc, FPRegisterID dest, RegisterID scratch)
+    {
+        loadImmediate(mask, scratch);
+        m_assembler.andInsn(scratch, value, scratch);
+        testFinalize(cond, scratch, scratch);
+
+        m_assembler.beqInsn(scratch, LOONGARCH64Registers::zero, 12);
         m_assembler.fmovInsn<64>(dest, trueSrc);
         m_assembler.bInsn(8);
         m_assembler.fmovInsn<64>(dest, falseSrc);
@@ -5987,78 +6438,70 @@ public:
 
     void convertDoubleToFloat16(FPRegisterID src, FPRegisterID dest)
     {
-        UNUSED_PARAM(src);
-        UNUSED_PARAM(dest);
-        UNREACHABLE_FOR_PLATFORM();
+        m_assembler.fcvt_s_dInsn(dest, src);
+        // vfcvt.h.s packs b.fp32 into the low half and a.fp32 into the high half.
+        // Only lane 0 carries the scalar Float16 value, so using dest for both inputs avoids scratch FPRs.
+        m_assembler.vfcvt_h_sInsn(dest, dest, dest);
     }
 
     void convertFloat16ToDouble(FPRegisterID src, FPRegisterID dest)
     {
-        UNUSED_PARAM(src);
-        UNUSED_PARAM(dest);
-        UNREACHABLE_FOR_PLATFORM();
+        m_assembler.vfcvtl_s_hInsn(dest, src);
+        m_assembler.fcvt_d_sInsn(dest, dest);
     }
 
     void loadFloat16(Address address, FPRegisterID dest)
     {
-        UNUSED_PARAM(address);
-        UNUSED_PARAM(dest);
-        UNREACHABLE_FOR_PLATFORM();
+        auto resolution = resolveAddress(address, lazyTemp<Memory>());
+        m_assembler.vldrepl_hInsn(dest, resolution.base, resolution.offset);
     }
 
     void loadFloat16(BaseIndex address, FPRegisterID dest)
     {
-        UNUSED_PARAM(address);
-        UNUSED_PARAM(dest);
-        UNREACHABLE_FOR_PLATFORM();
+        auto resolution = resolveAddress(address, lazyTemp<Memory>());
+        m_assembler.vldrepl_hInsn(dest, resolution.base, resolution.offset);
     }
 
     void loadFloat16(TrustedImmPtr address, FPRegisterID dest)
     {
-        UNUSED_PARAM(address);
-        UNUSED_PARAM(dest);
-        UNREACHABLE_FOR_PLATFORM();
+        auto temp = temps<Memory>();
+        loadImmediate(address, temp.memory());
+        m_assembler.vldrepl_hInsn(dest, temp.memory(), 0);
     }
 
     void moveZeroToFloat16(FPRegisterID reg)
     {
-        UNUSED_PARAM(reg);
-        UNREACHABLE_FOR_PLATFORM();
+        moveZeroToVector(reg);
     }
 
     void move16ToFloat16(RegisterID src, FPRegisterID dest)
     {
-        UNUSED_PARAM(src);
-        UNUSED_PARAM(dest);
-        UNREACHABLE_FOR_PLATFORM();
+        moveZeroToVector(dest);
+        m_assembler.vinsgr2vr_hInsn(dest, src, 0);
     }
 
     void move16ToFloat16(TrustedImm32 imm, FPRegisterID dest)
     {
-        UNUSED_PARAM(imm);
-        UNUSED_PARAM(dest);
-        UNREACHABLE_FOR_PLATFORM();
+        auto temp = temps<Data>();
+        move(imm, temp.data());
+        move16ToFloat16(temp.data(), dest);
     }
 
     void moveFloat16To16(FPRegisterID src, RegisterID dest)
     {
-        UNUSED_PARAM(src);
-        UNUSED_PARAM(dest);
-        UNREACHABLE_FOR_PLATFORM();
+        m_assembler.vpickve2gr_huInsn(dest, src, 0);
     }
 
     void storeFloat16(FPRegisterID src, Address address)
     {
-        UNUSED_PARAM(src);
-        UNUSED_PARAM(address);
-        UNREACHABLE_FOR_PLATFORM();
+        auto resolution = resolveAddress(address, lazyTemp<Memory>());
+        m_assembler.vstelm_hInsn(src, resolution.base, resolution.offset, 0);
     }
 
     void storeFloat16(FPRegisterID src, BaseIndex address)
     {
-        UNUSED_PARAM(src);
-        UNUSED_PARAM(address);
-        UNREACHABLE_FOR_PLATFORM();
+        auto resolution = resolveAddress(address, lazyTemp<Memory>());
+        m_assembler.vstelm_hInsn(src, resolution.base, resolution.offset, 0);
     }
 
 private:
@@ -6223,6 +6666,42 @@ private:
                 }
             });
         return Jump(label);
+    }
+
+    static bool isUnsigned32BitRelationalCompare(RelationalCondition cond)
+    {
+        switch (cond) {
+        case Above:
+        case AboveOrEqual:
+        case Below:
+        case BelowOrEqual:
+            return true;
+        case Equal:
+        case NotEqual:
+        case GreaterThan:
+        case GreaterThanOrEqual:
+        case LessThan:
+        case LessThanOrEqual:
+            return false;
+        }
+        RELEASE_ASSERT_NOT_REACHED();
+        return false;
+    }
+
+    void prepareBranch32Operand(RelationalCondition cond, RegisterID dest, RegisterID src)
+    {
+        if (isUnsigned32BitRelationalCompare(cond))
+            m_assembler.zeroExtend<32>(dest, src);
+        else
+            m_assembler.signExtend<32>(dest, src);
+    }
+
+    void loadBranch32Immediate(RelationalCondition cond, TrustedImm32 imm, RegisterID dest)
+    {
+        if (isUnsigned32BitRelationalCompare(cond))
+            loadImmediate(TrustedImm64(static_cast<uint32_t>(imm.m_value)), dest);
+        else
+            loadImmediate(imm, dest);
     }
 
     Jump branchTestFinalize(ResultCondition cond, RegisterID src)
@@ -6439,50 +6918,56 @@ private:
     Jump branchFP(DoubleCondition cond, FPRegisterID lhs, FPRegisterID rhs)
     {
         auto temp = temps<Data>();
+        return branchFP<fpSize, invert>(cond, lhs, rhs, temp.data());
+    }
+
+    template<unsigned fpSize, bool invert = false>
+    Jump branchFP(DoubleCondition cond, FPRegisterID lhs, FPRegisterID rhs, RegisterID scratch)
+    {
         JumpList unorderedJump;
 
         // Detect any NaN values.
         m_assembler.fclassInsn<fpSize>(fpTempRegister2, lhs);
-        m_assembler.movfr2grInsn<fpSize>(temp.data(), fpTempRegister2);
-        m_assembler.andiInsn(temp.data(), temp.data(), Imm::I12<0b0000000011>());
-        unorderedJump.append(makeBranch(NotEqual, temp.data(), LOONGARCH64Registers::zero));
+        m_assembler.movfr2grInsn<fpSize>(scratch, fpTempRegister2);
+        m_assembler.andiInsn(scratch, scratch, Imm::I12<0b0000000011>());
+        unorderedJump.append(makeBranch(NotEqual, scratch, LOONGARCH64Registers::zero));
 
         m_assembler.fclassInsn<fpSize>(fpTempRegister2, rhs);
-        m_assembler.movfr2grInsn<fpSize>(temp.data(), fpTempRegister2);
-        m_assembler.andiInsn(temp.data(), temp.data(), Imm::I12<0b0000000011>());
-        unorderedJump.append(makeBranch(NotEqual, temp.data(), LOONGARCH64Registers::zero));
+        m_assembler.movfr2grInsn<fpSize>(scratch, fpTempRegister2);
+        m_assembler.andiInsn(scratch, scratch, Imm::I12<0b0000000011>());
+        unorderedJump.append(makeBranch(NotEqual, scratch, LOONGARCH64Registers::zero));
 
         switch (cond) {
         case DoubleEqualAndOrdered:
         case DoubleEqualOrUnordered:
             m_assembler.fcmp_ceqInsn<fpSize>(fcc0, lhs, rhs);
-            m_assembler.movcf2grInsn(temp.data(), fcc0);
+            m_assembler.movcf2grInsn(scratch, fcc0);
             break;
         case DoubleNotEqualAndOrdered:
         case DoubleNotEqualOrUnordered:
             m_assembler.fcmp_ceqInsn<fpSize>(fcc0, lhs, rhs);
-            m_assembler.movcf2grInsn(temp.data(), fcc0);
-            m_assembler.xoriInsn(temp.data(), temp.data(), Imm::I12<1>());
+            m_assembler.movcf2grInsn(scratch, fcc0);
+            m_assembler.xoriInsn(scratch, scratch, Imm::I12<1>());
             break;
         case DoubleGreaterThanAndOrdered:
         case DoubleGreaterThanOrUnordered:
             m_assembler.fcmp_cltInsn<fpSize>(fcc0, rhs, lhs);
-            m_assembler.movcf2grInsn(temp.data(), fcc0);
+            m_assembler.movcf2grInsn(scratch, fcc0);
             break;
         case DoubleGreaterThanOrEqualAndOrdered:
         case DoubleGreaterThanOrEqualOrUnordered:
             m_assembler.fcmp_cleInsn<fpSize>(fcc0, rhs, lhs);
-            m_assembler.movcf2grInsn(temp.data(), fcc0);
+            m_assembler.movcf2grInsn(scratch, fcc0);
             break;
         case DoubleLessThanAndOrdered:
         case DoubleLessThanOrUnordered:
             m_assembler.fcmp_cltInsn<fpSize>(fcc0, lhs, rhs);
-            m_assembler.movcf2grInsn(temp.data(), fcc0);
+            m_assembler.movcf2grInsn(scratch, fcc0);
             break;
         case DoubleLessThanOrEqualAndOrdered:
         case DoubleLessThanOrEqualOrUnordered:
             m_assembler.fcmp_cleInsn<fpSize>(fcc0, lhs, rhs);
-            m_assembler.movcf2grInsn(temp.data(), fcc0);
+            m_assembler.movcf2grInsn(scratch, fcc0);
             break;
         }
 
@@ -6496,7 +6981,7 @@ private:
         case DoubleGreaterThanOrEqualAndOrdered:
         case DoubleLessThanAndOrdered:
         case DoubleLessThanOrEqualAndOrdered:
-            m_assembler.addi_dInsn(temp.data(), LOONGARCH64Registers::zero, Imm::I12<0>());
+            m_assembler.addi_dInsn(scratch, LOONGARCH64Registers::zero, Imm::I12<0>());
             break;
         case DoubleEqualOrUnordered:
         case DoubleNotEqualOrUnordered:
@@ -6504,12 +6989,12 @@ private:
         case DoubleGreaterThanOrEqualOrUnordered:
         case DoubleLessThanOrUnordered:
         case DoubleLessThanOrEqualOrUnordered:
-            m_assembler.addi_dInsn(temp.data(), LOONGARCH64Registers::zero, Imm::I12<1>());
+            m_assembler.addi_dInsn(scratch, LOONGARCH64Registers::zero, Imm::I12<1>());
             break;
         }
 
         end.link(this);
-        return makeBranch(invert ? Equal : NotEqual, temp.data(), LOONGARCH64Registers::zero);
+        return makeBranch(invert ? Equal : NotEqual, scratch, LOONGARCH64Registers::zero);
     }
 
     template<unsigned fpSize, bool invert = false>

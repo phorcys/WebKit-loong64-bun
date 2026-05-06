@@ -424,6 +424,9 @@ inline bool isVectorSwizzle2Valid(const Inst& inst)
 {
 #if CPU(ARM64)
     return inst.args[1].fpr() == inst.args[0].fpr() + 1;
+#elif CPU(LOONGARCH64)
+    UNUSED_PARAM(inst);
+    return true;
 #else
     UNUSED_PARAM(inst);
     return false;
