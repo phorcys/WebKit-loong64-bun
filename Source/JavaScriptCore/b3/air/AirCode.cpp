@@ -55,9 +55,9 @@ static void defaultPrologueGenerator(CCallHelpers& jit, Code& code)
 {
     jit.emitFunctionPrologue();
 
-    // NOTE: on ARM64, if the callee saves have bigger offsets due to a potential tail call,
+    // NOTE: on ARM64/LoongArch64, if the callee saves have bigger offsets due to a potential tail call,
     // the macro assembler might assert scratch register usage on store operations emitted by emitSave.
-    AllowMacroScratchRegisterUsageIf allowScratch(jit, isARM64() || isARM_THUMB2());
+    AllowMacroScratchRegisterUsageIf allowScratch(jit, isARM64() || isARM_THUMB2() || isLOONGARCH64());
 
     if (code.frameSize()) {
         jit.subPtr(MacroAssembler::TrustedImm32(code.frameSize()), MacroAssembler::stackPointerRegister);
@@ -149,9 +149,9 @@ void Code::emitDefaultPrologue(CCallHelpers& jit)
 void Code::emitEpilogue(CCallHelpers& jit)
 {
     if (frameSize()) {
-        // NOTE: on ARM64, if the callee saves have bigger offsets due to a potential tail call,
+        // NOTE: on ARM64/LoongArch64, if the callee saves have bigger offsets due to a potential tail call,
         // the macro assembler might assert scratch register usage on load operations emitted by emitRestore.
-        AllowMacroScratchRegisterUsageIf allowScratch(jit, isARM64());
+        AllowMacroScratchRegisterUsageIf allowScratch(jit, isARM64() || isLOONGARCH64());
         jit.emitRestore(calleeSaveRegisterAtOffsetList());
         jit.emitFunctionEpilogue();
     } else

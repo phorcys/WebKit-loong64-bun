@@ -2327,9 +2327,14 @@ private:
         PatchpointValue* result = m_out.patchpoint(Double);
         result->append(value, ValueRep::SomeRegister);
         result->append(m_out.doubleEncodeOffsetAsDouble, ValueRep::SomeRegister);
+        if (isLOONGARCH64())
+            result->numGPScratchRegisters = 2;
         result->setGenerator(
             [](CCallHelpers& jit, const StackmapGenerationParams& params) {
-                jit.add64(params[1].fpr(), params[2].fpr(), params[0].fpr());
+                if (isLOONGARCH64())
+                    jit.add64(params[1].fpr(), params[2].fpr(), params[0].fpr(), params.gpScratch(0), params.gpScratch(1));
+                else
+                    jit.add64(params[1].fpr(), params[2].fpr(), params[0].fpr());
             });
         result->effects = Effects::none();
         return result;
@@ -2342,10 +2347,15 @@ private:
         result->append(m_out.doubleEncodeOffsetAsDouble, ValueRep::SomeRegister);
         if (isX86_64() && !isX86_64_AVX())
             result->clobber(RegisterSet::macroClobberedFPRs());
+        if (isLOONGARCH64())
+            result->numGPScratchRegisters = 2;
         result->setGenerator(
             [](CCallHelpers& jit, const StackmapGenerationParams& params) {
                 AllowMacroScratchRegisterUsageIf allowScratchIf(jit, isX86_64() && !isX86_64_AVX());
-                jit.sub64(params[1].fpr(), params[2].fpr(), params[0].fpr());
+                if (isLOONGARCH64())
+                    jit.sub64(params[1].fpr(), params[2].fpr(), params[0].fpr(), params.gpScratch(0), params.gpScratch(1));
+                else
+                    jit.sub64(params[1].fpr(), params[2].fpr(), params[0].fpr());
             });
         result->effects = Effects::none();
         return result;
@@ -22560,8 +22570,8 @@ IGNORE_CLANG_WARNINGS_END
         LBasicBlock lastNext = m_out.insertNewBlocksBefore(continuation);
 
         PatchpointValue* patchpoint = m_out.patchpoint(pointerType());
-        if (isARM64()) {
-            // emitAllocateWithNonNullAllocator uses the scratch registers on ARM.
+        if (isARM64() || isLOONGARCH64()) {
+            // emitAllocateWithNonNullAllocator uses the scratch registers on ARM and LoongArch.
             patchpoint->clobber(RegisterSet::macroClobberedGPRs());
         }
         patchpoint->effects.terminal = true;
@@ -22577,7 +22587,7 @@ IGNORE_CLANG_WARNINGS_END
 
         patchpoint->setGenerator(
             [=] (CCallHelpers& jit, const StackmapGenerationParams& params) {
-                AllowMacroScratchRegisterUsageIf allowScratchIf(jit, isARM64());
+                AllowMacroScratchRegisterUsageIf allowScratchIf(jit, isARM64() || isLOONGARCH64());
                 CCallHelpers::JumpList jumpToSlowPath;
 
                 GPRReg allocatorGPR;

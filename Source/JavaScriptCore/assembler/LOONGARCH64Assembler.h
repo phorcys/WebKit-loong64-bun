@@ -1268,6 +1268,10 @@ struct MUL_D : RRRTypeBase<Opcode17::MUL_D_OP, RegistersBase::GGG> {
     static constexpr const char* name = "mul.d";
 };
 
+struct MULH_W : RRRTypeBase<Opcode17::MULH_W_OP, RegistersBase::GGG> {
+    static constexpr const char* name = "mulh.w";
+};
+
 struct MULH_D : RRRTypeBase<Opcode17::MULH_D_OP, RegistersBase::GGG> {
     static constexpr const char* name = "mulh.d";
 };
@@ -2075,6 +2079,7 @@ public:
     void sra_wInsn(RegisterID rd, RegisterID rj, RegisterID rk) { insn(LOONGARCH64Instructions::SRA_W::construct(rk, rj, rd)); }
 
     void mul_dInsn(RegisterID rd, RegisterID rj, RegisterID rk) { insn(LOONGARCH64Instructions::MUL_D::construct(rk, rj, rd)); }
+    void mulh_wInsn(RegisterID rd, RegisterID rj, RegisterID rk) { insn(LOONGARCH64Instructions::MULH_W::construct(rk, rj, rd)); }
     void mulh_dInsn(RegisterID rd, RegisterID rj, RegisterID rk) { insn(LOONGARCH64Instructions::MULH_D::construct(rk, rj, rd)); }
     void mulh_wuInsn(RegisterID rd, RegisterID rj, RegisterID rk) { insn(LOONGARCH64Instructions::MULH_WU::construct(rk, rj, rd)); }
     void mulh_duInsn(RegisterID rd, RegisterID rj, RegisterID rk) { insn(LOONGARCH64Instructions::MULH_DU::construct(rk, rj, rd)); }
@@ -2439,15 +2444,19 @@ public:
     void vpickev_bInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x711e0000, vd, vj, vk)); }
     void vpickev_hInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x711e8000, vd, vj, vk)); }
     void vpickev_wInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x711f0000, vd, vj, vk)); }
+    void vpickev_dInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x711f8000, vd, vj, vk)); }
     void vpickod_bInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x71200000, vd, vj, vk)); }
     void vpickod_hInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x71208000, vd, vj, vk)); }
     void vpickod_wInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x71210000, vd, vj, vk)); }
+    void vpickod_dInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x71218000, vd, vj, vk)); }
     void vilvl_bInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x711a0000, vd, vj, vk)); }
     void vilvl_hInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x711a8000, vd, vj, vk)); }
     void vilvl_wInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x711b0000, vd, vj, vk)); }
+    void vilvl_dInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x711b8000, vd, vj, vk)); }
     void vilvh_bInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x711c0000, vd, vj, vk)); }
     void vilvh_hInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x711c8000, vd, vj, vk)); }
     void vilvh_wInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x711d0000, vd, vj, vk)); }
+    void vilvh_dInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x711d8000, vd, vj, vk)); }
     void vhaddw_h_bInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70540000, vd, vj, vk)); }
     void vhaddw_w_hInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70548000, vd, vj, vk)); }
     void vhaddw_hu_buInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x70580000, vd, vj, vk)); }
@@ -2468,6 +2477,10 @@ public:
     void vshuf_bInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk, FPRegisterID va) { insn(0x0d500000 | (LOONGARCH64Instructions::registerValue(va) << 15) | (LOONGARCH64Instructions::registerValue(vk) << 10) | (LOONGARCH64Instructions::registerValue(vj) << 5) | LOONGARCH64Instructions::registerValue(vd)); }
     void vextrins_wInsn(FPRegisterID vd, FPRegisterID vj, uint8_t imm) { insn(lsxVVUInsn(0x73840000, vd, vj, imm)); }
     void vextrins_dInsn(FPRegisterID vd, FPRegisterID vj, uint8_t imm) { insn(lsxVVUInsn(0x73800000, vd, vj, imm)); }
+    void vshuf4i_bInsn(FPRegisterID vd, FPRegisterID vj, uint8_t imm) { insn(lsxVVUInsn(0x73900000, vd, vj, imm)); }
+    void vshuf4i_hInsn(FPRegisterID vd, FPRegisterID vj, uint8_t imm) { insn(lsxVVUInsn(0x73940000, vd, vj, imm)); }
+    void vshuf4i_wInsn(FPRegisterID vd, FPRegisterID vj, uint8_t imm) { insn(lsxVVUInsn(0x73980000, vd, vj, imm)); }
+    void vshuf4i_dInsn(FPRegisterID vd, FPRegisterID vj, uint8_t imm) { insn(lsxVVUInsn(0x739c0000, vd, vj, imm)); }
     void vori_bInsn(FPRegisterID vd, FPRegisterID vj, uint8_t imm) { insn(lsxVVUInsn(0x73d40000, vd, vj, imm)); }
     void vldiInsn(FPRegisterID vd, int32_t imm) { RELEASE_ASSERT(ImmediateBase<13>::isSImm<13>(imm)); insn(0x73e00000 | ((uint32_t(imm) & 0x1fff) << 5) | LOONGARCH64Instructions::registerValue(vd)); }
 
@@ -2560,7 +2573,11 @@ public:
     void vssrarni_h_wInsn(FPRegisterID vd, FPRegisterID vj, uint8_t shift) { RELEASE_ASSERT(shift < 32); insn(lsxVVUInsn(0x73688000, vd, vj, shift)); }
 
     void vfcvt_s_dInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x71468000, vd, vj, vk)); }
+    void vfcvt_h_sInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x71460000, vd, vj, vk)); }
+    void vfcvtl_s_hInsn(FPRegisterID vd, FPRegisterID vj) { insn(lsxVVInsn(0x729de800, vd, vj)); }
+    void vfcvth_s_hInsn(FPRegisterID vd, FPRegisterID vj) { insn(lsxVVInsn(0x729dec00, vd, vj)); }
     void vfcvtl_d_sInsn(FPRegisterID vd, FPRegisterID vj) { insn(lsxVVInsn(0x729df000, vd, vj)); }
+    void vfcvth_d_sInsn(FPRegisterID vd, FPRegisterID vj) { insn(lsxVVInsn(0x729df400, vd, vj)); }
     void vffint_s_wInsn(FPRegisterID vd, FPRegisterID vj) { insn(lsxVVInsn(0x729e0000, vd, vj)); }
     void vffint_s_wuInsn(FPRegisterID vd, FPRegisterID vj) { insn(lsxVVInsn(0x729e0400, vd, vj)); }
     void vffintl_d_wInsn(FPRegisterID vd, FPRegisterID vj) { insn(lsxVVInsn(0x729e1000, vd, vj)); }

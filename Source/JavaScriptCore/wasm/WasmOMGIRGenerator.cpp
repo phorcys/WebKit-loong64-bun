@@ -4288,7 +4288,7 @@ auto OMGIRGenerator::addSIMDShuffle(v128_t imm, ExpressionType a, ExpressionType
         return { };
     }
 
-    if constexpr (!isARM64())
+    if constexpr (!isARM64() && !isLOONGARCH64())
         UNREACHABLE_FOR_PLATFORM();
 
     Value* indexes = m_currentBlock->appendNew<Const128Value>(m_proc, origin(), imm);
@@ -5625,7 +5625,7 @@ static inline void prepareForTailCallImpl(unsigned functionIndex, CCallHelpers& 
     {
         ShuffleEntry entry;
         entry.src = ShuffleLocation::fromStack(fpOffsetToSPOffset(CallFrame::returnPCOffset()));
-#if CPU(ARM) || CPU(ARM64) || CPU(RISCV64)
+#if CPU(ARM) || CPU(ARM64) || CPU(RISCV64) || CPU(LOONGARCH64)
         ASSERT(!calleeSaves.find(MacroAssembler::linkRegister));
         entry.dst = ShuffleLocation::fromGPR(MacroAssembler::linkRegister);
 #else
@@ -5831,7 +5831,7 @@ static inline void prepareForTailCallImpl(unsigned functionIndex, CCallHelpers& 
 
     auto newSPAtPrologueOffsetFromSP = newFPOffsetFromSP + prologueStackPointerDelta();
 
-#if CPU(ARM) || CPU(ARM64) || CPU(RISCV64)
+#if CPU(ARM) || CPU(ARM64) || CPU(RISCV64) || CPU(LOONGARCH64)
     // the return PC should already be in the linkRegister from the shuffle above.
     if (WasmOMGIRGeneratorInternal::verboseTailCalls) {
         jit.probeDebug([] (Probe::Context& context) {

@@ -329,7 +329,7 @@ public:
         storeDouble(src, addressForPoke(index));
     }
 
-#if !CPU(ARM64)
+#if !CPU(ARM64) && !CPU(LOONGARCH64)
     void pushToSave(RegisterID src)
     {
         push(src);
@@ -354,7 +354,7 @@ public:
     }
     
     static constexpr ptrdiff_t pushToSaveByteOffset() { return sizeof(void*); }
-#endif // !CPU(ARM64)
+#endif // !CPU(ARM64) && !CPU(LOONGARCH64)
 
 #if CPU(X86_64) || CPU(ARM64) || CPU(RISCV64) || CPU(LOONGARCH64)
     void peek64(RegisterID dest, int index = 0)
