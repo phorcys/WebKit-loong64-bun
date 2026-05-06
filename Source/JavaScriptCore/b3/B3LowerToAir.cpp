@@ -2722,6 +2722,18 @@ private:
                 case Width16:
                     return Inst();
                 case Width32:
+                    if (isLOONGARCH64() && left.kind() == Arg::Tmp && right.kind() == Arg::Tmp && isValidForm(Branch32, Arg::RelCond, Arg::Tmp, Arg::Tmp, Arg::Tmp, Arg::Tmp)) {
+                        return left.inst(right.inst(
+                            Branch32, m_value, relCond,
+                            left.consume(*this), right.consume(*this),
+                            m_code.newTmp(GP), m_code.newTmp(GP)));
+                    }
+                    if (isLOONGARCH64() && left.kind() == Arg::Tmp && right.kind() == Arg::Imm && isValidForm(Branch32, Arg::RelCond, Arg::Tmp, Arg::Imm, Arg::Tmp, Arg::Tmp)) {
+                        return left.inst(right.inst(
+                            Branch32, m_value, relCond,
+                            left.consume(*this), right.consume(*this),
+                            m_code.newTmp(GP), m_code.newTmp(GP)));
+                    }
                     if (isValidForm(Branch32, Arg::RelCond, left.kind(), right.kind())) {
                         return left.inst(right.inst(
                             Branch32, m_value, relCond,
@@ -2755,6 +2767,11 @@ private:
                 case Width16:
                     return Inst();
                 case Width32:
+                    if (isLOONGARCH64() && isValidForm(BranchTest32, Arg::ResCond, left.kind(), right.kind(), Arg::Tmp)) {
+                        return left.inst(right.inst(
+                            BranchTest32, m_value, resCond,
+                            left.consume(*this), right.consume(*this), m_code.newTmp(GP)));
+                    }
                     if (isValidForm(BranchTest32, Arg::ResCond, left.kind(), right.kind())) {
                         return left.inst(right.inst(
                             BranchTest32, m_value, resCond,
@@ -2762,6 +2779,11 @@ private:
                     }
                     return Inst();
                 case Width64:
+                    if (isLOONGARCH64() && isValidForm(BranchTest64, Arg::ResCond, left.kind(), right.kind(), Arg::Tmp)) {
+                        return left.inst(right.inst(
+                            BranchTest64, m_value, resCond,
+                            left.consume(*this), right.consume(*this), m_code.newTmp(GP)));
+                    }
                     if (isValidForm(BranchTest64, Arg::ResCond, left.kind(), right.kind())) {
                         return left.inst(right.inst(
                             BranchTest64, m_value, resCond,
@@ -2775,11 +2797,15 @@ private:
                 ASSERT_NOT_REACHED();
             },
             [this] (Arg doubleCond, ArgPromise& left, ArgPromise& right) -> Inst {
+                if (isLOONGARCH64() && isValidForm(BranchDouble, Arg::DoubleCond, left.kind(), right.kind(), Arg::Tmp))
+                    return left.inst(right.inst(BranchDouble, m_value, doubleCond, left.consume(*this), right.consume(*this), m_code.newTmp(GP)));
                 if (isValidForm(BranchDouble, Arg::DoubleCond, left.kind(), right.kind()))
                     return left.inst(right.inst(BranchDouble, m_value, doubleCond, left.consume(*this), right.consume(*this)));
                 return Inst();
             },
             [this] (Arg doubleCond, ArgPromise& left, ArgPromise& right) -> Inst {
+                if (isLOONGARCH64() && isValidForm(BranchFloat, Arg::DoubleCond, left.kind(), right.kind(), Arg::Tmp))
+                    return left.inst(right.inst(BranchFloat, m_value, doubleCond, left.consume(*this), right.consume(*this), m_code.newTmp(GP)));
                 if (isValidForm(BranchFloat, Arg::DoubleCond, left.kind(), right.kind()))
                     return left.inst(right.inst(BranchFloat, m_value, doubleCond, left.consume(*this), right.consume(*this)));
                 return Inst();
@@ -2909,6 +2935,24 @@ private:
                 }
             }
 
+            if (isValidForm(opcode, condition.kind(), left.kind(), right.kind(), Arg::Tmp, Arg::Tmp, Arg::Tmp, Arg::Tmp, Arg::Tmp)) {
+                Tmp result = tmp(m_value);
+                Tmp thenCase = tmp(m_value->child(1));
+                Tmp elseCase = tmp(m_value->child(2));
+                return left.inst(right.inst(
+                    opcode, m_value, condition,
+                    left.consume(*this), right.consume(*this), thenCase, elseCase, result, m_code.newTmp(GP), m_code.newTmp(GP)));
+            }
+
+            if (isValidForm(opcode, condition.kind(), left.kind(), right.kind(), Arg::Tmp, Arg::Tmp, Arg::Tmp, Arg::Tmp)) {
+                Tmp result = tmp(m_value);
+                Tmp thenCase = tmp(m_value->child(1));
+                Tmp elseCase = tmp(m_value->child(2));
+                return left.inst(right.inst(
+                    opcode, m_value, condition,
+                    left.consume(*this), right.consume(*this), thenCase, elseCase, result, m_code.newTmp(GP)));
+            }
+
             if (isValidForm(opcode, condition.kind(), left.kind(), right.kind(), Arg::Tmp, Arg::Tmp, Arg::Tmp)) {
                 Tmp result = tmp(m_value);
                 Tmp thenCase = tmp(m_value->child(1));
@@ -2925,6 +2969,22 @@ private:
                 return left.inst(right.inst(
                     opcode, m_value, condition,
                     left.consume(*this), right.consume(*this), source, result));
+            }
+            if (isValidForm(opcode, condition.kind(), left.kind(), right.kind(), Arg::Tmp, Arg::Tmp, Arg::Tmp, Arg::Tmp)) {
+                Tmp result = tmp(m_value);
+                Tmp source = tmp(m_value->child(1));
+                append(relaxedMoveForType(m_value->type()), tmp(m_value->child(2)), result);
+                return left.inst(right.inst(
+                    opcode, m_value, condition,
+                    left.consume(*this), right.consume(*this), source, result, m_code.newTmp(GP), m_code.newTmp(GP)));
+            }
+            if (isValidForm(opcode, condition.kind(), left.kind(), right.kind(), Arg::Tmp, Arg::Tmp, Arg::Tmp)) {
+                Tmp result = tmp(m_value);
+                Tmp source = tmp(m_value->child(1));
+                append(relaxedMoveForType(m_value->type()), tmp(m_value->child(2)), result);
+                return left.inst(right.inst(
+                    opcode, m_value, condition,
+                    left.consume(*this), right.consume(*this), source, result, m_code.newTmp(GP)));
             }
             return Inst();
         };
@@ -3277,7 +3337,7 @@ private:
             return;
         }
 
-        if (isARM64_LSE()) {
+        if (isARM64_LSE() || isLOONGARCH64()) {
             if (isBranch) {
                 switch (width) {
                 case Width8:
@@ -3904,7 +3964,7 @@ private:
 
         case Div: {
             if (m_value->isChill())
-                RELEASE_ASSERT(isARM64());
+                RELEASE_ASSERT(isARM64() || isLOONGARCH64());
             if (m_value->type().isInt() && isX86()) {
                 appendX86Div(Div);
                 return;
@@ -3942,13 +4002,13 @@ private:
         }
 
         case FMin: {
-            RELEASE_ASSERT(isARM64());
+            RELEASE_ASSERT(isARM64() || isLOONGARCH64());
             append(m_value->type() == Float ? FloatMin : DoubleMin, tmp(m_value->child(0)), tmp(m_value->child(1)), tmp(m_value));
             return;
         }
 
         case FMax: {
-            RELEASE_ASSERT(isARM64());
+            RELEASE_ASSERT(isARM64() || isLOONGARCH64());
             append(m_value->type() == Float ? FloatMax : DoubleMax, tmp(m_value->child(0)), tmp(m_value->child(1)), tmp(m_value));
             return;
         }
@@ -4316,7 +4376,7 @@ private:
         }
             
         case Depend: {
-            RELEASE_ASSERT(isARM64());
+            RELEASE_ASSERT(isARM64() || isLOONGARCH64());
             appendUnOp<Depend32, Depend64>(m_value->child(0));
             return;
         }
@@ -5336,19 +5396,20 @@ private:
                 return;
             }
 
-            ASSERT(isARM64());
+            ASSERT(isARM64() || isLOONGARCH64());
             ASSERT(m_value->numChildren() == 3);
 #if CPU(ARM64)
             // The tbl instruction requires these values to be adjacent.
             Tmp a(ARM64Registers::q30);
             Tmp b(ARM64Registers::q31);
-#else
-            Tmp a;
-            Tmp b;
-#endif
             append(Air::MoveVector, tmp(m_value->child(0)), a);
             append(Air::MoveVector, tmp(m_value->child(1)), b);
             append(Air::VectorSwizzle2, a, b, tmp(m_value->child(2)), tmp(m_value));
+#elif CPU(LOONGARCH64)
+            append(Air::VectorSwizzle2, tmp(m_value->child(0)), tmp(m_value->child(1)), tmp(m_value->child(2)), tmp(m_value));
+#else
+            RELEASE_ASSERT_NOT_REACHED();
+#endif
             return;
         }
 
@@ -5831,6 +5892,33 @@ private:
             } else if (imm(right) && isValidForm(opcode, Arg::ResCond, Arg::Imm, Arg::Tmp)) {
                 sources.append(imm(right));
                 append(Move, tmp(left), result);
+            } else if (isLOONGARCH64() && m_value->opcode() == CheckAdd && m_value->type() == Int32 && isValidForm(opcode, Arg::ResCond, Arg::Tmp, Arg::Tmp, Arg::Tmp, Arg::Tmp)) {
+                sources.append(tmp(left));
+                sources.append(tmp(right));
+                sources.append(m_code.newTmp(m_value->resultBank()));
+            } else if (isLOONGARCH64() && m_value->opcode() == CheckAdd && m_value->type() == Int64 && isValidForm(opcode, Arg::ResCond, Arg::Tmp, Arg::Tmp, Arg::Tmp, Arg::Tmp, Arg::Tmp)) {
+                sources.append(tmp(left));
+                sources.append(tmp(right));
+                sources.append(m_code.newTmp(m_value->resultBank()));
+                sources.append(m_code.newTmp(m_value->resultBank()));
+            } else if (isLOONGARCH64() && m_value->opcode() == CheckSub && m_value->type() == Int32 && isValidForm(opcode, Arg::ResCond, Arg::Tmp, Arg::Tmp, Arg::Tmp, Arg::Tmp)) {
+                sources.append(tmp(left));
+                sources.append(tmp(right));
+                sources.append(m_code.newTmp(m_value->resultBank()));
+            } else if (isLOONGARCH64() && m_value->opcode() == CheckSub && m_value->type() == Int64 && isValidForm(opcode, Arg::ResCond, Arg::Tmp, Arg::Tmp, Arg::Tmp, Arg::Tmp, Arg::Tmp)) {
+                sources.append(tmp(left));
+                sources.append(tmp(right));
+                sources.append(m_code.newTmp(m_value->resultBank()));
+                sources.append(m_code.newTmp(m_value->resultBank()));
+            } else if (isLOONGARCH64() && m_value->opcode() == CheckMul && m_value->type() == Int32 && isValidForm(opcode, Arg::ResCond, Arg::Tmp, Arg::Tmp, Arg::Tmp, Arg::Tmp)) {
+                sources.append(tmp(left));
+                sources.append(tmp(right));
+                sources.append(m_code.newTmp(m_value->resultBank()));
+            } else if (isLOONGARCH64() && m_value->opcode() == CheckMul && m_value->type() == Int64 && isValidForm(opcode, Arg::ResCond, Arg::Tmp, Arg::Tmp, Arg::Tmp, Arg::Tmp, Arg::Tmp)) {
+                sources.append(tmp(left));
+                sources.append(tmp(right));
+                sources.append(m_code.newTmp(m_value->resultBank()));
+                sources.append(m_code.newTmp(m_value->resultBank()));
             } else if (isValidForm(opcode, Arg::ResCond, Arg::Tmp, Arg::Tmp, Arg::Tmp)) {
                 sources.append(tmp(left));
                 sources.append(tmp(right));
@@ -6232,7 +6320,7 @@ private:
             if (appendVoidAtomic(OPCODE_FOR_WIDTH(AtomicAnd, atomic->accessWidth())))
                 return;
 
-            if (isARM64_LSE()) {
+            if (isARM64_LSE() || isLOONGARCH64()) {
                 Arg address = addr(atomic);
                 Air::Opcode opcode = OPCODE_FOR_WIDTH(AtomicXchgClear, atomic->accessWidth());
                 if (isValidForm(opcode, Arg::Tmp, address.kind(), Arg::Tmp)) {

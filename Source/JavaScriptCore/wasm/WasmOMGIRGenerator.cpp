@@ -4227,7 +4227,7 @@ auto OMGIRGenerator::addSIMDShuffle(v128_t imm, ExpressionType a, ExpressionType
         return { };
     }
 
-    if constexpr (!isARM64())
+    if constexpr (!isARM64() && !isLOONGARCH64())
         UNREACHABLE_FOR_PLATFORM();
 
     Value* indexes = m_currentBlock->appendNew<Const128Value>(m_proc, origin(), imm);
@@ -5627,7 +5627,7 @@ static inline void prepareForTailCallImpl(unsigned functionIndex, CCallHelpers& 
     // The return PC should be at the top of the new stack.
     // On ARM64E, we load it before changing SP to avoid needing an extra temp register.
 
-#if CPU(ARM) || CPU(ARM64) || CPU(RISCV64)
+#if CPU(ARM) || CPU(ARM64) || CPU(RISCV64) || CPU(LOONGARCH64)
     JIT_COMMENT(jit, "Load the return pointer from its saved location.");
     jit.loadPtr(CCallHelpers::Address(MacroAssembler::stackPointerRegister, newFPOffsetFromSP + OBJECT_OFFSETOF(CallerFrameAndPC, returnPC)), tmp);
     jit.move(tmp, MacroAssembler::linkRegister);

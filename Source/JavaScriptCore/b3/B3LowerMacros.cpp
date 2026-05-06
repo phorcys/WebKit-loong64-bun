@@ -130,7 +130,7 @@ private:
             switch (m_value->opcode()) {
             case Mod: {
                 if (m_value->isChill()) {
-                    if (isARM64()) {
+                    if (isARM64() || isLOONGARCH64()) {
                         BasicBlock* before = m_blockInsertionSet.splitForward(m_block, m_index, &m_insertionSet);
                         BasicBlock* zeroDenCase = m_blockInsertionSet.insertBefore(m_block);
                         BasicBlock* normalModCase = m_blockInsertionSet.insertBefore(m_block);
@@ -163,7 +163,7 @@ private:
                 }
 
                 if (m_value->type() == Double) {
-                    if constexpr (!isARM64()) {
+                    if constexpr (!isARM64() && !isLOONGARCH64()) {
                         // Non-ARM64: just call fmod directly.
                         Value* functionAddress = m_insertionSet.insert<ConstPtrValue>(m_index, m_origin, tagCFunction<OperationPtrTag>(Math::fmodDouble));
                         Value* result = m_insertionSet.insert<CCallValue>(m_index, Double, m_origin,
@@ -290,7 +290,7 @@ private:
                     break;
                 }
 
-                if (isARM64()) {
+                if (isARM64() || isLOONGARCH64()) {
                     Value* divResult = m_insertionSet.insert<Value>(m_index, chill(Div), m_origin, m_value->child(0), m_value->child(1));
                     Value* multipliedBack = m_insertionSet.insert<Value>(m_index, Mul, m_origin, divResult, m_value->child(1));
                     Value* result = m_insertionSet.insert<Value>(m_index, Sub, m_origin, m_value->child(0), multipliedBack);
@@ -309,7 +309,7 @@ private:
                         replaceWithBinaryCall(Math::i32_rem_u);
                     break;
                 }
-                if (isARM64()) {
+                if (isARM64() || isLOONGARCH64()) {
                     Value* divResult = m_insertionSet.insert<Value>(m_index, UDiv, m_origin, m_value->child(0), m_value->child(1));
                     Value* multipliedBack = m_insertionSet.insert<Value>(m_index, Mul, m_origin, divResult, m_value->child(1));
                     Value* result = m_insertionSet.insert<Value>(m_index, Sub, m_origin, m_value->child(0), multipliedBack);
@@ -501,7 +501,7 @@ private:
                         break;
                 }
 
-                if (isARM64_LSE()) {
+                if (isARM64_LSE() || isLOONGARCH64()) {
                     if (m_value->opcode() == AtomicXchgSub) {
                         m_value->setOpcodeUnsafely(AtomicXchgAdd);
                         m_value->child(0) = m_insertionSet.insert<Value>(
@@ -1094,8 +1094,8 @@ private:
     {
         ASSERT(nonChillOpcode == Div || nonChillOpcode == Mod);
 
-        // ARM supports this instruction natively.
-        if (isARM64())
+        // ARM64 and LoongArch64 support this instruction natively.
+        if (isARM64() || isLOONGARCH64())
             return;
 
         // We implement "res = Div<Chill>/Mod<Chill>(num, den)" as follows:
@@ -1663,8 +1663,8 @@ private:
     PatchpointValue* emitWasmGCAllocationPatchpoint(BasicBlock* allocBlock, Value* allocator, BasicBlock* fastInit, BasicBlock* slowPath)
     {
         PatchpointValue* patchpoint = allocBlock->appendNew<PatchpointValue>(m_proc, pointerType(), m_origin);
-        if (isARM64()) {
-            // emitAllocateWithNonNullAllocator uses the scratch registers on ARM.
+        if (isARM64() || isLOONGARCH64()) {
+            // emitAllocateWithNonNullAllocator uses macro scratch registers on these ports.
             patchpoint->clobber(RegisterSet::macroClobberedGPRs());
         }
         patchpoint->effects.terminal = true;
@@ -1673,7 +1673,7 @@ private:
         patchpoint->resultConstraints = { ValueRep::SomeEarlyRegister };
 
         patchpoint->setGenerator([=](CCallHelpers& jit, const StackmapGenerationParams& params) {
-            AllowMacroScratchRegisterUsageIf allowScratchIf(jit, isARM64());
+            AllowMacroScratchRegisterUsageIf allowScratchIf(jit, isARM64() || isLOONGARCH64());
             CCallHelpers::JumpList jumpToSlowPath;
 
             GPRReg allocatorGPR = params[1].gpr();
