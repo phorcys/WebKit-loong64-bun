@@ -42,7 +42,7 @@ using namespace LOONGARCH64Registers;
 
 #define PTR_SIZE 8
 #define GPREG_SIZE 8
-#define FPREG_SIZE 8
+#define FPREG_SIZE 16
 
 #define PROBE_PROBE_FUNCTION_OFFSET (0 * PTR_SIZE)
 #define PROBE_ARG_OFFSET (1 * PTR_SIZE)
@@ -171,38 +171,38 @@ static_assert(PROBE_OFFSETOF(cpu.gprs[LOONGARCH64Registers::r31]) == PROBE_CPU_R
 
 static_assert(PROBE_OFFSETOF(cpu.sprs[LOONGARCH64Registers::pc]) == PROBE_CPU_PC_OFFSET);
 
-static_assert(PROBE_OFFSETOF(cpu.fprs.fprs[LOONGARCH64Registers::f0]) == PROBE_CPU_F0_OFFSET);
-static_assert(PROBE_OFFSETOF(cpu.fprs.fprs[LOONGARCH64Registers::f1]) == PROBE_CPU_F1_OFFSET);
-static_assert(PROBE_OFFSETOF(cpu.fprs.fprs[LOONGARCH64Registers::f2]) == PROBE_CPU_F2_OFFSET);
-static_assert(PROBE_OFFSETOF(cpu.fprs.fprs[LOONGARCH64Registers::f3]) == PROBE_CPU_F3_OFFSET);
-static_assert(PROBE_OFFSETOF(cpu.fprs.fprs[LOONGARCH64Registers::f4]) == PROBE_CPU_F4_OFFSET);
-static_assert(PROBE_OFFSETOF(cpu.fprs.fprs[LOONGARCH64Registers::f5]) == PROBE_CPU_F5_OFFSET);
-static_assert(PROBE_OFFSETOF(cpu.fprs.fprs[LOONGARCH64Registers::f6]) == PROBE_CPU_F6_OFFSET);
-static_assert(PROBE_OFFSETOF(cpu.fprs.fprs[LOONGARCH64Registers::f7]) == PROBE_CPU_F7_OFFSET);
-static_assert(PROBE_OFFSETOF(cpu.fprs.fprs[LOONGARCH64Registers::f8]) == PROBE_CPU_F8_OFFSET);
-static_assert(PROBE_OFFSETOF(cpu.fprs.fprs[LOONGARCH64Registers::f9]) == PROBE_CPU_F9_OFFSET);
-static_assert(PROBE_OFFSETOF(cpu.fprs.fprs[LOONGARCH64Registers::f10]) == PROBE_CPU_F10_OFFSET);
-static_assert(PROBE_OFFSETOF(cpu.fprs.fprs[LOONGARCH64Registers::f11]) == PROBE_CPU_F11_OFFSET);
-static_assert(PROBE_OFFSETOF(cpu.fprs.fprs[LOONGARCH64Registers::f12]) == PROBE_CPU_F12_OFFSET);
-static_assert(PROBE_OFFSETOF(cpu.fprs.fprs[LOONGARCH64Registers::f13]) == PROBE_CPU_F13_OFFSET);
-static_assert(PROBE_OFFSETOF(cpu.fprs.fprs[LOONGARCH64Registers::f14]) == PROBE_CPU_F14_OFFSET);
-static_assert(PROBE_OFFSETOF(cpu.fprs.fprs[LOONGARCH64Registers::f15]) == PROBE_CPU_F15_OFFSET);
-static_assert(PROBE_OFFSETOF(cpu.fprs.fprs[LOONGARCH64Registers::f16]) == PROBE_CPU_F16_OFFSET);
-static_assert(PROBE_OFFSETOF(cpu.fprs.fprs[LOONGARCH64Registers::f17]) == PROBE_CPU_F17_OFFSET);
-static_assert(PROBE_OFFSETOF(cpu.fprs.fprs[LOONGARCH64Registers::f18]) == PROBE_CPU_F18_OFFSET);
-static_assert(PROBE_OFFSETOF(cpu.fprs.fprs[LOONGARCH64Registers::f19]) == PROBE_CPU_F19_OFFSET);
-static_assert(PROBE_OFFSETOF(cpu.fprs.fprs[LOONGARCH64Registers::f20]) == PROBE_CPU_F20_OFFSET);
-static_assert(PROBE_OFFSETOF(cpu.fprs.fprs[LOONGARCH64Registers::f21]) == PROBE_CPU_F21_OFFSET);
-static_assert(PROBE_OFFSETOF(cpu.fprs.fprs[LOONGARCH64Registers::f22]) == PROBE_CPU_F22_OFFSET);
-static_assert(PROBE_OFFSETOF(cpu.fprs.fprs[LOONGARCH64Registers::f23]) == PROBE_CPU_F23_OFFSET);
-static_assert(PROBE_OFFSETOF(cpu.fprs.fprs[LOONGARCH64Registers::f24]) == PROBE_CPU_F24_OFFSET);
-static_assert(PROBE_OFFSETOF(cpu.fprs.fprs[LOONGARCH64Registers::f25]) == PROBE_CPU_F25_OFFSET);
-static_assert(PROBE_OFFSETOF(cpu.fprs.fprs[LOONGARCH64Registers::f26]) == PROBE_CPU_F26_OFFSET);
-static_assert(PROBE_OFFSETOF(cpu.fprs.fprs[LOONGARCH64Registers::f27]) == PROBE_CPU_F27_OFFSET);
-static_assert(PROBE_OFFSETOF(cpu.fprs.fprs[LOONGARCH64Registers::f28]) == PROBE_CPU_F28_OFFSET);
-static_assert(PROBE_OFFSETOF(cpu.fprs.fprs[LOONGARCH64Registers::f29]) == PROBE_CPU_F29_OFFSET);
-static_assert(PROBE_OFFSETOF(cpu.fprs.fprs[LOONGARCH64Registers::f30]) == PROBE_CPU_F30_OFFSET);
-static_assert(PROBE_OFFSETOF(cpu.fprs.fprs[LOONGARCH64Registers::f31]) == PROBE_CPU_F31_OFFSET);
+static_assert(PROBE_OFFSETOF(cpu.fprs.vectors[LOONGARCH64Registers::f0]) == PROBE_CPU_F0_OFFSET);
+static_assert(PROBE_OFFSETOF(cpu.fprs.vectors[LOONGARCH64Registers::f1]) == PROBE_CPU_F1_OFFSET);
+static_assert(PROBE_OFFSETOF(cpu.fprs.vectors[LOONGARCH64Registers::f2]) == PROBE_CPU_F2_OFFSET);
+static_assert(PROBE_OFFSETOF(cpu.fprs.vectors[LOONGARCH64Registers::f3]) == PROBE_CPU_F3_OFFSET);
+static_assert(PROBE_OFFSETOF(cpu.fprs.vectors[LOONGARCH64Registers::f4]) == PROBE_CPU_F4_OFFSET);
+static_assert(PROBE_OFFSETOF(cpu.fprs.vectors[LOONGARCH64Registers::f5]) == PROBE_CPU_F5_OFFSET);
+static_assert(PROBE_OFFSETOF(cpu.fprs.vectors[LOONGARCH64Registers::f6]) == PROBE_CPU_F6_OFFSET);
+static_assert(PROBE_OFFSETOF(cpu.fprs.vectors[LOONGARCH64Registers::f7]) == PROBE_CPU_F7_OFFSET);
+static_assert(PROBE_OFFSETOF(cpu.fprs.vectors[LOONGARCH64Registers::f8]) == PROBE_CPU_F8_OFFSET);
+static_assert(PROBE_OFFSETOF(cpu.fprs.vectors[LOONGARCH64Registers::f9]) == PROBE_CPU_F9_OFFSET);
+static_assert(PROBE_OFFSETOF(cpu.fprs.vectors[LOONGARCH64Registers::f10]) == PROBE_CPU_F10_OFFSET);
+static_assert(PROBE_OFFSETOF(cpu.fprs.vectors[LOONGARCH64Registers::f11]) == PROBE_CPU_F11_OFFSET);
+static_assert(PROBE_OFFSETOF(cpu.fprs.vectors[LOONGARCH64Registers::f12]) == PROBE_CPU_F12_OFFSET);
+static_assert(PROBE_OFFSETOF(cpu.fprs.vectors[LOONGARCH64Registers::f13]) == PROBE_CPU_F13_OFFSET);
+static_assert(PROBE_OFFSETOF(cpu.fprs.vectors[LOONGARCH64Registers::f14]) == PROBE_CPU_F14_OFFSET);
+static_assert(PROBE_OFFSETOF(cpu.fprs.vectors[LOONGARCH64Registers::f15]) == PROBE_CPU_F15_OFFSET);
+static_assert(PROBE_OFFSETOF(cpu.fprs.vectors[LOONGARCH64Registers::f16]) == PROBE_CPU_F16_OFFSET);
+static_assert(PROBE_OFFSETOF(cpu.fprs.vectors[LOONGARCH64Registers::f17]) == PROBE_CPU_F17_OFFSET);
+static_assert(PROBE_OFFSETOF(cpu.fprs.vectors[LOONGARCH64Registers::f18]) == PROBE_CPU_F18_OFFSET);
+static_assert(PROBE_OFFSETOF(cpu.fprs.vectors[LOONGARCH64Registers::f19]) == PROBE_CPU_F19_OFFSET);
+static_assert(PROBE_OFFSETOF(cpu.fprs.vectors[LOONGARCH64Registers::f20]) == PROBE_CPU_F20_OFFSET);
+static_assert(PROBE_OFFSETOF(cpu.fprs.vectors[LOONGARCH64Registers::f21]) == PROBE_CPU_F21_OFFSET);
+static_assert(PROBE_OFFSETOF(cpu.fprs.vectors[LOONGARCH64Registers::f22]) == PROBE_CPU_F22_OFFSET);
+static_assert(PROBE_OFFSETOF(cpu.fprs.vectors[LOONGARCH64Registers::f23]) == PROBE_CPU_F23_OFFSET);
+static_assert(PROBE_OFFSETOF(cpu.fprs.vectors[LOONGARCH64Registers::f24]) == PROBE_CPU_F24_OFFSET);
+static_assert(PROBE_OFFSETOF(cpu.fprs.vectors[LOONGARCH64Registers::f25]) == PROBE_CPU_F25_OFFSET);
+static_assert(PROBE_OFFSETOF(cpu.fprs.vectors[LOONGARCH64Registers::f26]) == PROBE_CPU_F26_OFFSET);
+static_assert(PROBE_OFFSETOF(cpu.fprs.vectors[LOONGARCH64Registers::f27]) == PROBE_CPU_F27_OFFSET);
+static_assert(PROBE_OFFSETOF(cpu.fprs.vectors[LOONGARCH64Registers::f28]) == PROBE_CPU_F28_OFFSET);
+static_assert(PROBE_OFFSETOF(cpu.fprs.vectors[LOONGARCH64Registers::f29]) == PROBE_CPU_F29_OFFSET);
+static_assert(PROBE_OFFSETOF(cpu.fprs.vectors[LOONGARCH64Registers::f30]) == PROBE_CPU_F30_OFFSET);
+static_assert(PROBE_OFFSETOF(cpu.fprs.vectors[LOONGARCH64Registers::f31]) == PROBE_CPU_F31_OFFSET);
 
 static_assert(sizeof(Probe::State) == PROBE_SIZE);
 
@@ -328,38 +328,38 @@ asm(
     "st.d $r30, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_R30_OFFSET) "\n"
     "st.d $r31, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_R31_OFFSET) "\n"
 
-    "fst.d $f0, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F0_OFFSET) "\n"
-    "fst.d $f1, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F1_OFFSET) "\n"
-    "fst.d $f2, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F2_OFFSET) "\n"
-    "fst.d $f3, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F3_OFFSET) "\n"
-    "fst.d $f4, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F4_OFFSET) "\n"
-    "fst.d $f5, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F5_OFFSET) "\n"
-    "fst.d $f6, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F6_OFFSET) "\n"
-    "fst.d $f7, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F7_OFFSET) "\n"
-    "fst.d $f8, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F8_OFFSET) "\n"
-    "fst.d $f9, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F9_OFFSET) "\n"
-    "fst.d $f10, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F10_OFFSET) "\n"
-    "fst.d $f11, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F11_OFFSET) "\n"
-    "fst.d $f12, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F12_OFFSET) "\n"
-    "fst.d $f13, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F13_OFFSET) "\n"
-    "fst.d $f14, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F14_OFFSET) "\n"
-    "fst.d $f15, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F15_OFFSET) "\n"
-    "fst.d $f16, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F16_OFFSET) "\n"
-    "fst.d $f17, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F17_OFFSET) "\n"
-    "fst.d $f18, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F18_OFFSET) "\n"
-    "fst.d $f19, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F19_OFFSET) "\n"
-    "fst.d $f20, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F20_OFFSET) "\n"
-    "fst.d $f21, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F21_OFFSET) "\n"
-    "fst.d $f22, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F22_OFFSET) "\n"
-    "fst.d $f23, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F23_OFFSET) "\n"
-    "fst.d $f24, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F24_OFFSET) "\n"
-    "fst.d $f25, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F25_OFFSET) "\n"
-    "fst.d $f26, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F26_OFFSET) "\n"
-    "fst.d $f27, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F27_OFFSET) "\n"
-    "fst.d $f28, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F28_OFFSET) "\n"
-    "fst.d $f29, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F29_OFFSET) "\n"
-    "fst.d $f30, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F30_OFFSET) "\n"
-    "fst.d $f31, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F31_OFFSET) "\n"
+    "vst $vr0, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F0_OFFSET) "\n"
+    "vst $vr1, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F1_OFFSET) "\n"
+    "vst $vr2, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F2_OFFSET) "\n"
+    "vst $vr3, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F3_OFFSET) "\n"
+    "vst $vr4, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F4_OFFSET) "\n"
+    "vst $vr5, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F5_OFFSET) "\n"
+    "vst $vr6, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F6_OFFSET) "\n"
+    "vst $vr7, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F7_OFFSET) "\n"
+    "vst $vr8, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F8_OFFSET) "\n"
+    "vst $vr9, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F9_OFFSET) "\n"
+    "vst $vr10, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F10_OFFSET) "\n"
+    "vst $vr11, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F11_OFFSET) "\n"
+    "vst $vr12, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F12_OFFSET) "\n"
+    "vst $vr13, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F13_OFFSET) "\n"
+    "vst $vr14, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F14_OFFSET) "\n"
+    "vst $vr15, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F15_OFFSET) "\n"
+    "vst $vr16, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F16_OFFSET) "\n"
+    "vst $vr17, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F17_OFFSET) "\n"
+    "vst $vr18, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F18_OFFSET) "\n"
+    "vst $vr19, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F19_OFFSET) "\n"
+    "vst $vr20, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F20_OFFSET) "\n"
+    "vst $vr21, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F21_OFFSET) "\n"
+    "vst $vr22, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F22_OFFSET) "\n"
+    "vst $vr23, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F23_OFFSET) "\n"
+    "vst $vr24, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F24_OFFSET) "\n"
+    "vst $vr25, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F25_OFFSET) "\n"
+    "vst $vr26, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F26_OFFSET) "\n"
+    "vst $vr27, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F27_OFFSET) "\n"
+    "vst $vr28, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F28_OFFSET) "\n"
+    "vst $vr29, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F29_OFFSET) "\n"
+    "vst $vr30, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F30_OFFSET) "\n"
+    "vst $vr31, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F31_OFFSET) "\n"
 
     "st.d $r1, $r3, " STRINGIZE_VALUE_OF(PROBE_SAVED_RETURN_PC_OFFSET) "\n"
     "st.d $r1, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_PC_OFFSET) "\n"
@@ -403,38 +403,38 @@ asm(
     LOCAL_LABEL_STRING(ctiMasmProbeTrampolineRestoreRegisters) ":" "\n"
     "move $r3, $r27" "\n"
 
-    "fld.d $f0, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F0_OFFSET) "\n"
-    "fld.d $f1, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F1_OFFSET) "\n"
-    "fld.d $f2, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F2_OFFSET) "\n"
-    "fld.d $f3, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F3_OFFSET) "\n"
-    "fld.d $f4, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F4_OFFSET) "\n"
-    "fld.d $f5, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F5_OFFSET) "\n"
-    "fld.d $f6, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F6_OFFSET) "\n"
-    "fld.d $f7, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F7_OFFSET) "\n"
-    "fld.d $f8, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F8_OFFSET) "\n"
-    "fld.d $f9, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F9_OFFSET) "\n"
-    "fld.d $f10, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F10_OFFSET) "\n"
-    "fld.d $f11, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F11_OFFSET) "\n"
-    "fld.d $f12, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F12_OFFSET) "\n"
-    "fld.d $f13, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F13_OFFSET) "\n"
-    "fld.d $f14, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F14_OFFSET) "\n"
-    "fld.d $f15, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F15_OFFSET) "\n"
-    "fld.d $f16, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F16_OFFSET) "\n"
-    "fld.d $f17, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F17_OFFSET) "\n"
-    "fld.d $f18, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F18_OFFSET) "\n"
-    "fld.d $f19, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F19_OFFSET) "\n"
-    "fld.d $f20, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F20_OFFSET) "\n"
-    "fld.d $f21, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F21_OFFSET) "\n"
-    "fld.d $f22, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F22_OFFSET) "\n"
-    "fld.d $f23, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F23_OFFSET) "\n"
-    "fld.d $f24, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F24_OFFSET) "\n"
-    "fld.d $f25, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F25_OFFSET) "\n"
-    "fld.d $f26, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F26_OFFSET) "\n"
-    "fld.d $f27, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F27_OFFSET) "\n"
-    "fld.d $f28, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F28_OFFSET) "\n"
-    "fld.d $f29, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F29_OFFSET) "\n"
-    "fld.d $f30, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F30_OFFSET) "\n"
-    "fld.d $f31, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F31_OFFSET) "\n"
+    "vld $vr0, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F0_OFFSET) "\n"
+    "vld $vr1, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F1_OFFSET) "\n"
+    "vld $vr2, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F2_OFFSET) "\n"
+    "vld $vr3, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F3_OFFSET) "\n"
+    "vld $vr4, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F4_OFFSET) "\n"
+    "vld $vr5, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F5_OFFSET) "\n"
+    "vld $vr6, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F6_OFFSET) "\n"
+    "vld $vr7, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F7_OFFSET) "\n"
+    "vld $vr8, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F8_OFFSET) "\n"
+    "vld $vr9, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F9_OFFSET) "\n"
+    "vld $vr10, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F10_OFFSET) "\n"
+    "vld $vr11, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F11_OFFSET) "\n"
+    "vld $vr12, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F12_OFFSET) "\n"
+    "vld $vr13, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F13_OFFSET) "\n"
+    "vld $vr14, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F14_OFFSET) "\n"
+    "vld $vr15, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F15_OFFSET) "\n"
+    "vld $vr16, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F16_OFFSET) "\n"
+    "vld $vr17, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F17_OFFSET) "\n"
+    "vld $vr18, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F18_OFFSET) "\n"
+    "vld $vr19, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F19_OFFSET) "\n"
+    "vld $vr20, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F20_OFFSET) "\n"
+    "vld $vr21, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F21_OFFSET) "\n"
+    "vld $vr22, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F22_OFFSET) "\n"
+    "vld $vr23, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F23_OFFSET) "\n"
+    "vld $vr24, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F24_OFFSET) "\n"
+    "vld $vr25, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F25_OFFSET) "\n"
+    "vld $vr26, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F26_OFFSET) "\n"
+    "vld $vr27, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F27_OFFSET) "\n"
+    "vld $vr28, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F28_OFFSET) "\n"
+    "vld $vr29, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F29_OFFSET) "\n"
+    "vld $vr30, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F30_OFFSET) "\n"
+    "vld $vr31, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_F31_OFFSET) "\n"
 
     // $r0 -- zero register, loaded for completeness
     "ld.d $r0, $r3, " STRINGIZE_VALUE_OF(PROBE_CPU_R0_OFFSET) "\n"

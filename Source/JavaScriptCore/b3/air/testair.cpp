@@ -2192,7 +2192,7 @@ void testElideSimpleMove()
 
         auto compilation = compile(proc);
         CString disassembly = compilation->disassembly();
-        std::regex findRRMove(isARM64() ? "mov\\s+x\\d+, x\\d+\\n" : isARM_THUMB2() ? "mov\\s+\\w+, \\w+\\n" : "mov %\\w+, %\\w+\\n");
+        std::regex findRRMove(isARM64() ? "mov\\s+x\\d+, x\\d+\\n" : isARM_THUMB2() ? "mov\\s+\\w+, \\w+\\n" : isLOONGARCH64() ? "or\\s+\\$\\w+, \\$\\w+, \\$zero\\n" : "mov %\\w+, %\\w+\\n");
         auto result = matchAll(disassembly, findRRMove);
         if (isARM64()) {
             if (!Options::defaultB3OptLevel())
@@ -2204,6 +2204,11 @@ void testElideSimpleMove()
                 CHECK(result.size() == 4);
             else
                 CHECK(result.size() == 2);
+        } else if (isLOONGARCH64()) {
+            if (!Options::defaultB3OptLevel())
+                CHECK(result.size() == 4);
+            else
+                CHECK(result.size() == 1);
         } else if (isX86()) {
             // sp -> fp; arg0 -> ret0; fp -> sp
             // fp -> sp only happens in O0 because we don't actually need to move the stack in general.
@@ -2287,7 +2292,7 @@ void testElideMoveThenRealloc()
 
         Tmp tmp = code.newTmp(B3::GP);
         Arg negOne;
-        if (isARM64() || isARM_THUMB2()) {
+        if (isARM64() || isARM_THUMB2() || isLOONGARCH64()) {
             negOne = code.newTmp(B3::GP);
             root->append(Move, nullptr, Arg::bigImm(-1), negOne);
         } else if (isX86())
@@ -2295,10 +2300,19 @@ void testElideMoveThenRealloc()
         else
             RELEASE_ASSERT_NOT_REACHED();
 
+        auto appendBranchTest32 = [&] (BasicBlock* block, Tmp value, Arg mask) {
+            if (isLOONGARCH64()) {
+                Tmp scratch = code.newTmp(GP);
+                block->append(BranchTest32, nullptr, Arg::resCond(MacroAssembler::NonZero), value, mask, scratch);
+                return;
+            }
+            block->append(BranchTest32, nullptr, Arg::resCond(MacroAssembler::NonZero), value, mask);
+        };
+
         {
             root->append(Move, nullptr, Arg::imm(1), Tmp(reg));
 
-            root->append(BranchTest32, nullptr, Arg::resCond(MacroAssembler::NonZero), Tmp(reg), negOne);
+            appendBranchTest32(root, Tmp(reg), negOne);
             root->setSuccessors(taken, notTaken);
         }
 
@@ -2308,14 +2322,14 @@ void testElideMoveThenRealloc()
         }
 
         {
-            notTaken->append(BranchTest32, nullptr, Arg::resCond(MacroAssembler::NonZero), Tmp(reg), negOne);
+            appendBranchTest32(notTaken, Tmp(reg), negOne);
             notTaken->setSuccessors(continuation, notTakenReturn);
         }
 
         {
             tmp = code.newTmp(B3::GP);
             continuation->append(Move, nullptr, Arg::imm(42), tmp);
-            continuation->append(BranchTest32, nullptr, Arg::resCond(MacroAssembler::NonZero), tmp, negOne);
+            appendBranchTest32(continuation, tmp, negOne);
             continuation->setSuccessors(ret, notTakenReturn);
         }
 
@@ -2368,6 +2382,7 @@ void testLinearScanSpillRangesLateUse()
         patchpoint->setGenerator([=] (CCallHelpers& jit, const B3::StackmapGenerationParams& params) {
             RELEASE_ASSERT(params[0].gpr() != params[1].gpr());
 
+            AllowMacroScratchRegisterUsage allowScratch(jit);
             auto good = jit.branch32(CCallHelpers::Equal, params[0].gpr(), CCallHelpers::TrustedImm32(i));
             jit.breakpoint();
             good.link(&jit);
@@ -2421,6 +2436,7 @@ void testLinearScanSpillRangesEarlyDef()
         patchpoint->setGenerator([=] (CCallHelpers& jit, const B3::StackmapGenerationParams& params) {
             RELEASE_ASSERT(params[0].gpr() != params[1].gpr());
 
+            AllowMacroScratchRegisterUsage allowScratch(jit);
             auto good = jit.branch32(CCallHelpers::Equal, params[1].gpr(), CCallHelpers::TrustedImm32(i));
             jit.breakpoint();
             good.link(&jit);
@@ -2444,6 +2460,7 @@ void testLinearScanSpillRangesEarlyDef()
         B3::PatchpointValue* patchpoint = proc.add<B3::PatchpointValue>(B3::Void, B3::Origin());
         patchpoint->append(dummyValue, B3::ValueRep::SomeRegister);
         patchpoint->setGenerator([=] (CCallHelpers& jit, const B3::StackmapGenerationParams& params) {
+            AllowMacroScratchRegisterUsage allowScratch(jit);
             auto good = jit.branch32(CCallHelpers::Equal, params[0].gpr(), CCallHelpers::TrustedImm32(i));
             jit.breakpoint();
             good.link(&jit);
@@ -2629,6 +2646,7 @@ void testEarlyAndLateUseOfSameTmp()
             patchpoint->setGenerator([=] (CCallHelpers& jit, const B3::StackmapGenerationParams& params) {
                 RELEASE_ASSERT(!RegisterSet::registersToSaveForJSCall(RegisterSet::allScalarRegisters()).normalizeWidths().contains(params[1].gpr(), IgnoreVectors));
 
+                AllowMacroScratchRegisterUsage allowScratch(jit);
                 auto good = jit.branch64(CCallHelpers::Equal, params[1].gpr(), CCallHelpers::TrustedImm32(rand));
                 jit.breakpoint();
                 good.link(&jit);
@@ -2690,6 +2708,7 @@ void testEarlyClobberInterference()
             patchpoint->setGenerator([=] (CCallHelpers& jit, const B3::StackmapGenerationParams& params) {
                 RELEASE_ASSERT(!RegisterSet::registersToSaveForJSCall(RegisterSet::allScalarRegisters()).normalizeWidths().contains(params[0].gpr(), IgnoreVectors));
 
+                AllowMacroScratchRegisterUsage allowScratch(jit);
                 auto good = jit.branch64(CCallHelpers::Equal, params[0].gpr(), CCallHelpers::TrustedImm32(rand));
                 jit.breakpoint();
                 good.link(&jit);

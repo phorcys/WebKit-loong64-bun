@@ -72,11 +72,15 @@ void InjectedScriptModule::ensureInjected(InjectedScriptManager* injectedScriptM
         auto& stack = error->stack();
         if (stack.size() > 0)
             lineColumn = stack[0].computeLineAndColumn();
+        IGNORE_WARNINGS_BEGIN("unsafe-buffer-usage-in-format-attr-call")
         WTFLogAlways("Error when calling 'hasInjectedModule' for '%s': %s (%d:%d)\n", name().utf8().data(), error->value().toWTFString(injectedScript.globalObject()).utf8().data(), lineColumn.line, lineColumn.column);
+        IGNORE_WARNINGS_END
         RELEASE_ASSERT_NOT_REACHED();
     }
     if (!hasInjectedModuleResult.value()) {
+        IGNORE_WARNINGS_BEGIN("unsafe-buffer-usage-in-format-attr-call")
         WTFLogAlways("VM is terminated when calling 'injectModule' for '%s'\n", name().utf8().data());
+        IGNORE_WARNINGS_END
         RELEASE_ASSERT_NOT_REACHED();
     }
     if (!hasInjectedModuleResult.value().isBoolean() || !hasInjectedModuleResult.value().asBoolean()) {
@@ -92,7 +96,9 @@ void InjectedScriptModule::ensureInjected(InjectedScriptManager* injectedScriptM
             auto& stack = error->stack();
             if (stack.size() > 0)
                 lineColumn = stack[0].computeLineAndColumn();
+            IGNORE_WARNINGS_BEGIN("unsafe-buffer-usage-in-format-attr-call")
             WTFLogAlways("Error when calling 'injectModule' for '%s': %s (%d:%d)\n", name().utf8().data(), error->value().toWTFString(injectedScript.globalObject()).utf8().data(), lineColumn.line, lineColumn.column);
+            IGNORE_WARNINGS_END
             RELEASE_ASSERT_NOT_REACHED();
         }
     }

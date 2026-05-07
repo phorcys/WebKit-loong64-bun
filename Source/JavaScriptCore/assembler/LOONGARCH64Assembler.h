@@ -212,6 +212,14 @@ enum class Opcode14 : unsigned {
 enum class Opcode12 : unsigned {
     FCMP_COND_S_OP     = 0b000011000001,
     FCMP_COND_D_OP     = 0b000011000010,
+    FMADD_S_OP         = 0b000010000001,
+    FMADD_D_OP         = 0b000010000010,
+    FMSUB_S_OP         = 0b000010000101,
+    FMSUB_D_OP         = 0b000010000110,
+    FNMADD_S_OP        = 0b000010001001,
+    FNMADD_D_OP        = 0b000010001010,
+    FNMSUB_S_OP        = 0b000010001101,
+    FNMSUB_D_OP        = 0b000010001110,
 };
 
 enum class Opcode10 : unsigned {
@@ -568,6 +576,7 @@ struct RegistersBase {
     using FF = Tuple<FType, FType>;
     using GGG = Tuple<GType, GType, GType>;
     using FFF = Tuple<FType, FType, FType>;
+    using FFFF = Tuple<FType, FType, FType, FType>;
     using CFFF = Tuple<CType, FType, FType, FType>;
 };
 
@@ -1320,6 +1329,22 @@ struct MOD_WU : RRRTypeBase<Opcode17::MOD_WU_OP, RegistersBase::GGG> {
     static constexpr const char* name = "mod.wu";
 };
 
+struct FMADD_S : RRRRTypeBase<Opcode12::FMADD_S_OP, RegistersBase::FFFF> {
+    static constexpr const char* name = "fmadd.s";
+};
+
+struct FMSUB_S : RRRRTypeBase<Opcode12::FMSUB_S_OP, RegistersBase::FFFF> {
+    static constexpr const char* name = "fmsub.s";
+};
+
+struct FNMADD_S : RRRRTypeBase<Opcode12::FNMADD_S_OP, RegistersBase::FFFF> {
+    static constexpr const char* name = "fnmadd.s";
+};
+
+struct FNMSUB_S : RRRRTypeBase<Opcode12::FNMSUB_S_OP, RegistersBase::FFFF> {
+    static constexpr const char* name = "fnmsub.s";
+};
+
 struct FADD_S : RRRTypeBase<Opcode17::FADD_S_OP, RegistersBase::FFF>{
     static constexpr const char* name = "fadd.s";
 };
@@ -1494,6 +1519,22 @@ struct FMUL_D : RRRTypeBase<Opcode17::FMUL_D_OP, RegistersBase::FFF>{
 
 struct FDIV_D : RRRTypeBase<Opcode17::FDIV_D_OP, RegistersBase::FFF>{
     static constexpr const char* name = "fmul.d";
+};
+
+struct FMADD_D : RRRRTypeBase<Opcode12::FMADD_D_OP, RegistersBase::FFFF> {
+    static constexpr const char* name = "fmadd.d";
+};
+
+struct FMSUB_D : RRRRTypeBase<Opcode12::FMSUB_D_OP, RegistersBase::FFFF> {
+    static constexpr const char* name = "fmsub.d";
+};
+
+struct FNMADD_D : RRRRTypeBase<Opcode12::FNMADD_D_OP, RegistersBase::FFFF> {
+    static constexpr const char* name = "fnmadd.d";
+};
+
+struct FNMSUB_D : RRRRTypeBase<Opcode12::FNMSUB_D_OP, RegistersBase::FFFF> {
+    static constexpr const char* name = "fnmsub.d";
 };
 
 struct FCOPYSIGN_D : RRRTypeBase<Opcode17::FCOPYSIGN_D_OP, RegistersBase::FFF> {
@@ -2127,6 +2168,30 @@ public:
     }
 
     template<unsigned fpSize>
+    void fmaddInsn(FPRegisterID fd, FPRegisterID fj, FPRegisterID fk, FPRegisterID fa)
+    {
+        insnFP<fpSize, LOONGARCH64Instructions::FMADD_S, LOONGARCH64Instructions::FMADD_D>(fa, fk, fj, fd);
+    }
+
+    template<unsigned fpSize>
+    void fmsubInsn(FPRegisterID fd, FPRegisterID fj, FPRegisterID fk, FPRegisterID fa)
+    {
+        insnFP<fpSize, LOONGARCH64Instructions::FMSUB_S, LOONGARCH64Instructions::FMSUB_D>(fa, fk, fj, fd);
+    }
+
+    template<unsigned fpSize>
+    void fnmaddInsn(FPRegisterID fd, FPRegisterID fj, FPRegisterID fk, FPRegisterID fa)
+    {
+        insnFP<fpSize, LOONGARCH64Instructions::FNMADD_S, LOONGARCH64Instructions::FNMADD_D>(fa, fk, fj, fd);
+    }
+
+    template<unsigned fpSize>
+    void fnmsubInsn(FPRegisterID fd, FPRegisterID fj, FPRegisterID fk, FPRegisterID fa)
+    {
+        insnFP<fpSize, LOONGARCH64Instructions::FNMSUB_S, LOONGARCH64Instructions::FNMSUB_D>(fa, fk, fj, fd);
+    }
+
+    template<unsigned fpSize>
     void fdivInsn(FPRegisterID fd, FPRegisterID fj, FPRegisterID fk)
     {
         insnFP<fpSize, LOONGARCH64Instructions::FDIV_S, LOONGARCH64Instructions::FDIV_D>(fk, fj, fd);
@@ -2441,6 +2506,14 @@ public:
     void vfnmsub_sInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk, FPRegisterID va) { insn(lsxVVVVInsn(0x09d00000, vd, vj, vk, va)); }
     void vfnmsub_dInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk, FPRegisterID va) { insn(lsxVVVVInsn(0x09e00000, vd, vj, vk, va)); }
 
+    void vpackev_bInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x71160000, vd, vj, vk)); }
+    void vpackev_hInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x71168000, vd, vj, vk)); }
+    void vpackev_wInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x71170000, vd, vj, vk)); }
+    void vpackev_dInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x71178000, vd, vj, vk)); }
+    void vpackod_bInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x71180000, vd, vj, vk)); }
+    void vpackod_hInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x71188000, vd, vj, vk)); }
+    void vpackod_wInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x71190000, vd, vj, vk)); }
+    void vpackod_dInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x71198000, vd, vj, vk)); }
     void vpickev_bInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x711e0000, vd, vj, vk)); }
     void vpickev_hInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x711e8000, vd, vj, vk)); }
     void vpickev_wInsn(FPRegisterID vd, FPRegisterID vj, FPRegisterID vk) { insn(lsxVVVInsn(0x711f0000, vd, vj, vk)); }
@@ -3127,49 +3200,65 @@ protected:
 
         static void* read(uint32_t* location)
         {
-            unsigned i = 0;
-            {
-                // Iterate through all ImmediateLoader::Op::Type::NOP instructions generated for the purposes of the placeholder.
-                uint32_t nopInsn = LOONGARCH64Instructions::ANDI::construct(LOONGARCH64Registers::zero,
-                                                                            LOONGARCH64Registers::zero,
-                                                                            I12Immediate::v<I12Immediate, 0>());
-                for (; i < 8; ++i) {
-                    if (location[i] != nopInsn)
+            LOONGARCH64Instructions::InstructionValue instruction(location[7]);
+            RegisterID dest = RegisterID(instruction.field<0, 5>());
+            if (dest == LOONGARCH64Registers::zero) {
+                for (int index = 6; index >= 0; --index) {
+                    instruction = LOONGARCH64Instructions::InstructionValue(location[index]);
+                    dest = RegisterID(instruction.field<0, 5>());
+                    if (dest != LOONGARCH64Registers::zero)
                         break;
                 }
             }
+            RELEASE_ASSERT(dest != LOONGARCH64Registers::zero);
+
+            unsigned i = 0;
+            uint32_t nopInsn = LOONGARCH64Instructions::ANDI::construct(LOONGARCH64Registers::zero,
+                                                                        LOONGARCH64Registers::zero,
+                                                                        I12Immediate::v<I12Immediate, 0>());
 
             intptr_t target = 0;
             for (; i < 8; ++i) {
+                if (location[i] == nopInsn)
+                    continue;
+
                 LOONGARCH64Instructions::InstructionValue insn(location[i]);
 
                 // Counterpart to ImmediateLoader::Op::Type::LU52I_D.
-                if (insn.field<22, 10>() == uint32_t(LOONGARCH64Instructions::Opcode10::LU52I_D_OP)) {
-                    target += int64_t(insn.field<10, 12>()) << 52;
+                if (insn.field<22, 10>() == uint32_t(LOONGARCH64Instructions::Opcode10::LU52I_D_OP)
+                    && insn.field<0, 5>() == unsigned(dest)
+                    && (insn.field<5, 5>() == unsigned(dest) || insn.field<5, 5>() == unsigned(LOONGARCH64Registers::zero))) {
+                    target = (target & ((int64_t(1) << 52) - 1)) | (int64_t(I12Immediate::value(insn)) << 52);
                     continue;
                 }
 
                 // Counterpart to ImmediateLoader::Op::Type::LU32I_D.
-                if (insn.field<25, 7>()  == uint32_t(LOONGARCH64Instructions::Opcode7::LU32I_D_OP)) {
-                    target += int64_t(insn.field<5, 20>()) << 32;
+                if (insn.field<25, 7>()  == uint32_t(LOONGARCH64Instructions::Opcode7::LU32I_D_OP)
+                    && insn.field<0, 5>() == unsigned(dest)) {
+                    target = (target & 0xffffffffll) | (int64_t(SImm<20>(insn.field<5, 20>())) << 32);
                     continue;
                 }
 
                 // Counterpart to ImmediateLoader::Op::Type::LU12I_W.
-                if (insn.field<25, 7>()  == uint32_t(LOONGARCH64Instructions::Opcode7::LU12I_W_OP)) {
-                    target += int64_t(insn.field<5, 20>()) << 12;
+                if (insn.field<25, 7>()  == uint32_t(LOONGARCH64Instructions::Opcode7::LU12I_W_OP)
+                    && insn.field<0, 5>() == unsigned(dest)) {
+                    target = int32_t(insn.field<5, 20>() << 12);
                     continue;
                 }
 
                 // Counterpart to ImmediateLoader::Op::Type::ORI.
-                if (insn.field<22, 10>() == uint32_t(LOONGARCH64Instructions::Opcode10::ORI_OP)) {
-                    target += int64_t(insn.field<10, 12>());
+                if (insn.field<22, 10>() == uint32_t(LOONGARCH64Instructions::Opcode10::ORI_OP)
+                    && insn.field<0, 5>() == unsigned(dest)
+                    && (insn.field<5, 5>() == unsigned(dest) || insn.field<5, 5>() == unsigned(LOONGARCH64Registers::zero))) {
+                    target |= int64_t(insn.field<10, 12>());
                     continue;
                 }
 
                 // Counterpart to ImmediateLoader::Op::Type::ADDI_W.
-                if (insn.field<22, 10>() == uint32_t(LOONGARCH64Instructions::Opcode10::ADDI_W_OP)) {
-                    target += int64_t(insn.field<10, 12>());
+                if (insn.field<22, 10>() == uint32_t(LOONGARCH64Instructions::Opcode10::ADDI_W_OP)
+                    && insn.field<0, 5>() == unsigned(dest)
+                    && (insn.field<5, 5>() == unsigned(dest) || insn.field<5, 5>() == unsigned(LOONGARCH64Registers::zero))) {
+                    target = int32_t(uint32_t(target) + uint32_t(I12Immediate::value(insn)));
                     continue;
                 }
 

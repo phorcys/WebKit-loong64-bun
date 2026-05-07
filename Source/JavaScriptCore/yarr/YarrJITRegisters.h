@@ -164,8 +164,8 @@ public:
     static constexpr GPRReg length = LOONGARCH64Registers::r6;
     static constexpr GPRReg output = LOONGARCH64Registers::r7;
     static constexpr GPRReg matchingContext = LOONGARCH64Registers::r8;
-    static constexpr GPRReg freelistRegister = LOONGARCH64Registers::r8;
-    static constexpr GPRReg freelistSizeRegister = LOONGARCH64Registers::r9;
+    static constexpr GPRReg freelistRegister = LOONGARCH64Registers::r17;
+    static constexpr GPRReg freelistSizeRegister = InvalidGPRReg;
 
     // Scratch registers
     static constexpr GPRReg regT0 = LOONGARCH64Registers::r10;
@@ -174,11 +174,28 @@ public:
     static constexpr GPRReg remainingMatchCount = LOONGARCH64Registers::r13;
     static constexpr GPRReg regUnicodeInputAndTrail = LOONGARCH64Registers::r14;
     static constexpr GPRReg unicodeAndSubpatternIdTemp = LOONGARCH64Registers::r9;
-    static constexpr GPRReg initialStart = LOONGARCH64Registers::r18;
-    static constexpr GPRReg endOfStringAddress = LOONGARCH64Registers::r20;
+    static constexpr GPRReg initialStart = LOONGARCH64Registers::r15;
+    static constexpr GPRReg endOfStringAddress = LOONGARCH64Registers::r16;
 
     static constexpr GPRReg returnRegister = LOONGARCH64Registers::r4;
     static constexpr GPRReg returnRegister2 = LOONGARCH64Registers::r5;
+
+    // SIMD registers for Boyer-Moore SIMD lookahead. Avoid f0-f7 argument
+    // registers, f22/f23 MacroAssembler scratch registers, and f24-f31
+    // callee-saved registers.
+    static constexpr FPRReg vectorTemp0 = LOONGARCH64Registers::f8;
+    static constexpr FPRReg vectorTemp1 = LOONGARCH64Registers::f9;
+    static constexpr FPRReg vectorTemp2 = LOONGARCH64Registers::f10;
+    static constexpr FPRReg vectorTemp3 = LOONGARCH64Registers::f11;
+    static constexpr FPRReg vectorTemp4 = LOONGARCH64Registers::f12;
+    static constexpr FPRReg vectorInput0 = LOONGARCH64Registers::f13;
+    static constexpr FPRReg vectorInput1 = LOONGARCH64Registers::f14;
+    static constexpr FPRReg vectorInput2 = LOONGARCH64Registers::f15;
+    static constexpr FPRReg vectorInput3 = LOONGARCH64Registers::f16;
+    static constexpr FPRReg vectorScratch0 = LOONGARCH64Registers::f17;
+    static constexpr FPRReg vectorScratch1 = LOONGARCH64Registers::f18;
+    static constexpr FPRReg vectorScratch2 = LOONGARCH64Registers::f19;
+    static constexpr FPRReg vectorScratch3 = LOONGARCH64Registers::f20;
 #endif
 };
 

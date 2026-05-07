@@ -63,32 +63,34 @@
 # r30 => csr7   (numberTag)
 # r31 => csr8   (notCellMask)
 #
-# FPR conventions, to match the baseline JIT:
+# FPR conventions, to match the baseline JIT. The ft*/fa*/wfa* names here are
+# offlineasm abstract names, not LoongArch ABI names. LoongArch ABI names are:
+# f0-f7 => $fa0-$fa7, f8-f23 => $ft0-$ft15, f24-f31 => $fs0-$fs7.
 #
-# f0  => fa0, wfa0
-# f1  => fa1, wfa1
-# f2  => fa2, wfa2
-# f3  => fa3, wfa3
-# f4  => fa4, wfa4
-# f5  => fa5, wfa5
-# f6  => fa6, wfa6
-# f7  => fa7, wfa7
-# f8  => ft0
-# f9  => ft1
-# f10 => ft2
-# f11 => ft3
-# f12 => ft4
-# f13 => ft5
-# f14 => ft6
-# f15 => ft7
-# f16 => ft8
-# f17 => ft9
-# f18 => ft10
-# f19 => ft11
-# f20 => ft12
-# f21 => ft13
-# f22 => ft14
-# f23 => ft15
+# f0  => ft0, fa0, wfa0, fr
+# f1  => ft1, fa1, wfa1
+# f2  => ft2, fa2, wfa2
+# f3  => ft3, fa3, wfa3
+# f4  => ft4, fa4, wfa4
+# f5  => ft5, fa5, wfa5
+# f6  => ft6, fa6, wfa6
+# f7  => ft7, fa7, wfa7
+# f8  => JIT fpRegT8
+# f9  => JIT fpRegT9
+# f10 => JIT fpRegT10
+# f11 => JIT fpRegT11
+# f12 => JIT fpRegT12
+# f13 => JIT fpRegT13
+# f14 => JIT fpRegT14
+# f15 => JIT fpRegT15
+# f16 => JIT fpRegT16
+# f17 => JIT fpRegT17
+# f18 => JIT fpRegT18
+# f19 => JIT fpRegT19
+# f20 => JIT fpRegT20
+# f21 => JIT fpRegT21
+# f22 => MacroAssembler scratch
+# f23 => MacroAssembler scratch
 # f24 => csfr0
 # f25 => csfr1
 # f26 => csfr2
@@ -216,66 +218,22 @@ end
 class FPRegisterID
     def loongarch64Operand
         case @name
-        when 'fa0', 'wfa0'
-            '$f0'
-        when 'fa1', 'wfa1'
-            '$f1'
-        when 'fa2', 'wfa2'
-            '$f2'
-        when 'fa3', 'wfa3'
-            '$f3'
-        when 'fa4', 'wfa4'
-            '$f4'
-        when 'fa5', 'wfa5'
-            '$f5'
-        when 'fa6', 'wfa6'
-            '$f6'
-        when 'fa7', 'wfa7'
-            '$f7'
         when 'ft0'
-            '$f8'
+            '$f0'
         when 'ft1'
-            '$f9'
+            '$f1'
         when 'ft2'
-            '$f10'
+            '$f2'
         when 'ft3'
-            '$f11'
+            '$f3'
         when 'ft4'
-            '$f12'
+            '$f4'
         when 'ft5'
-            '$f13'
+            '$f5'
         when 'ft6'
-            '$f14'
+            '$f6'
         when 'ft7'
-            '$f15'
-        when 'ft8'
-            '$f16'
-        when 'ft9'
-            '$f17'
-        when 'ft10'
-            '$f18'
-        when 'ft11'
-            '$f19'
-        when 'ft12'
-            '$f20'
-        when 'ft13'
-            '$f21'
-        when 'ft14'
-            '$f22'
-        when 'ft15'
-            '$f23'
-        when 'ft16'
-            '$f24'
-        when 'ft17'
-            '$f25'
-        when 'ft18'
-            '$f26'
-        when 'ft19'
-            '$f27'
-        when 'ft20'
-            '$f28'
-        when 'ft21'
-            '$f29'
+            '$f7'
         when 'csfr0'
             '$f24'
         when 'csfr1'
@@ -299,65 +257,33 @@ class FPRegisterID
 
     def loongarch64VectorOperand
         case @name
-        when 'fa0', 'wfa0'
-            '$vr0'
-        when 'fa1', 'wfa1'
-            '$vr1'
-        when 'fa2', 'wfa2'
-            '$vr2'
-        when 'fa3', 'wfa3'
-            '$vr3'
-        when 'fa4', 'wfa4'
-            '$vr4'
-        when 'fa5', 'wfa5'
-            '$vr5'
-        when 'fa6', 'wfa6'
-            '$vr6'
-        when 'fa7', 'wfa7'
-            '$vr7'
         when 'ft0'
-            '$vr8'
+            '$vr0'
         when 'ft1'
-            '$vr9'
+            '$vr1'
         when 'ft2'
-            '$vr10'
+            '$vr2'
         when 'ft3'
-            '$vr11'
+            '$vr3'
         when 'ft4'
-            '$vr12'
+            '$vr4'
         when 'ft5'
-            '$vr13'
+            '$vr5'
         when 'ft6'
-            '$vr14'
+            '$vr6'
         when 'ft7'
-            '$vr15'
-        when 'ft8'
-            '$vr16'
-        when 'ft9'
-            '$vr17'
-        when 'ft10'
-            '$vr18'
-        when 'ft11'
-            '$vr19'
-        when 'ft12'
-            '$vr20'
-        when 'ft13'
-            '$vr21'
-        when 'ft14'
-            '$vr22'
-        when 'ft15'
-            '$vr23'
-        when 'ft16', 'csfr0'
+            '$vr7'
+        when 'csfr0'
             '$vr24'
-        when 'ft17', 'csfr1'
+        when 'csfr1'
             '$vr25'
-        when 'ft18', 'csfr2'
+        when 'csfr2'
             '$vr26'
-        when 'ft19', 'csfr3'
+        when 'csfr3'
             '$vr27'
-        when 'ft20', 'csfr4'
+        when 'csfr4'
             '$vr28'
-        when 'ft21', 'csfr5'
+        when 'csfr5'
             '$vr29'
         when 'csfr6'
             '$vr30'
@@ -1857,7 +1783,7 @@ def loongarch64LowerFPOperation(list)
                         # Float to Uint32
                         notEqualZeroLabel = LocalLabel.unique(node.codeOrigin, "float_to_uint32_not_equal_zero")
                         doneLabel = LocalLabel.unique(node.codeOrigin, "float_to_uint32_done")
-                        newList << Instruction.new(node.codeOrigin, "addi.d", [sp, Immediate.new(node.codeOrigin, -4), sp])
+                        newList << Instruction.new(node.codeOrigin, "addi.d", [sp, Immediate.new(node.codeOrigin, -8), sp])
                         newList << Instruction.new(node.codeOrigin, "li.d", [Immediate.new(node.codeOrigin, 0x3b031b014f000000), rscratch])
                         newList << Instruction.new(node.codeOrigin, "st.d", [rscratch, Address.new(node.codeOrigin, sp, Immediate.new(node.codeOrigin, 0))])
                         # fscratch2 = 0x3b031b014f000000 = 2.14748365e+09
@@ -1875,13 +1801,13 @@ def loongarch64LowerFPOperation(list)
                         newList << Instruction.new(node.codeOrigin, "li.d", [Immediate.new(node.codeOrigin, 0xffffffff80000000), rscratch])
                         newList << Instruction.new(node.codeOrigin, "or", [node.operands[1], rscratch, node.operands[1]])
                         newList << doneLabel
-                        newList << Instruction.new(node.codeOrigin, "addi.d", [sp, Immediate.new(node.codeOrigin, 4), sp])
+                        newList << Instruction.new(node.codeOrigin, "addi.d", [sp, Immediate.new(node.codeOrigin, 8), sp])
 
                     when :q
                         # Float to Uint64
                         notEqualZeroLabel = LocalLabel.unique(node.codeOrigin, "float_to_uint64_not_equal_zero")
                         doneLabel = LocalLabel.unique(node.codeOrigin, "float_to_uint64_done")
-                        newList << Instruction.new(node.codeOrigin, "addi.d", [sp, Immediate.new(node.codeOrigin, -4), sp])
+                        newList << Instruction.new(node.codeOrigin, "addi.d", [sp, Immediate.new(node.codeOrigin, -8), sp])
                         newList << Instruction.new(node.codeOrigin, "li.d", [Immediate.new(node.codeOrigin, 0x3b031b015f000000), rscratch])
                         newList << Instruction.new(node.codeOrigin, "st.d", [rscratch, Address.new(node.codeOrigin, sp, Immediate.new(node.codeOrigin, 0))])
                         # fscratch2 = 0x3b031b015f000000 = 9.22337204e+18
@@ -1899,7 +1825,7 @@ def loongarch64LowerFPOperation(list)
                         newList << Instruction.new(node.codeOrigin, "li.d", [Immediate.new(node.codeOrigin, 0x8000000000000000), rscratch])
                         newList << Instruction.new(node.codeOrigin, "or", [node.operands[1], rscratch, node.operands[1]])
                         newList << doneLabel
-                        newList << Instruction.new(node.codeOrigin, "addi.d", [sp, Immediate.new(node.codeOrigin, 4), sp])
+                        newList << Instruction.new(node.codeOrigin, "addi.d", [sp, Immediate.new(node.codeOrigin, 8), sp])
                     else
                         raise "Invalid type #{destinationType}"
                     end
@@ -1910,7 +1836,7 @@ def loongarch64LowerFPOperation(list)
                         # Double to Uint32
                         notEqualZeroLabel = LocalLabel.unique(node.codeOrigin, "double_to_uint32_not_equal_zero")
                         doneLabel = LocalLabel.unique(node.codeOrigin, "double_to_uint32_done")
-                        newList << Instruction.new(node.codeOrigin, "addi.d", [sp, Immediate.new(node.codeOrigin, -4), sp])
+                        newList << Instruction.new(node.codeOrigin, "addi.d", [sp, Immediate.new(node.codeOrigin, -8), sp])
                         newList << Instruction.new(node.codeOrigin, "li.d", [Immediate.new(node.codeOrigin, 0x41e0000000000000), rscratch])
                         newList << Instruction.new(node.codeOrigin, "st.d", [rscratch, Address.new(node.codeOrigin, sp, Immediate.new(node.codeOrigin, 0))])
                         # fscratch2 = 0x41e0000000000000 = 2147483648.0
@@ -1928,13 +1854,13 @@ def loongarch64LowerFPOperation(list)
                         newList << Instruction.new(node.codeOrigin, "li.d", [Immediate.new(node.codeOrigin, 0xffffffff80000000), rscratch])
                         newList << Instruction.new(node.codeOrigin, "or", [node.operands[1], rscratch, node.operands[1]])
                         newList << doneLabel
-                        newList << Instruction.new(node.codeOrigin, "addi.d", [sp, Immediate.new(node.codeOrigin, 4), sp])
+                        newList << Instruction.new(node.codeOrigin, "addi.d", [sp, Immediate.new(node.codeOrigin, 8), sp])
 
                     when :q
                         # Double to Uint64
                         notEqualZeroLabel = LocalLabel.unique(node.codeOrigin, "double_to_uint64_not_equal_zero")
                         doneLabel = LocalLabel.unique(node.codeOrigin, "double_to_uint64_done")
-                        newList << Instruction.new(node.codeOrigin, "addi.d", [sp, Immediate.new(node.codeOrigin, -4), sp])
+                        newList << Instruction.new(node.codeOrigin, "addi.d", [sp, Immediate.new(node.codeOrigin, -8), sp])
                         newList << Instruction.new(node.codeOrigin, "li.d", [Immediate.new(node.codeOrigin, 0x43e0000000000000), rscratch])
                         newList << Instruction.new(node.codeOrigin, "st.d", [rscratch, Address.new(node.codeOrigin, sp, Immediate.new(node.codeOrigin, 0))])
                         # fscratch2 = 0x43e0000000000000 = 9.2233720368547758e+18
@@ -1952,7 +1878,7 @@ def loongarch64LowerFPOperation(list)
                         newList << Instruction.new(node.codeOrigin, "li.d", [Immediate.new(node.codeOrigin, 0x8000000000000000), rscratch])
                         newList << Instruction.new(node.codeOrigin, "or", [node.operands[1], rscratch, node.operands[1]])
                         newList << doneLabel
-                        newList << Instruction.new(node.codeOrigin, "addi.d", [sp, Immediate.new(node.codeOrigin, 4), sp])
+                        newList << Instruction.new(node.codeOrigin, "addi.d", [sp, Immediate.new(node.codeOrigin, 8), sp])
                     else
                         raise "Invalid type #{destinationType}"
                     end
@@ -2281,9 +2207,15 @@ class Instruction
         when /^vpickve2gr\.(d)$/
             loongarch64ValidateOperands(operands, [VecRegisterID, Immediate, RegisterID])
             $asm.puts "#{opcode} #{operands[2].loongarch64Operand}, #{operands[0].loongarch64Operand}, #{operands[1].loongarch64Operand(:u8)}"
-        when /^(add\.(w|d)|sub\.(w|d)|and|or|xor|s(ll|rl|ra)\.(w|d)|mul\.(w|d)|div\.(w|d)(u?)|mod\.(w|d)(u?))$/
+        when /^(add\.(w|d)|sub\.(w|d)|and|or|xor|s(ll|rl|ra)\.(w|d)|mul\.(w|d)|mulh\.(w|d)(u?)|div\.(w|d)(u?)|mod\.(w|d)(u?))$/
             loongarch64ValidateOperands(operands, [RegisterID, RegisterID, RegisterID])
             $asm.puts "#{laop(opcode)} #{operands[2].loongarch64Operand}, #{operands[0].loongarch64Operand}, #{operands[1].loongarch64Operand}"
+        when "smulhq"
+            loongarch64ValidateOperands(operands, [RegisterID, RegisterID, RegisterID])
+            $asm.puts "mulh.d #{operands[2].loongarch64Operand}, #{operands[0].loongarch64Operand}, #{operands[1].loongarch64Operand}"
+        when "umulhq"
+            loongarch64ValidateOperands(operands, [RegisterID, RegisterID, RegisterID])
+            $asm.puts "mulh.du #{operands[2].loongarch64Operand}, #{operands[0].loongarch64Operand}, #{operands[1].loongarch64Operand}"
         when /^(and|or|xor)i$/
             loongarch64ValidateOperands(operands, [RegisterID, Immediate, RegisterID])
             $asm.puts "#{laop(opcode)} #{operands[2].loongarch64Operand}, #{operands[0].loongarch64Operand}, #{operands[1].loongarch64Operand}"
@@ -2300,7 +2232,7 @@ class Instruction
             raise "Invalid bstrpick.d msbd immediate" unless loongarch64ValidateImmediate(:la64_shift_immediate, operands[1].value)
             raise "Invalid bstrpick.d lsbd immediate" unless loongarch64ValidateImmediate(:la64_shift_immediate, operands[2].value)
             $asm.puts "bstrpick.d #{operands[3].loongarch64Operand}, #{operands[0].loongarch64Operand}, #{operands[1].loongarch64Operand}, #{operands[2].loongarch64Operand}"
-        when /^slt|slt(u?)$/
+        when /^sltu?$/
             loongarch64ValidateOperands(operands, [RegisterID, RegisterID, RegisterID])
             $asm.puts "#{laop(opcode)} #{operands[2].loongarch64Operand}, #{operands[0].loongarch64Operand}, #{operands[1].loongarch64Operand}"
         when "seqz"

@@ -26,7 +26,6 @@
 
 #if defined(__loongarch__)
 #define SIMDUTF_IMPLEMENTATION_LASX 0
-#define SIMDUTF_IMPLEMENTATION_LSX 0
 #define SIMDUTF_IMPLEMENTATION_FALLBACK 1
 #endif
 

@@ -3418,6 +3418,16 @@ auto OMGIRGenerator::addI64Add128(ExpressionType lhsLoVar, ExpressionType lhsHiV
     Value* rhsLo = get(rhsLoVar);
     Value* rhsHi = get(rhsHiVar);
 
+#if CPU(LOONGARCH64)
+    Value* lo = m_currentBlock->appendNew<Value>(m_proc, Add, origin(), lhsLo, rhsLo);
+    Value* carry = m_currentBlock->appendNew<Value>(m_proc, Below, origin(), lo, lhsLo);
+    Value* hiWithoutCarry = m_currentBlock->appendNew<Value>(m_proc, Add, origin(), lhsHi, rhsHi);
+    Value* hi = m_currentBlock->appendNew<Value>(m_proc, Add, origin(), hiWithoutCarry, m_currentBlock->appendNew<Value>(m_proc, ZExt32, origin(), carry));
+
+    resultLo = push(lo);
+    resultHi = push(hi);
+    return { };
+#else
     B3::Type tupleType = int64PairTupleType();
     PatchpointValue* patchpoint = m_currentBlock->appendNew<PatchpointValue>(m_proc, tupleType, origin());
     patchpoint->append(lhsLo, ValueRep::SomeRegister);
@@ -3447,6 +3457,7 @@ auto OMGIRGenerator::addI64Add128(ExpressionType lhsLoVar, ExpressionType lhsHiV
     resultLo = push(m_currentBlock->appendNew<ExtractValue>(m_proc, origin(), B3::Int64, patchpoint, 0));
     resultHi = push(m_currentBlock->appendNew<ExtractValue>(m_proc, origin(), B3::Int64, patchpoint, 1));
     return { };
+#endif
 }
 
 auto OMGIRGenerator::addI64Sub128(ExpressionType lhsLoVar, ExpressionType lhsHiVar, ExpressionType rhsLoVar, ExpressionType rhsHiVar, ExpressionType& resultLo, ExpressionType& resultHi) -> PartialResult
@@ -3456,6 +3467,16 @@ auto OMGIRGenerator::addI64Sub128(ExpressionType lhsLoVar, ExpressionType lhsHiV
     Value* rhsLo = get(rhsLoVar);
     Value* rhsHi = get(rhsHiVar);
 
+#if CPU(LOONGARCH64)
+    Value* lo = m_currentBlock->appendNew<Value>(m_proc, Sub, origin(), lhsLo, rhsLo);
+    Value* borrow = m_currentBlock->appendNew<Value>(m_proc, Below, origin(), lhsLo, rhsLo);
+    Value* hiWithoutBorrow = m_currentBlock->appendNew<Value>(m_proc, Sub, origin(), lhsHi, rhsHi);
+    Value* hi = m_currentBlock->appendNew<Value>(m_proc, Sub, origin(), hiWithoutBorrow, m_currentBlock->appendNew<Value>(m_proc, ZExt32, origin(), borrow));
+
+    resultLo = push(lo);
+    resultHi = push(hi);
+    return { };
+#else
     B3::Type tupleType = int64PairTupleType();
     PatchpointValue* patchpoint = m_currentBlock->appendNew<PatchpointValue>(m_proc, tupleType, origin());
     patchpoint->append(lhsLo, ValueRep::SomeRegister);
@@ -3485,6 +3506,7 @@ auto OMGIRGenerator::addI64Sub128(ExpressionType lhsLoVar, ExpressionType lhsHiV
     resultLo = push(m_currentBlock->appendNew<ExtractValue>(m_proc, origin(), B3::Int64, patchpoint, 0));
     resultHi = push(m_currentBlock->appendNew<ExtractValue>(m_proc, origin(), B3::Int64, patchpoint, 1));
     return { };
+#endif
 }
 
 auto OMGIRGenerator::addI64MulWideU(ExpressionType lhsVar, ExpressionType rhsVar, ExpressionType& resultLo, ExpressionType& resultHi) -> PartialResult
@@ -3492,7 +3514,7 @@ auto OMGIRGenerator::addI64MulWideU(ExpressionType lhsVar, ExpressionType rhsVar
     Value* lhs = get(lhsVar);
     Value* rhs = get(rhsVar);
 
-#if CPU(ARM64)
+#if CPU(ARM64) || CPU(LOONGARCH64)
     resultLo = push(m_currentBlock->appendNew<Value>(m_proc, Mul, origin(), lhs, rhs));
     resultHi = push(m_currentBlock->appendNew<Value>(m_proc, UMulHigh, origin(), lhs, rhs));
 
@@ -3520,7 +3542,7 @@ auto OMGIRGenerator::addI64MulWideS(ExpressionType lhsVar, ExpressionType rhsVar
     Value* lhs = get(lhsVar);
     Value* rhs = get(rhsVar);
 
-#if CPU(ARM64)
+#if CPU(ARM64) || CPU(LOONGARCH64)
     resultLo = push(m_currentBlock->appendNew<Value>(m_proc, Mul, origin(), lhs, rhs));
     resultHi = push(m_currentBlock->appendNew<Value>(m_proc, MulHigh, origin(), lhs, rhs));
 

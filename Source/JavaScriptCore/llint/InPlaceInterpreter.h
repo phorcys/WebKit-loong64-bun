@@ -349,7 +349,11 @@ extern "C" void SYSV_ABI ipint_entry();
     m(0x0e, table_copy) \
     m(0x0f, table_grow) \
     m(0x10, table_size) \
-    m(0x11, table_fill)
+    m(0x11, table_fill) \
+    m(0x13, i64_add128) \
+    m(0x14, i64_sub128) \
+    m(0x15, i64_mul_wide_s) \
+    m(0x16, i64_mul_wide_u)
 
 #define FOR_EACH_IPINT_SIMD_OPCODE(m) \
     m(0x00, simd_v128_load_mem) \

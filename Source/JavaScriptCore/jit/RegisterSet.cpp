@@ -231,14 +231,17 @@ RegisterSet RegisterSet::vmCalleeSaveRegisters()
     result.add(GPRInfo::regCS6);
     result.add(GPRInfo::regCS7);
     result.add(GPRInfo::regCS8);
-    result.add(FPRInfo::fpRegCS0, IgnoreVectors);
-    result.add(FPRInfo::fpRegCS1, IgnoreVectors);
-    result.add(FPRInfo::fpRegCS2, IgnoreVectors);
-    result.add(FPRInfo::fpRegCS3, IgnoreVectors);
-    result.add(FPRInfo::fpRegCS4, IgnoreVectors);
-    result.add(FPRInfo::fpRegCS5, IgnoreVectors);
-    result.add(FPRInfo::fpRegCS6, IgnoreVectors);
-    result.add(FPRInfo::fpRegCS7, IgnoreVectors);
+    // The LoongArch LP64D ABI specifies preservation of the 64-bit FPR value.
+    // It does not define LSX/LASX upper-lane preservation, so treat these like
+    // ARM64's partial-width callee-saved vector registers.
+    result.add(FPRInfo::fpRegCS0, Width64);
+    result.add(FPRInfo::fpRegCS1, Width64);
+    result.add(FPRInfo::fpRegCS2, Width64);
+    result.add(FPRInfo::fpRegCS3, Width64);
+    result.add(FPRInfo::fpRegCS4, Width64);
+    result.add(FPRInfo::fpRegCS5, Width64);
+    result.add(FPRInfo::fpRegCS6, Width64);
+    result.add(FPRInfo::fpRegCS7, Width64);
 #endif
     return result;
 }
@@ -390,14 +393,14 @@ RegisterSet RegisterSet::ftlCalleeSaveRegisters()
     result.add(GPRInfo::regCS6);
     result.add(GPRInfo::regCS7);
     result.add(GPRInfo::regCS8);
-    result.add(FPRInfo::fpRegCS0, IgnoreVectors);
-    result.add(FPRInfo::fpRegCS1, IgnoreVectors);
-    result.add(FPRInfo::fpRegCS2, IgnoreVectors);
-    result.add(FPRInfo::fpRegCS3, IgnoreVectors);
-    result.add(FPRInfo::fpRegCS4, IgnoreVectors);
-    result.add(FPRInfo::fpRegCS5, IgnoreVectors);
-    result.add(FPRInfo::fpRegCS6, IgnoreVectors);
-    result.add(FPRInfo::fpRegCS7, IgnoreVectors);
+    result.add(FPRInfo::fpRegCS0, Width64);
+    result.add(FPRInfo::fpRegCS1, Width64);
+    result.add(FPRInfo::fpRegCS2, Width64);
+    result.add(FPRInfo::fpRegCS3, Width64);
+    result.add(FPRInfo::fpRegCS4, Width64);
+    result.add(FPRInfo::fpRegCS5, Width64);
+    result.add(FPRInfo::fpRegCS6, Width64);
+    result.add(FPRInfo::fpRegCS7, Width64);
 #else
     UNREACHABLE_FOR_PLATFORM();
 #endif

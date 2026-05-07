@@ -28,6 +28,7 @@
 
 #include "APICast.h"
 #include "JSCellInlines.h"
+#include "JSLock.h"
 #include "SimpleMarkingConstraint.h"
 
 using namespace JSC;
@@ -62,6 +63,7 @@ void JSContextGroupAddMarkingConstraint(JSContextGroupRef group, JSMarkingConstr
 {
     VM& vm = *toJS(group);
 
+    JSLockHolder locker(vm);
     
     unsigned constraintIndex = constraintCounter.exchangeAdd(1);
     

@@ -195,8 +195,8 @@ private:
             }
 
             case RotL: {
-                // ARM64 doesn't have a rotate left.
-                if (isARM64()) {
+                // ARM64 and LoongArch64 only expose rotate-right instructions.
+                if (isARM64() || isLOONGARCH64()) {
                     Value* newShift = m_insertionSet.insert<Value>(m_index, Neg, m_value->origin(), m_value->child(1));
                     Value* rotate = m_insertionSet.insert<Value>(m_index, RotR, m_value->origin(), m_value->child(0), newShift);
                     m_value->replaceWithIdentity(rotate);
@@ -272,4 +272,3 @@ bool lowerMacrosAfterOptimizations(Procedure& proc)
 } } // namespace JSC::B3
 
 #endif // ENABLE(B3_JIT)
-
