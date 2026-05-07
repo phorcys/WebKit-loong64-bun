@@ -2262,9 +2262,11 @@ private:
             result->numGPScratchRegisters = 2;
         result->setGenerator(
             [](CCallHelpers& jit, const StackmapGenerationParams& params) {
+#if CPU(LOONGARCH64)
                 if (isLOONGARCH64())
                     jit.add64(params[1].fpr(), params[2].fpr(), params[0].fpr(), params.gpScratch(0), params.gpScratch(1));
                 else
+#endif
                     jit.add64(params[1].fpr(), params[2].fpr(), params[0].fpr());
             });
         result->effects = Effects::none();
@@ -2283,9 +2285,11 @@ private:
         result->setGenerator(
             [](CCallHelpers& jit, const StackmapGenerationParams& params) {
                 AllowMacroScratchRegisterUsageIf allowScratchIf(jit, isX86_64() && !isX86_64_AVX());
+#if CPU(LOONGARCH64)
                 if (isLOONGARCH64())
                     jit.sub64(params[1].fpr(), params[2].fpr(), params[0].fpr(), params.gpScratch(0), params.gpScratch(1));
                 else
+#endif
                     jit.sub64(params[1].fpr(), params[2].fpr(), params[0].fpr());
             });
         result->effects = Effects::none();

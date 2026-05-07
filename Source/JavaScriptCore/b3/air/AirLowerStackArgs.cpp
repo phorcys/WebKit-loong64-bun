@@ -128,8 +128,8 @@ void lowerStackArgs(Code& code)
                 }
             };
 
-            if (isARM64() && (inst.kind.opcode == Lea32 || inst.kind.opcode == Lea64)) {
-                // On ARM64, Lea is just an add. We can't handle this below because
+            if ((isARM64() || isLOONGARCH64()) && (inst.kind.opcode == Lea32 || inst.kind.opcode == Lea64)) {
+                // On non-x86, Lea is just an add. We can't handle this below because
                 // taking into account the Width to see if we can compute the immediate
                 // is wrong.
                 auto lowerArmLea = [&] (Value::OffsetType offset, Tmp base) {
@@ -171,7 +171,7 @@ void lowerStackArgs(Code& code)
             // In that case, split the move into separate load and store instructions so that the extendedOffsetReg can
             // be used for each address, one at a time.
             std::optional<Width> moveWidth = isMove(inst);
-            if (isARM64() && moveWidth && inst.args.size() == 3 && inst.args[0].isStack()) {
+            if ((isARM64() || isLOONGARCH64()) && moveWidth && inst.args.size() == 3 && inst.args[0].isStack()) {
                 Arg& src = inst.args[0];
                 src = stackAddr(instIndex, src, *moveWidth, src.offset() + src.stackSlot()->offsetFromFP());
                 if (extendedOffsetAddrRegInUse) {

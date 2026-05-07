@@ -40,6 +40,7 @@ class CCallHelpers;
 namespace B3 { namespace Air {
 
 class Code;
+struct Inst;
 
 class GenerateAndAllocateRegisters {
     WTF_MAKE_SEQUESTERED_ARENA_ALLOCATED(GenerateAndAllocateRegisters);
@@ -65,6 +66,7 @@ private:
     void freeDeadTmpsAtCurrentInst();
     void freeDeadTmpsAtCurrentBlock();
     bool assignTmp(Tmp&, Bank, Arg::Role);
+    GPRReg addressScratchRegister();
     void buildLiveRanges(UnifiedTmpLiveness&);
     bool isDisallowedRegister(Reg);
 
@@ -91,6 +93,7 @@ private:
     RegisterSet m_lateClobber;
     RegisterSet m_clobberedToClear;
     RegisterSet m_allowedRegisters;
+    Inst* m_currentInst { nullptr };
     std::unique_ptr<UnifiedTmpLiveness> m_liveness;
 
     struct PatchSpillData {

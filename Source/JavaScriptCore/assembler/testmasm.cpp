@@ -249,6 +249,9 @@ bool NODELETE isSpecialGPR(MacroAssembler::RegisterID id)
 #if CPU(ARM64)
     if (id == ARM64Registers::x18)
         return true;
+#elif CPU(LOONGARCH64)
+    if (id == LOONGARCH64Registers::zero || id == LOONGARCH64Registers::ra || id == LOONGARCH64Registers::tp || id == LOONGARCH64Registers::rx)
+        return true;
 #elif CPU(RISCV64)
     if (id == RISCV64Registers::zero || id == RISCV64Registers::ra || id == RISCV64Registers::gp || id == RISCV64Registers::tp)
         return true;
@@ -270,18 +273,27 @@ T invoke(const MacroAssemblerCodeRef<JSEntryPtrTag>& code, Arguments... argument
     void* executableAddress = untagCFunctionPtr<JSEntryPtrTag>(code.code().taggedPtr());
     T (SYSV_ABI *function)(Arguments...) = std::bit_cast<T(SYSV_ABI *)(Arguments...)>(executableAddress);
 
-#if CPU(RISCV64)
-    // RV64 calling convention requires all 32-bit values to be sign-extended into the whole register.
-    // JSC JIT is tailored for other ISAs that pass these values in 32-bit-wide registers, which RISC-V
-    // doesn't support, so any 32-bit value passed in return-value registers has to be manually sign-extended.
-    // This mirrors sign-extension of 32-bit values in argument registers on RV64 in CCallHelpers.h.
+#if CPU(RISCV64) || CPU(LOONGARCH64)
+    // RV64 and LoongArch64 calling conventions require 32-bit integer values
+    // to be sign-extended into the whole register.
+    // JSC JIT is tailored for other ISAs that pass these values in 32-bit-wide registers,
+    // so any 32-bit value passed in return-value registers has to be manually sign-extended here.
+    // This mirrors sign-extension of 32-bit values in argument registers on RV64/LoongArch64
+    // in CCallHelpers.h.
     if constexpr (std::is_integral_v<T>) {
         T returnValue = function(arguments...);
         if constexpr (sizeof(T) == 4) {
+#if CPU(RISCV64)
             asm volatile(
                 "sext.w %[out_value], %[in_value]\n\t"
                 : [out_value] "=r" (returnValue)
                 : [in_value] "r" (returnValue));
+#elif CPU(LOONGARCH64)
+            asm volatile(
+                "slli.w %[out_value], %[in_value], 0\n\t"
+                : [out_value] "=r" (returnValue)
+                : [in_value] "r" (returnValue));
+#endif
         }
         return returnValue;
     }
@@ -5496,7 +5508,7 @@ void testProbeModifiesStackPointer(WTF::Function<void*(Probe::Context&)> compute
     CPUState originalState;
     void* originalSP { nullptr };
     void* modifiedSP { nullptr };
-#if !CPU(RISCV64)
+#if CPU(X86_64) || CPU(ARM_THUMB2) || CPU(ARM64)
     uintptr_t modifiedFlags { 0 };
 #endif
     
@@ -5530,7 +5542,7 @@ void testProbeModifiesStackPointer(WTF::Function<void*(Probe::Context&)> compute
                 cpu.fpr(id) = std::bit_cast<double>(testWord64(id));
             }
 
-#if !(CPU(RISCV64))
+#if CPU(X86_64) || CPU(ARM_THUMB2) || CPU(ARM64)
             originalState.spr(flagsSPR) = cpu.spr(flagsSPR);
             modifiedFlags = originalState.spr(flagsSPR) ^ flagsMask;
             cpu.spr(flagsSPR) = modifiedFlags;
@@ -5556,7 +5568,7 @@ void testProbeModifiesStackPointer(WTF::Function<void*(Probe::Context&)> compute
             }
             for (auto id = CCallHelpers::firstFPRegister(); id <= CCallHelpers::lastFPRegister(); id = nextID(id))
                 CHECK_EQ(cpu.fpr<uint64_t>(id), testWord64(id));
-#if !CPU(RISCV64)
+#if CPU(X86_64) || CPU(ARM_THUMB2) || CPU(ARM64)
             CHECK_EQ(cpu.spr(flagsSPR) & flagsMask, modifiedFlags & flagsMask);
 #endif
             CHECK_EQ(cpu.sp(), modifiedSP);
@@ -5573,7 +5585,7 @@ void testProbeModifiesStackPointer(WTF::Function<void*(Probe::Context&)> compute
             }
             for (auto id = CCallHelpers::firstFPRegister(); id <= CCallHelpers::lastFPRegister(); id = nextID(id))
                 cpu.fpr(id) = originalState.fpr(id);
-#if !CPU(RISCV64)
+#if CPU(X86_64) || CPU(ARM_THUMB2) || CPU(ARM64)
             cpu.spr(flagsSPR) = originalState.spr(flagsSPR);
 #endif
             cpu.sp() = originalSP;
@@ -5590,7 +5602,7 @@ void testProbeModifiesStackPointer(WTF::Function<void*(Probe::Context&)> compute
             }
             for (auto id = CCallHelpers::firstFPRegister(); id <= CCallHelpers::lastFPRegister(); id = nextID(id))
                 CHECK_EQ(cpu.fpr<uint64_t>(id), originalState.fpr<uint64_t>(id));
-#if !CPU(RISCV64)
+#if CPU(X86_64) || CPU(ARM_THUMB2) || CPU(ARM64)
             CHECK_EQ(cpu.spr(flagsSPR) & flagsMask, originalState.spr(flagsSPR) & flagsMask);
 #endif
             CHECK_EQ(cpu.sp(), originalSP);
@@ -5671,7 +5683,7 @@ void testProbeModifiesStackValues()
     CPUState originalState;
     void* originalSP { nullptr };
     void* newSP { nullptr };
-#if !CPU(RISCV64)
+#if CPU(X86_64) || CPU(ARM_THUMB2) || CPU(ARM64)
     uintptr_t modifiedFlags { 0 };
 #endif
     size_t numberOfExtraEntriesToWrite { 10 }; // ARM64 requires that this be 2 word aligned.
@@ -5707,7 +5719,7 @@ void testProbeModifiesStackValues()
                 originalState.fpr(id) = cpu.fpr(id);
                 cpu.fpr(id) = std::bit_cast<double>(testWord64(id));
             }
-#if !CPU(RISCV64)
+#if CPU(X86_64) || CPU(ARM_THUMB2) || CPU(ARM64)
             originalState.spr(flagsSPR) = cpu.spr(flagsSPR);
             modifiedFlags = originalState.spr(flagsSPR) ^ flagsMask;
             cpu.spr(flagsSPR) = modifiedFlags;
@@ -5746,7 +5758,7 @@ void testProbeModifiesStackValues()
             }
             for (auto id = CCallHelpers::firstFPRegister(); id <= CCallHelpers::lastFPRegister(); id = nextID(id))
                 CHECK_EQ(cpu.fpr<uint64_t>(id), testWord64(id));
-#if !CPU(RISCV64)
+#if CPU(X86_64) || CPU(ARM_THUMB2) || CPU(ARM64)
             CHECK_EQ(cpu.spr(flagsSPR) & flagsMask, modifiedFlags & flagsMask);
 #endif
             CHECK_EQ(cpu.sp(), newSP);
@@ -5772,7 +5784,7 @@ void testProbeModifiesStackValues()
             }
             for (auto id = CCallHelpers::firstFPRegister(); id <= CCallHelpers::lastFPRegister(); id = nextID(id))
                 cpu.fpr(id) = originalState.fpr(id);
-#if !CPU(RISCV64)
+#if CPU(X86_64) || CPU(ARM_THUMB2) || CPU(ARM64)
             cpu.spr(flagsSPR) = originalState.spr(flagsSPR);
 #endif
             cpu.sp() = originalSP;

@@ -37,7 +37,7 @@ ModuleProgramExecutable::ModuleProgramExecutable(JSGlobalObject* globalObject, c
     : Base(globalObject->vm().moduleProgramExecutableStructure.get(), globalObject->vm(), source, StrictModeLexicallyScopedFeature, DerivedContextType::None, false, false, EvalContextType::None, NoIntrinsic)
 {
     SourceProviderSourceType sourceType = source.provider()->sourceType();
-    ASSERT(sourceType == SourceProviderSourceType::Module
+    ASSERT_UNUSED(sourceType, sourceType == SourceProviderSourceType::Module
     #if USE(BUN_JSC_ADDITIONS)
     || sourceType == SourceProviderSourceType::BunTranspiledModule
     #endif

@@ -242,10 +242,10 @@ Neg32 UZD:G:32
     x86: Addr
     x86: Index
 
-arm: NegateDouble U:F:64, D:F:64
+arm loongarch64: NegateDouble U:F:64, D:F:64
     Tmp, Tmp
 
-arm: NegateFloat U:F:32, D:F:32
+arm loongarch64: NegateFloat U:F:32, D:F:32
     Tmp, Tmp
 
 Mul32 U:G:32, UZD:G:32
@@ -279,10 +279,10 @@ arm64: MultiplyAddSignExtend32 U:G:32, U:G:32, U:G:64, D:G:64
 arm64: MultiplyAddZeroExtend32 U:G:32, U:G:32, U:G:64, D:G:64
     Tmp, Tmp, Tmp, Tmp
 
-arm64 loongarch64: MultiplySub32 U:G:32, U:G:32, U:G:32, ZD:G:32
+arm64: MultiplySub32 U:G:32, U:G:32, U:G:32, ZD:G:32
     Tmp, Tmp, Tmp, Tmp
 
-arm64 loongarch64: MultiplySub64 U:G:64, U:G:64, U:G:64, D:G:64
+arm64: MultiplySub64 U:G:64, U:G:64, U:G:64, D:G:64
     Tmp, Tmp, Tmp, Tmp
 
 arm64: MultiplySubSignExtend32 U:G:32, U:G:32, U:G:64, D:G:64
@@ -333,11 +333,17 @@ x86_64: X86MulHigh64 U:G:64, UD:G:64, D:G:64
 x86_64: X86UMulHigh64 U:G:64, UD:G:64, D:G:64
     Tmp, Tmp*, Tmp*
 
-arm64 loongarch64: Div32 U:G:32, U:G:32, ZD:G:32
+arm64: Div32 U:G:32, U:G:32, ZD:G:32
     Tmp, Tmp, Tmp
 
-arm64 loongarch64: UDiv32 U:G:32, U:G:32, ZD:G:32
+loongarch64: Div32 U:G:32, U:G:32, ZD:G:32, S:G:64, S:G:64
+    Tmp, Tmp, Tmp, Tmp, Tmp
+
+arm64: UDiv32 U:G:32, U:G:32, ZD:G:32
     Tmp, Tmp, Tmp
+
+loongarch64: UDiv32 U:G:32, U:G:32, ZD:G:32, S:G:64, S:G:64
+    Tmp, Tmp, Tmp, Tmp, Tmp
 
 arm64 loongarch64: Div64 U:G:64, U:G:64, D:G:64
     Tmp, Tmp, Tmp
@@ -417,7 +423,7 @@ Lea32 UA:G:32, D:G:32
 And32 U:G:32, U:G:32, ZD:G:32
     Tmp, Tmp, Tmp
     arm64: BitImm, Tmp, Tmp
-    32:  Imm, Tmp, Tmp
+    32 loongarch64: Imm, Tmp, Tmp
     x86: Tmp, Addr, Tmp
     x86: Addr, Tmp, Tmp
 
@@ -533,7 +539,7 @@ x86_64: RotateRight32 U:G:32, UZD:G:32
     Tmp*, Tmp
     Imm, Tmp
 
-arm: RotateRight32 U:G:32, U:G:32, ZD:G:32
+arm loongarch64: RotateRight32 U:G:32, U:G:32, ZD:G:32
     Tmp, Tmp, Tmp
     Tmp, Imm, Tmp
 
@@ -541,7 +547,7 @@ x86_64: RotateRight64 U:G:64, UD:G:64
     Tmp*, Tmp
     Imm, Tmp
 
-arm64: RotateRight64 U:G:64, U:G:64, D:G:64
+arm64 loongarch64: RotateRight64 U:G:64, U:G:64, D:G:64
     Tmp, Tmp, Tmp
     Tmp, Imm, Tmp
 
@@ -634,10 +640,10 @@ x86_64: Not64 UD:G:64
     Addr
     Index
 
-arm: AbsDouble U:F:64, D:F:64
+arm loongarch64: AbsDouble U:F:64, D:F:64
     Tmp, Tmp
 
-arm: AbsFloat U:F:32, D:F:32
+arm loongarch64: AbsFloat U:F:32, D:F:32
     Tmp, Tmp
 
 CeilDouble U:F:64, D:F:64
@@ -754,9 +760,9 @@ Move32 U:G:32, ZD:G:32
     x86: Imm, Tmp as zeroExtend32ToWord
     x86 armv7: Imm, Addr as store32
     x86: Imm, Index as store32
-    arm64: ZeroReg, Tmp as move
-    arm64: ZeroReg, Addr as store32
-    arm64: ZeroReg, Index as store32
+    arm64 loongarch64: ZeroReg, Tmp as move
+    arm64 loongarch64: ZeroReg, Addr as store32
+    arm64 loongarch64: ZeroReg, Index as store32
 
 arm64: MoveWithIncrement32 UD:G:32, ZD:G:32
     PreIndex, Tmp as load32
@@ -896,7 +902,7 @@ Load8 U:G:8, ZD:G:32
     Addr, Tmp
     Index, Tmp
 
-arm: LoadAcq8 U:G:8, ZD:G:32 /effects
+arm loongarch64: LoadAcq8 U:G:8, ZD:G:32 /effects
     SimpleAddr, Tmp
 
 Store8 U:G:8, D:G:8
@@ -907,28 +913,28 @@ Store8 U:G:8, D:G:8
     arm64: ZeroReg, Addr
     arm64: ZeroReg, Index
 
-arm: StoreRel8 U:G:8, D:G:8 /effects
+arm loongarch64: StoreRel8 U:G:8, D:G:8 /effects
     Tmp, SimpleAddr
 
 Load8SignedExtendTo32 U:G:8, ZD:G:32
     Addr, Tmp
     Index, Tmp
 
-arm: LoadAcq8SignedExtendTo32 U:G:8, ZD:G:32 /effects
+arm loongarch64: LoadAcq8SignedExtendTo32 U:G:8, ZD:G:32 /effects
     SimpleAddr, Tmp
 
 Load16 U:G:16, ZD:G:32
     Addr, Tmp
     Index, Tmp
 
-arm: LoadAcq16 U:G:16, ZD:G:32 /effects
+arm loongarch64: LoadAcq16 U:G:16, ZD:G:32 /effects
     SimpleAddr, Tmp
 
 Load16SignedExtendTo32 U:G:16, ZD:G:32
     Addr, Tmp
     Index, Tmp
 
-arm: LoadAcq16SignedExtendTo32 U:G:16, ZD:G:32 /effects
+arm loongarch64: LoadAcq16SignedExtendTo32 U:G:16, ZD:G:32 /effects
     SimpleAddr, Tmp
 
 Store16 U:G:16, D:G:16
@@ -939,19 +945,19 @@ Store16 U:G:16, D:G:16
     arm64: ZeroReg, Addr
     arm64: ZeroReg, Index
 
-arm: StoreRel16 U:G:16, D:G:16 /effects
+arm loongarch64: StoreRel16 U:G:16, D:G:16 /effects
     Tmp, SimpleAddr
 
-arm: LoadAcq32 U:G:32, ZD:G:32 /effects
+arm loongarch64: LoadAcq32 U:G:32, ZD:G:32 /effects
     SimpleAddr, Tmp
 
-arm: StoreRel32 U:G:32, ZD:G:32 /effects
+arm loongarch64: StoreRel32 U:G:32, ZD:G:32 /effects
     Tmp, SimpleAddr
 
-arm64: LoadAcq64 U:G:64, ZD:G:64 /effects
+arm64 loongarch64: LoadAcq64 U:G:64, ZD:G:64 /effects
     SimpleAddr, Tmp
 
-arm64: StoreRel64 U:G:64, ZD:G:64 /effects
+arm64 loongarch64: StoreRel64 U:G:64, ZD:G:64 /effects
     Tmp, SimpleAddr
 
 x86: Xchg8 UD:G:8, UD:G:8 /effects
@@ -1527,6 +1533,10 @@ Compare32 U:G:32, U:G:32, U:G:32, ZD:G:32
     RelCond, Tmp, Tmp, Tmp
     RelCond, Tmp, Imm, Tmp
 
+loongarch64: Compare32 U:G:32, U:G:32, U:G:32, ZD:G:32, S:G:64, S:G:64
+    RelCond, Tmp, Tmp, Tmp, Tmp, Tmp
+    RelCond, Tmp, Imm, Tmp, Tmp, Tmp
+
 64: Compare64 U:G:32, U:G:64, U:G:64, ZD:G:32
     RelCond, Tmp, Tmp, Tmp
     RelCond, Tmp, Imm, Tmp
@@ -1543,8 +1553,14 @@ Test32 U:G:32, U:G:32, U:G:32, ZD:G:32
 CompareDouble U:G:32, U:F:64, U:F:64, ZD:G:32
     DoubleCond, Tmp, Tmp, Tmp
 
+loongarch64: CompareDouble U:G:32, U:F:64, U:F:64, ZD:G:32, S:G:64
+    DoubleCond, Tmp, Tmp, Tmp, Tmp
+
 CompareFloat U:G:32, U:F:32, U:F:32, ZD:G:32
     DoubleCond, Tmp, Tmp, Tmp
+
+loongarch64: CompareFloat U:G:32, U:F:32, U:F:32, ZD:G:32, S:G:64
+    DoubleCond, Tmp, Tmp, Tmp, Tmp
 
 arm64: CompareDoubleWithZero U:G:32, U:F:64, ZD:G:32
     DoubleCond, Tmp, Tmp
@@ -1684,7 +1700,9 @@ BranchAdd32 U:G:32, U:G:32, U:G:32, ZD:G:32 /branch
     x86:ResCond, Tmp, Addr, Tmp
     x86:ResCond, Addr, Tmp, Tmp
 
-loongarch64: BranchAdd32 U:G:32, U:G:32, U:G:32, S:G:32, ZD:G:32 /branch
+# LoongArch64 has no flags/carry state for CheckSpecial to use when recovering
+# clobbered stackmap inputs, so the result must not alias either input.
+loongarch64: BranchAdd32 U:G:32, U:G:32, U:G:32, S:G:32, EZD:G:32 /branch
     ResCond, Tmp, Tmp, Tmp, Tmp
 
 BranchAdd32 U:G:32, U:G:32, UZD:G:32 /branch
@@ -1700,7 +1718,7 @@ BranchAdd32 U:G:32, U:G:32, UZD:G:32 /branch
     x86:ResCond, Tmp, Addr, Tmp
     x86:ResCond, Addr, Tmp, Tmp
 
-loongarch64: BranchAdd64 U:G:32, U:G:64, U:G:64, S:G:64, S:G:64, ZD:G:64 /branch
+loongarch64: BranchAdd64 U:G:32, U:G:64, U:G:64, S:G:64, S:G:64, EZD:G:64 /branch
     ResCond, Tmp, Tmp, Tmp, Tmp, Tmp
 
 64: BranchAdd64 U:G:32, U:G:64, UD:G:64 /branch
@@ -1977,13 +1995,13 @@ x86_64: CompareFloatingPointVectorUnordered U:G:Ptr, U:F:128, U:F:128, D:F:128
 64: CompareFloatingPointVector U:G:32, U:G:Ptr, U:F:128, U:F:128, D:F:128
     DoubleCond, SIMDInfo, Tmp, Tmp, Tmp
 
-arm64: CompareIntegerVector U:G:32, U:G:Ptr, U:F:128, U:F:128, D:F:128
+arm64 loongarch64: CompareIntegerVector U:G:32, U:G:Ptr, U:F:128, U:F:128, D:F:128
     RelCond, SIMDInfo, Tmp, Tmp, Tmp
 
 x86_64: CompareIntegerVector U:G:32, U:G:Ptr, U:F:128, U:F:128, D:F:128, S:F:128
     RelCond, SIMDInfo, Tmp, Tmp, Tmp, Tmp
 
-arm64: CompareIntegerVectorWithZero U:G:32, U:G:Ptr, U:F:128, D:F:128
+arm64 loongarch64: CompareIntegerVectorWithZero U:G:32, U:G:Ptr, U:F:128, D:F:128
     RelCond, SIMDInfo, Tmp, Tmp
 
 x86_64: CompareIntegerVectorWithZero U:G:32, U:G:Ptr, U:F:128, D:F:128, S:G:8
@@ -2025,10 +2043,10 @@ arm64: VectorMulByElementFloat64 U:F:128, U:F:128, U:G:8, D:F:128
 64: VectorMax U:G:Ptr, U:F:128, U:F:128, D:F:128
     SIMDInfo, Tmp, Tmp, Tmp
 
-arm64: VectorPmin U:G:Ptr, U:F:128, U:F:128, D:F:128, S:F:128
+arm64 loongarch64: VectorPmin U:G:Ptr, U:F:128, U:F:128, D:F:128, S:F:128
     SIMDInfo, Tmp, Tmp, Tmp, Tmp
 
-arm64: VectorPmax U:G:Ptr, U:F:128, U:F:128, D:F:128, S:F:128
+arm64 loongarch64: VectorPmax U:G:Ptr, U:F:128, U:F:128, D:F:128, S:F:128
     SIMDInfo, Tmp, Tmp, Tmp, Tmp
 
 x86_64: VectorPmin U:G:Ptr, U:F:128, U:F:128, D:F:128
@@ -2043,7 +2061,7 @@ x86_64: VectorPmax U:G:Ptr, U:F:128, U:F:128, D:F:128
 64: VectorBitwiseSelect U:F:128, U:F:128, UD:F:128
     Tmp, Tmp, Tmp
 
-arm64: VectorNot U:G:Ptr, U:F:128, D:F:128
+arm64 loongarch64: VectorNot U:G:Ptr, U:F:128, D:F:128
     SIMDInfo, Tmp, Tmp
 
 64: VectorAnd U:G:Ptr, U:F:128, U:F:128, D:F:128
@@ -2061,10 +2079,10 @@ arm64: VectorNot U:G:Ptr, U:F:128, D:F:128
 64: VectorUshl U:G:Ptr, U:F:128, U:F:128, D:F:128
     SIMDInfo, Tmp, Tmp, Tmp
 
-x86_64: VectorSshr U:G:Ptr, U:F:128, U:F:128, D:F:128
+x86_64 loongarch64: VectorSshr U:G:Ptr, U:F:128, U:F:128, D:F:128
     SIMDInfo, Tmp, Tmp, Tmp
 
-x86_64: VectorUshr U:G:Ptr, U:F:128, U:F:128, D:F:128
+x86_64 loongarch64: VectorUshr U:G:Ptr, U:F:128, U:F:128, D:F:128
     SIMDInfo, Tmp, Tmp, Tmp
 
 arm64: VectorSshl U:G:Ptr, U:F:128, U:F:128, D:F:128
@@ -2085,7 +2103,7 @@ x86_64: VectorSshr8 U:F:128, U:F:128, D:F:128, S:F:128, S:F:128
 64: VectorSshr8 U:G:Ptr, U:F:128, U:G:8, D:F:128
     SIMDInfo, Tmp, Imm, Tmp
 
-arm64: VectorShl8 U:G:Ptr, U:F:128, U:G:8, D:F:128
+arm64 loongarch64: VectorShl8 U:G:Ptr, U:F:128, U:G:8, D:F:128
     SIMDInfo, Tmp, Imm, Tmp
 
 arm64: VectorHorizontalAdd U:G:Ptr, U:F:128, D:F:128
@@ -2103,10 +2121,10 @@ arm64: VectorHorizontalAdd U:G:Ptr, U:F:128, D:F:128
 64: VectorUnzipOdd U:G:Ptr, U:F:128, U:F:128, D:F:128
     SIMDInfo, Tmp, Tmp, Tmp
 
-arm64: VectorTransposeEven U:G:Ptr, U:F:128, U:F:128, D:F:128
+arm64 loongarch64: VectorTransposeEven U:G:Ptr, U:F:128, U:F:128, D:F:128
     SIMDInfo, Tmp, Tmp, Tmp
 
-arm64: VectorTransposeOdd U:G:Ptr, U:F:128, U:F:128, D:F:128
+arm64 loongarch64: VectorTransposeOdd U:G:Ptr, U:F:128, U:F:128, D:F:128
     SIMDInfo, Tmp, Tmp, Tmp
 
 64: VectorReverse U:G:Ptr, U:G:8, U:F:128, D:F:128
@@ -2127,10 +2145,10 @@ arm64_sha3: VectorXor3 U:F:128, U:F:128, U:F:128, D:F:128
 x86_64: VectorAbsInt64 U:F:128, D:F:128, S:F:128
     Tmp, Tmp, Tmp
 
-arm64: VectorNeg U:G:Ptr, U:F:128, D:F:128
+arm64 loongarch64: VectorNeg U:G:Ptr, U:F:128, D:F:128
     SIMDInfo, Tmp, Tmp
 
-arm64: VectorPopcnt U:G:Ptr, U:F:128, D:F:128
+arm64 loongarch64: VectorPopcnt U:G:Ptr, U:F:128, D:F:128
     SIMDInfo, Tmp, Tmp
 
 64: VectorCeil U:G:Ptr, U:F:128, D:F:128
@@ -2142,11 +2160,11 @@ arm64: VectorPopcnt U:G:Ptr, U:F:128, D:F:128
 64: VectorTrunc U:G:Ptr, U:F:128, D:F:128
     SIMDInfo, Tmp, Tmp
 
-arm64: VectorTruncSat U:G:Ptr, U:F:128, D:F:128
-    SIMDInfo, Tmp, Tmp
-
 x86_64: VectorTruncSat U:G:Ptr, U:F:128, D:F:128, S:G:64, S:F:128, S:F:128
     SIMDInfo, Tmp, Tmp, Tmp, Tmp, Tmp
+
+arm64 loongarch64: VectorTruncSat U:G:Ptr, U:F:128, D:F:128
+    SIMDInfo, Tmp, Tmp
 
 x86_64: VectorTruncSatUnsignedFloat32 U:F:128, D:F:128, S:G:64, S:F:128, S:F:128
     Tmp, Tmp, Tmp, Tmp, Tmp
@@ -2163,7 +2181,7 @@ x86_64: VectorTruncSatUnsignedFloat64 U:F:128, D:F:128, S:G:64, S:F:128
 x86_64: VectorConvertUnsigned U:F:128, D:F:128, S:F:128
     Tmp, Tmp, Tmp
 
-arm64: VectorConvertLow U:G:Ptr, U:F:64, D:F:128
+arm64 loongarch64: VectorConvertLow U:G:Ptr, U:F:64, D:F:128
     SIMDInfo, Tmp, Tmp
 
 x86_64: VectorConvertLowSignedInt32 U:F:64, D:F:128
@@ -2226,20 +2244,20 @@ x86_64: VectorLoad8Splat U:G:8, D:F:128, S:F:128
 x86_64: VectorAllTrue U:G:8, U:F:128, ZD:G:32, S:F:128
     SIMDInfo, Tmp, Tmp, Tmp
 
-arm64: VectorAllTrue U:G:8, U:F:128, ZD:G:32
-    SIMDInfo, Tmp, Tmp
-
-arm64: VectorBitmask U:G:8, U:F:128, ZD:G:32
+arm64 loongarch64: VectorAllTrue U:G:8, U:F:128, ZD:G:32
     SIMDInfo, Tmp, Tmp
 
 x86_64: VectorBitmask U:G:8, U:F:128, ZD:G:32, S:F:128
     SIMDInfo, Tmp, Tmp, Tmp
 
-arm64: VectorExtaddPairwise U:G:8, U:F:128, D:F:128
+arm64 loongarch64: VectorBitmask U:G:8, U:F:128, ZD:G:32
     SIMDInfo, Tmp, Tmp
 
 x86_64: VectorExtaddPairwise U:G:8, U:F:128, D:F:128, S:G:64, S:F:128
     SIMDInfo, Tmp, Tmp, Tmp, Tmp
+
+arm64 loongarch64: VectorExtaddPairwise U:G:8, U:F:128, D:F:128
+    SIMDInfo, Tmp, Tmp
 
 x86_64: VectorExtaddPairwiseUnsignedInt16 U:F:128, D:F:128, S:F:128
     Tmp, Tmp, Tmp
@@ -2253,25 +2271,25 @@ arm64: VectorAddPairwise U:G:8, U:F:128, U:F:128, D:F:128
 arm64: VectorMulHigh U:G:8, U:F:128, U:F:128, D:F:128
     SIMDInfo, Tmp, Tmp, Tmp
 
-x86_64: VectorMulHigh U:G:8, U:F:128, U:F:128, D:F:128, S:F:128
+x86_64 loongarch64: VectorMulHigh U:G:8, U:F:128, U:F:128, D:F:128, S:F:128
     SIMDInfo, Tmp, Tmp, Tmp, Tmp
 
 arm64: VectorMulLow U:G:8, U:F:128, U:F:128, D:F:128
     SIMDInfo, Tmp, Tmp, Tmp
 
-x86_64: VectorMulLow U:G:8, U:F:128, U:F:128, D:F:128, S:F:128
+x86_64 loongarch64: VectorMulLow U:G:8, U:F:128, U:F:128, D:F:128, S:F:128
     SIMDInfo, Tmp, Tmp, Tmp, Tmp
-
-arm64: VectorMulSat U:F:128, U:F:128, D:F:128
-    Tmp, Tmp, Tmp
 
 x86_64: VectorMulSat U:F:128, U:F:128, D:F:128, S:G:64, S:F:128
     Tmp, Tmp, Tmp, Tmp, Tmp
 
+arm64 loongarch64: VectorMulSat U:F:128, U:F:128, D:F:128
+    Tmp, Tmp, Tmp
+
 arm64: VectorDotProduct U:F:128, U:F:128, D:F:128, S:F:128
     Tmp, Tmp, Tmp, Tmp
 
-x86_64: VectorDotProduct U:F:128, U:F:128, D:F:128
+x86_64 loongarch64: VectorDotProduct U:F:128, U:F:128, D:F:128
     Tmp, Tmp, Tmp
 
 64: VectorSwizzle U:F:128, U:F:128, D:F:128

@@ -1355,6 +1355,8 @@ public:
         }
         if (isARM_THUMB2())
             return isValidARMThumb2Immediate(value);
+        if (isLOONGARCH64())
+            return LOONGARCH64Assembler::ImmediateBase<12>::isSImm<12>(value);
         return false;
     }
 
@@ -1418,7 +1420,7 @@ public:
         if (!value)
             return true;
 
-        if (!isARM64() && !isX86_64())
+        if (!isARM64() && !isX86_64() && !isLOONGARCH64())
             return false;
 
 #if CPU(ARM64)
@@ -1462,6 +1464,8 @@ public:
         auto pattern = X86ContiguousBitPattern32::create(u32);
         if (pattern.isValid())
             return true;
+#elif CPU(LOONGARCH64)
+        return true;
 #endif
 
         return false;
@@ -1472,7 +1476,7 @@ public:
         if (!value)
             return true;
 
-        if (!isARM64() && !isX86_64())
+        if (!isARM64() && !isX86_64() && !isLOONGARCH64())
             return false;
 
         uint64_t u64 = static_cast<uint64_t>(value);
@@ -1491,6 +1495,8 @@ public:
         auto pattern = X86ContiguousBitPattern64::create(u64);
         if (pattern.isValid())
             return true;
+#elif CPU(LOONGARCH64)
+        return true;
 #endif
 
         uint32_t low32 = static_cast<uint32_t>(u64);
@@ -1506,8 +1512,15 @@ public:
         if (bitEquals(value, vectorAllZeros()))
             return true;
 
-        if (!isARM64() && !isX86_64())
+        if (!isARM64() && !isX86_64() && !isLOONGARCH64())
             return false;
+
+#if CPU(LOONGARCH64)
+        // Non-zero 128-bit constants are materialized through GPR scratch code on LoongArch64,
+        // not as cheap vector immediates. Keep this conservative so moveConstants() can place
+        // them in the constant table instead of treating them as freely rematerializable.
+        return false;
+#endif
 
         WTF_ALLOW_UNSAFE_BUFFER_USAGE_BEGIN
         if (value.u64x2[0] == value.u64x2[1])
@@ -1546,6 +1559,7 @@ public:
             }
         }
 
+#if CPU(LOONGARCH64)
         if (isLOONGARCH64()) {
             switch (*width) {
             case Width8:
@@ -1557,6 +1571,7 @@ public:
                 return LOONGARCH64Assembler::ImmediateBase<12>::isSImm<12>(offset) && !(offset & 0xf);
             }
         }
+#endif
 
 #if CPU(ARM_THUMB2)
         switch (opcode) {
@@ -1602,8 +1617,10 @@ public:
     {
         if (isARM64())
             return isValidSignedImm9(offset);
+#if CPU(LOONGARCH64)
         if (isLOONGARCH64())
             return LOONGARCH64Assembler::ImmediateBase<12>::isSImm<12>(offset);
+#endif
         return false;
     }
 
@@ -1754,10 +1771,14 @@ public:
             return MacroAssembler::TrustedImm64(value());
     }
 
-#if CPU(ARM64)
+#if CPU(ARM64) || CPU(LOONGARCH64)
     MacroAssembler::RegisterID asZeroReg() const
     {
+#if CPU(ARM64)
         return ARM64Registers::zr;
+#elif CPU(LOONGARCH64)
+        return LOONGARCH64Registers::zero;
+#endif
     }
 #endif
 

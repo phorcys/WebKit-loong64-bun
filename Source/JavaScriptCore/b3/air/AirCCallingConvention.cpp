@@ -41,19 +41,8 @@ namespace JSC { namespace B3 { namespace Air {
 
 namespace {
 
-template<typename BankInfo>
-void marshallCCallArgumentImpl(Vector<Arg>& result, unsigned& argumentCount, Value::OffsetType& stackOffset, Type childType)
+void appendCCallArgumentStackSlot(Vector<Arg>& result, Value::OffsetType& stackOffset, Type childType)
 {
-    const auto registerCount = cCallArgumentRegisterCount(childType);
-    if constexpr (is32Bit())
-        ASSERT(childType != Int64);
-
-    if (argumentCount < BankInfo::numberOfArgumentRegisters) {
-        for (unsigned i = 0; i < registerCount; i++)
-            result.append(Tmp(BankInfo::toArgumentRegister(argumentCount++)));
-        return;
-    }
-
     unsigned slotSize, slotAlignment;
     if ((isARM64() && isDarwin()) || isARM_THUMB2()) {
         // Arguments are packed to their natural alignment.
@@ -74,12 +63,43 @@ void marshallCCallArgumentImpl(Vector<Arg>& result, unsigned& argumentCount, Val
     }
 
     stackOffset = WTF::roundUpToMultipleOf(slotAlignment, stackOffset);
-    for (unsigned i = 0; i < registerCount; i++) {
-        result.append(Arg::callArg(stackOffset));
-        stackOffset += slotSize;
-    }
+    result.append(Arg::callArg(stackOffset));
+    stackOffset += slotSize;
 }
 
+template<typename BankInfo>
+void marshallCCallArgumentImpl(Vector<Arg>& result, unsigned& argumentCount, Value::OffsetType& stackOffset, Type childType)
+{
+    const auto registerCount = cCallArgumentRegisterCount(childType);
+    if constexpr (is32Bit())
+        ASSERT(childType != Int64);
+
+    if (argumentCount < BankInfo::numberOfArgumentRegisters) {
+        for (unsigned i = 0; i < registerCount; i++)
+            result.append(Tmp(BankInfo::toArgumentRegister(argumentCount++)));
+        return;
+    }
+
+    for (unsigned i = 0; i < registerCount; i++)
+        appendCCallArgumentStackSlot(result, stackOffset, childType);
+}
+
+void marshallLoongArch64FPCCallArgument(Vector<Arg>& result, unsigned& gpArgumentCount, unsigned& fpArgumentCount, Value::OffsetType& stackOffset, Type childType)
+{
+    ASSERT(childType == Float || childType == Double);
+
+    if (fpArgumentCount < FPRInfo::numberOfArgumentRegisters) {
+        result.append(Tmp(FPRInfo::toArgumentRegister(fpArgumentCount++)));
+        return;
+    }
+
+    if (gpArgumentCount < GPRInfo::numberOfArgumentRegisters) {
+        result.append(Tmp(GPRInfo::toArgumentRegister(gpArgumentCount++)));
+        return;
+    }
+
+    appendCCallArgumentStackSlot(result, stackOffset, childType);
+}
 
 void marshallCCallArgument(Vector<Arg> &result, unsigned& gpArgumentCount, unsigned& fpArgumentCount, Value::OffsetType& stackOffset, Type childType)
 {
@@ -88,6 +108,10 @@ void marshallCCallArgument(Vector<Arg> &result, unsigned& gpArgumentCount, unsig
         marshallCCallArgumentImpl<GPRInfo>(result, gpArgumentCount, stackOffset, childType);
         return;
     case FP:
+        if (isLOONGARCH64()) {
+            marshallLoongArch64FPCCallArgument(result, gpArgumentCount, fpArgumentCount, stackOffset, childType);
+            return;
+        }
         marshallCCallArgumentImpl<FPRInfo>(result, fpArgumentCount, stackOffset, childType);
         return;
     }
@@ -107,6 +131,25 @@ Vector<Arg> computeCCallingConvention(Code& code, CCallValue* value)
         marshallCCallArgument(result, gpArgumentCount, fpArgumentCount, stackOffset, value->child(i)->type());
     code.requestCallArgAreaSizeInBytes(WTF::roundUpToMultipleOf<stackAlignmentBytes()>(stackOffset));
     return result;
+}
+
+bool cCallArgumentRequiresBitwiseTransfer(Type type, const Arg& destination)
+{
+    return isLOONGARCH64() && type.isFloat() && destination.isGPTmp();
+}
+
+Opcode cCallArgumentBitwiseTransferOpcode(Type type)
+{
+    ASSERT(isLOONGARCH64());
+    switch (type.kind()) {
+    case Float:
+        return MoveFloatTo32;
+    case Double:
+        return MoveDoubleTo64;
+    default:
+        RELEASE_ASSERT_NOT_REACHED();
+        return Oops;
+    }
 }
 
 size_t cCallResultCount(Code& code, CCallValue* value)
@@ -229,6 +272,12 @@ Value* ArgumentValueList::makeCCallValue(B3::BasicBlock* block, Type type, Air::
 {
     if (arg.isTmp() && arg.tmp().isReg()) {
         Value* val = block->appendNew<ArgumentRegValue>(procedure, Origin(), arg.reg());
+        if (cCallArgumentRequiresBitwiseTransfer(type, arg)) {
+            if (type == Float)
+                val = block->appendNew<Value>(procedure, Trunc, Origin(), val);
+            return block->appendNew<Value>(procedure, BitwiseCast, Origin(), val);
+        }
+
         if constexpr (!is32Bit()) {
             if (type == Int32)
                 val = block->appendNew<Value>(procedure, Trunc, Origin(), val);
@@ -315,4 +364,3 @@ ArgumentValueList computeCCallArguments(Procedure& procedure, B3::BasicBlock* bl
 } } } // namespace JSC::B3::Air
 
 #endif // ENABLE(B3_JIT)
-

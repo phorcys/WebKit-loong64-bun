@@ -845,14 +845,10 @@ static void appendUTF8BytesQuotedJSON(Vector<uint8_t>& out, const WTF::String& s
     out.append('"');
 }
 
-static void appendASCIILiteral(Vector<uint8_t>& out, const char* str, size_t length)
-{
-    out.append(std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(str), length));
-}
-
 static void appendASCII(Vector<uint8_t>& out, ASCIILiteral literal)
 {
-    appendASCIILiteral(out, literal.characters(), literal.length());
+    for (auto ch : literal.span8())
+        out.append(ch);
 }
 
 static void appendUnsigned(Vector<uint8_t>& out, size_t value)
@@ -864,13 +860,13 @@ static void appendUnsigned(Vector<uint8_t>& out, size_t value)
     }
 
     // Max digits for size_t (20 digits for 64-bit)
-    char buf[20];
-    int pos = sizeof(buf);
+    std::array<char, 20> buf;
+    size_t pos = buf.size();
     while (value > 0) {
         buf[--pos] = '0' + (value % 10);
         value /= 10;
     }
-    out.append(std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(&buf[pos]), sizeof(buf) - pos));
+    out.append(asByteSpan(std::span(buf).subspan(pos)));
 }
 
 Vector<uint8_t> BunV8HeapSnapshotBuilder::generateV8HeapSnapshotBytes()

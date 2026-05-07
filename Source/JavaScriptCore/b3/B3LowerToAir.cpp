@@ -2836,6 +2836,18 @@ private:
                 case Width16:
                     return Inst();
                 case Width32:
+                    if (isLOONGARCH64() && left.kind() == Arg::Tmp && right.kind() == Arg::Tmp && isValidForm(Compare32, Arg::RelCond, Arg::Tmp, Arg::Tmp, Arg::Tmp, Arg::Tmp, Arg::Tmp)) {
+                        return left.inst(right.inst(
+                            Compare32, m_value, relCond,
+                            left.consume(*this), right.consume(*this), tmp(m_value),
+                            m_code.newTmp(GP), m_code.newTmp(GP)));
+                    }
+                    if (isLOONGARCH64() && left.kind() == Arg::Tmp && right.kind() == Arg::Imm && isValidForm(Compare32, Arg::RelCond, Arg::Tmp, Arg::Imm, Arg::Tmp, Arg::Tmp, Arg::Tmp)) {
+                        return left.inst(right.inst(
+                            Compare32, m_value, relCond,
+                            left.consume(*this), right.consume(*this), tmp(m_value),
+                            m_code.newTmp(GP), m_code.newTmp(GP)));
+                    }
                     if (isValidForm(Compare32, Arg::RelCond, left.kind(), right.kind(), Arg::Tmp)) {
                         return left.inst(right.inst(
                             Compare32, m_value, relCond,
@@ -2885,6 +2897,11 @@ private:
                 return Inst();
             },
             [this] (const Arg& doubleCond, ArgPromise& left, ArgPromise& right) -> Inst {
+                if (isLOONGARCH64() && isValidForm(CompareDouble, Arg::DoubleCond, left.kind(), right.kind(), Arg::Tmp, Arg::Tmp)) {
+                    return left.inst(right.inst(
+                        CompareDouble, m_value, doubleCond,
+                        left.consume(*this), right.consume(*this), tmp(m_value), m_code.newTmp(GP)));
+                }
                 if (isValidForm(CompareDouble, Arg::DoubleCond, left.kind(), right.kind(), Arg::Tmp)) {
                     return left.inst(right.inst(
                         CompareDouble, m_value, doubleCond,
@@ -2893,6 +2910,11 @@ private:
                 return Inst();
             },
             [this] (const Arg& doubleCond, ArgPromise& left, ArgPromise& right) -> Inst {
+                if (isLOONGARCH64() && isValidForm(CompareFloat, Arg::DoubleCond, left.kind(), right.kind(), Arg::Tmp, Arg::Tmp)) {
+                    return left.inst(right.inst(
+                        CompareFloat, m_value, doubleCond,
+                        left.consume(*this), right.consume(*this), tmp(m_value), m_code.newTmp(GP)));
+                }
                 if (isValidForm(CompareFloat, Arg::DoubleCond, left.kind(), right.kind(), Arg::Tmp)) {
                     return left.inst(right.inst(
                         CompareFloat, m_value, doubleCond,
@@ -3971,6 +3993,11 @@ private:
             }
             ASSERT(!isX86() || m_value->type().isFloat());
 
+            if (isLOONGARCH64() && m_value->type() == Int32) {
+                append(Div32, tmp(m_value->child(0)), tmp(m_value->child(1)), tmp(m_value), m_code.newTmp(GP), m_code.newTmp(GP));
+                return;
+            }
+
             appendBinOp<Div32, Div64, DivDouble, DivFloat>(m_value->child(0), m_value->child(1));
             return;
         }
@@ -3982,6 +4009,11 @@ private:
             }
 
             ASSERT(!isX86() && !m_value->type().isFloat());
+
+            if (isLOONGARCH64() && m_value->type() == Int32) {
+                append(UDiv32, tmp(m_value->child(0)), tmp(m_value->child(1)), tmp(m_value), m_code.newTmp(GP), m_code.newTmp(GP));
+                return;
+            }
 
             appendBinOp<UDiv32, UDiv64, Air::Oops, Air::Oops>(m_value->child(0), m_value->child(1));
             return;
@@ -4960,7 +4992,7 @@ private:
 
             int32_t mask = (elementByteSize(lane) * CHAR_BIT) - 1;
 
-            if constexpr (isARM64()) {
+            if constexpr (isARM64() || isLOONGARCH64()) {
                 auto v = tmp(value->child(0));
 
                 if (value->child(1)->hasInt32()) {
@@ -4980,11 +5012,20 @@ private:
                 Tmp shiftAmount = m_code.newTmp(B3::GP);
                 Tmp shiftVector = m_code.newTmp(B3::FP);
 
-                append(And32, Arg::bitImm(mask), shift, shiftAmount);
+                append(And32, isLOONGARCH64() ? Arg::imm(mask) : Arg::bitImm(mask), shift, shiftAmount);
+#if CPU(ARM64)
                 if (value->opcode() == VectorShr)
                     append(Neg32, shiftAmount);
+#endif
                 append(VectorSplatInt8, shiftAmount, shiftVector);
+#if CPU(ARM64)
                 append(value->signMode() == SIMDSignMode::Signed ? VectorSshl : VectorUshl, Arg::simdInfo(value->simdInfo()), v, shiftVector, tmp(value));
+#elif CPU(LOONGARCH64)
+                if (value->opcode() == VectorShl)
+                    append(VectorUshl, Arg::simdInfo(value->simdInfo()), v, shiftVector, tmp(value));
+                else
+                    append(value->signMode() == SIMDSignMode::Signed ? VectorSshr : VectorUshr, Arg::simdInfo(value->simdInfo()), v, shiftVector, tmp(value));
+#endif
                 return;
             }
 
@@ -6023,12 +6064,7 @@ private:
                 break;
             }
 
-            // The overflow check (3-arg form) compares ptrPlusImm against the original
-            // pointer Tmp with a 64-bit branch. For Int32 pointers (memory32), Move32
-            // above already zero-extends and ZExt32(ptr) + offset cannot overflow 64 bits,
-            // so the check is unnecessary — and unsafe, since the Int32 pointer Tmp's upper
-            // bits are undefined and a Branch64 against it may spuriously fire.
-            if (value->offset() && ptr->type() == Int64)
+            if (value->offset())
                 append(Inst(Air::WasmBoundsCheck, value, ptrPlusImm, limit, pointer));
             else
                 append(Inst(Air::WasmBoundsCheck, value, ptrPlusImm, limit));

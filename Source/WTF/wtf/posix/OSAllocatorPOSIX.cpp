@@ -63,7 +63,11 @@
 
 #endif
 
-#ifdef BUN_MACOSX
+#ifndef BUN_MACOSX
+#define BUN_MACOSX 0
+#endif
+
+#if BUN_MACOSX
 #define BUN_VM_CHILD_PROCESS_INHERIT VM_INHERIT_NONE
 #else
 #ifdef VM_INHERIT_DEFAULT

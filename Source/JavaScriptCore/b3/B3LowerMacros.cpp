@@ -330,7 +330,7 @@ private:
             }
             case FMax:
             case FMin: {
-                if (isX86() || isARM_THUMB2()) {
+                if (isX86() || isARM_THUMB2() || isLOONGARCH64()) {
                     bool isMax = m_value->opcode() == FMax;
 
                     Value* a = m_value->child(0);
@@ -1094,8 +1094,8 @@ private:
     {
         ASSERT(nonChillOpcode == Div || nonChillOpcode == Mod);
 
-        // ARM64 and LoongArch64 support this instruction natively.
-        if (isARM64() || isLOONGARCH64())
+        // ARM64 supports this instruction natively.
+        if (isARM64())
             return;
 
         // We implement "res = Div<Chill>/Mod<Chill>(num, den)" as follows:

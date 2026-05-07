@@ -202,12 +202,25 @@ void lowerAfterRegAlloc(Code& code)
                 }
                 
                 Vector<ShufflePair> pairs;
+                struct BitwiseTransfer {
+                    Arg src;
+                    Arg dst;
+                    Type type;
+                    Width width;
+                    StackSlot* spillSlot { nullptr };
+                };
+                Vector<BitwiseTransfer, 4> bitwiseTransfers;
                 for (unsigned i = 0; i < destinations.size(); ++i) {
                     Value* child = value->child(i);
                     Arg src = inst.args[i >= 1 ? i + results.size() + 1 : i + 1];
                     Arg dst = destinations[i];
                     Width width = widthForType(child->type());
-                    pairs.append(ShufflePair(src, dst, width));
+                    if (cCallArgumentRequiresBitwiseTransfer(child->type(), dst)) {
+                        StackSlot* stackSlot = code.addStackSlot(bytesForWidth(width), StackSlotKind::Spill);
+                        pairs.append(ShufflePair(src, Arg::stack(stackSlot), width));
+                        bitwiseTransfers.append({ Arg::stack(stackSlot), dst, child->type(), width, stackSlot });
+                    } else
+                        pairs.append(ShufflePair(src, dst, width));
 
                     auto excludeRegisters = [&] (Tmp tmp) {
                         if (tmp.isReg())
@@ -242,6 +255,8 @@ void lowerAfterRegAlloc(Code& code)
                 
                 insertionSet.insertInsts(
                     instIndex, emitShuffle(code, pairs, gpScratch, fpScratch, inst.origin));
+                for (const BitwiseTransfer& transfer : bitwiseTransfers)
+                    insertionSet.insert(instIndex, cCallArgumentBitwiseTransferOpcode(transfer.type), inst.origin, transfer.src, transfer.dst);
 
                 inst = buildCCall(code, inst.origin, destinations);
                 if (oldKind.effects)
@@ -297,4 +312,3 @@ void lowerAfterRegAlloc(Code& code)
 } } } // namespace JSC::B3::Air
 
 #endif // ENABLE(B3_JIT)
-

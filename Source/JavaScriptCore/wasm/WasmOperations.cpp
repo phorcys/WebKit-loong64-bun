@@ -812,7 +812,7 @@ void loadValuesIntoBuffer(Probe::Context& context, const StackMap& values, Wasm:
                 *std::bit_cast<double*>(buffer + index) = context.fpr(value.fpr());
                 break;
             case B3::V128:
-#if CPU(X86_64) || CPU(ARM64)
+#if CPU(X86_64) || CPU(ARM64) || CPU(LOONGARCH64)
                 dataLogLnIf(verbose, "Vector FPR for value ", index, " ", value.fpr(), " = ", context.vector(value.fpr()));
                 *std::bit_cast<v128_t*>(buffer + index) = context.vector(value.fpr());
 #else
@@ -1220,7 +1220,7 @@ JSC_DEFINE_NOEXCEPT_JIT_OPERATION(operationWasmLoopOSREnterBBQJIT, void, (Probe:
 #endif
         } else if (value.isFPR()) {
             if (type.isVector()) {
-#if CPU(X86_64) || CPU(ARM64)
+#if CPU(X86_64) || CPU(ARM64) || CPU(LOONGARCH64)
                 context.vector(value.fpr()) = *std::bit_cast<v128_t*>(bufferSlot);
 #else
                 UNREACHABLE_FOR_PLATFORM();
@@ -1497,11 +1497,17 @@ JSC_DEFINE_JIT_OPERATION(operationIterateResults, void, (JSWebAssemblyInstance* 
         OPERATION_RETURN_IF_EXCEPTION(scope);
 
         auto rep = wasmCallInfo.results[index];
-        if (rep.location.isGPR())
-            registerResults[registerResultOffsets.find(rep.location.jsr().payloadGPR())->offset() / sizeof(uint64_t)] = unboxedValue;
-        else if (rep.location.isFPR())
-            registerResults[registerResultOffsets.find(rep.location.fpr())->offset() / sizeof(uint64_t)] = unboxedValue;
-        else
+        if (rep.location.isGPR()) {
+            auto offset = registerResultOffsets.find(rep.location.jsr().payloadGPR())->offset();
+            *std::bit_cast<uint64_t*>(std::bit_cast<uint8_t*>(registerResults) + offset) = unboxedValue;
+        } else if (rep.location.isFPR()) {
+            auto offset = registerResultOffsets.find(rep.location.fpr())->offset();
+            auto* slot = std::bit_cast<uint8_t*>(registerResults) + offset;
+            if (returnType.isF32())
+                *std::bit_cast<uint32_t*>(slot) = static_cast<uint32_t>(unboxedValue);
+            else
+                *std::bit_cast<uint64_t*>(slot) = unboxedValue;
+        } else
             calleeFramePointer[rep.location.offsetFromFP() / sizeof(uint64_t)] = unboxedValue;
     }
     OPERATION_RETURN(scope);

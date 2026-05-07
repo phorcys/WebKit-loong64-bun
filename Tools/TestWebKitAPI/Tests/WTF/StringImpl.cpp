@@ -758,7 +758,7 @@ TEST(WTF, ExternalStringImplCreate8bit)
     bool freeFunctionCalled = false;
 
     {
-        auto external = ExternalStringImpl::create({ byteCast<Latin1Character>(&buffer[0]), bufferStringLength }, [&freeFunctionCalled](ExternalStringImpl* externalStringImpl, void* buffer, unsigned bufferSize) mutable {
+        auto external = ExternalStringImpl::create({ byteCast<Latin1Character>(&buffer[0]), bufferStringLength }, nullptr, [&freeFunctionCalled](void*, void*, unsigned) mutable {
             freeFunctionCalled = true;
         });
 
@@ -780,7 +780,7 @@ TEST(WTF, ExternalStringImplCreate16bit)
     bool freeFunctionCalled = false;
 
     {
-        auto external = ExternalStringImpl::create({ buffer, bufferStringLength }, [&freeFunctionCalled](ExternalStringImpl* externalStringImpl, void* buffer, unsigned bufferSize) mutable {
+        auto external = ExternalStringImpl::create({ buffer, bufferStringLength }, nullptr, [&freeFunctionCalled](void*, void*, unsigned) mutable {
             freeFunctionCalled = true;
         });
 
@@ -809,7 +809,7 @@ TEST(WTF, ExternalStringAtom)
     bool freeFunctionCalled = false;
 
     {
-        auto external = ExternalStringImpl::create(byteCast<Latin1Character>(std::span { buffer, bufferStringLength }), [&freeFunctionCalled](ExternalStringImpl* externalStringImpl, void* buffer, unsigned bufferSize) mutable {
+        auto external = ExternalStringImpl::create(byteCast<Latin1Character>(std::span { buffer, bufferStringLength }), nullptr, [&freeFunctionCalled](void*, void*, unsigned) mutable {
             freeFunctionCalled = true;
         });    
 
@@ -845,7 +845,7 @@ TEST(WTF, ExternalStringToSymbol)
     bool freeFunctionCalled = false;
 
     {
-        auto external = ExternalStringImpl::create(buffer.span8(), [&freeFunctionCalled](ExternalStringImpl* externalStringImpl, void* buffer, unsigned bufferSize) mutable {
+        auto external = ExternalStringImpl::create(buffer.span8(), nullptr, [&freeFunctionCalled](void*, void*, unsigned) mutable {
             freeFunctionCalled = true;
         });
 

@@ -2143,7 +2143,7 @@ set(JavaScriptCore_INTERFACE_DEPENDENCIES
 WEBKIT_FRAMEWORK_DECLARE(JavaScriptCore)
 WEBKIT_INCLUDE_CONFIG_FILES_IF_EXISTS()
 
-if (NOT WIN32)
+if (NOT WIN32 AND NOT (PORT STREQUAL JSCOnly AND DEVELOPER_MODE))
     WEBKIT_ADD_TARGET_CXX_FLAGS(JavaScriptCore
         -Wunsafe-buffer-usage
         -Wunsafe-buffer-usage-in-libc-call

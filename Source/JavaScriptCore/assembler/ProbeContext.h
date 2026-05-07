@@ -48,7 +48,7 @@ struct CPUState {
     inline UCPURegister& gpr(RegisterID);
     inline UCPURegister& spr(SPRegisterID);
     inline double& fpr(FPRegisterID);
-#if CPU(X86_64) || CPU(ARM64)
+#if CPU(X86_64) || CPU(ARM64) || CPU(LOONGARCH64)
     inline v128_t& vector(FPRegisterID);
 #endif
 
@@ -66,7 +66,7 @@ struct CPUState {
     UCPURegister gprs[MacroAssembler::numberOfRegisters()];
     UCPURegister sprs[MacroAssembler::numberOfSPRegisters()];
     struct {
-#if CPU(X86_64) || CPU(ARM64)
+#if CPU(X86_64) || CPU(ARM64) || CPU(LOONGARCH64)
         // These platforms always save vector-width FPRs
         v128_t vectors[MacroAssembler::numberOfFPRegisters()] = { };
 #else
@@ -90,14 +90,14 @@ inline UCPURegister& CPUState::spr(SPRegisterID id)
 inline double& CPUState::fpr(FPRegisterID id)
 {
     ASSERT(id >= MacroAssembler::firstFPRegister() && id <= MacroAssembler::lastFPRegister());
-#if CPU(X86_64) || CPU(ARM64)
+#if CPU(X86_64) || CPU(ARM64) || CPU(LOONGARCH64)
     return fprs.vectors[id].f64x2[0];
 #else
     return fprs.fprs[id];
 #endif
 }
 
-#if CPU(X86_64) || CPU(ARM64)
+#if CPU(X86_64) || CPU(ARM64) || CPU(LOONGARCH64)
 inline v128_t& CPUState::vector(FPRegisterID id)
 {
     ASSERT(id >= MacroAssembler::firstFPRegister() && id <= MacroAssembler::lastFPRegister());
@@ -241,7 +241,7 @@ public:
     UCPURegister& gpr(RegisterID id) { return cpu.gpr(id); }
     UCPURegister& spr(SPRegisterID id) { return cpu.spr(id); }
     double& fpr(FPRegisterID id) { return cpu.fpr(id); }
-#if CPU(X86_64) || CPU(ARM64)
+#if CPU(X86_64) || CPU(ARM64) || CPU(LOONGARCH64)
     v128_t& vector(FPRegisterID id) { return cpu.vector(id); }
 #endif
     ASCIILiteral gprName(RegisterID id) { return cpu.gprName(id); }
