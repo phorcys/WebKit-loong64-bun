@@ -416,7 +416,11 @@ Expected<MacroAssemblerCodeRef<WasmEntryPtrTag>, BindingFailure> wasmToJS(const 
             jit.callOperation<OperationPtrTag>(operationConvertToF32);
             jit.loadPtr(CCallHelpers::Address(GPRInfo::wasmContextInstancePointer, JSWebAssemblyInstance::offsetOfVM()), GPRInfo::nonPreservedNonReturnGPR);
             exceptionChecks.append(jit.branchTestPtr(CCallHelpers::NonZero, CCallHelpers::Address(GPRInfo::nonPreservedNonReturnGPR, VM::exceptionOffset())));
-            jit.moveDouble(FPRInfo::returnValueFPR , dest);
+#if CPU(LOONGARCH64)
+            jit.MacroAssemblerLOONGARCH64::moveFloat(FPRInfo::returnValueFPR, dest);
+#else
+            jit.moveDouble(FPRInfo::returnValueFPR, dest);
+#endif
             done.link(&jit);
             break;
         }
@@ -509,8 +513,15 @@ Expected<MacroAssemblerCodeRef<WasmEntryPtrTag>, BindingFailure> wasmToJS(const 
                 ASSERT(savedResultRegisters.find(loc.jsr().payloadGPR())->offset() + 4 == savedResultRegisters.find(loc.jsr().tagGPR())->offset());
 #endif
                 jit.loadValue(CCallHelpers::Address(CCallHelpers::stackPointerRegister, savedResultRegisters.find(loc.jsr().payloadGPR())->offset()), loc.jsr());
-            } else if (loc.isFPR())
-                jit.loadDouble(CCallHelpers::Address(CCallHelpers::stackPointerRegister, savedResultRegisters.find(loc.fpr())->offset()), loc.fpr());
+            } else if (loc.isFPR()) {
+                CCallHelpers::Address resultAddress(CCallHelpers::stackPointerRegister, savedResultRegisters.find(loc.fpr())->offset());
+                if (signature.returnType(i).isF32())
+                    jit.loadFloat(resultAddress, loc.fpr());
+                else {
+                    ASSERT(signature.returnType(i).isF64());
+                    jit.loadDouble(resultAddress, loc.fpr());
+                }
+            }
         }
     }
 

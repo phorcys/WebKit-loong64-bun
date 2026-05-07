@@ -1825,8 +1825,8 @@ macro storeAllArgumentRegisters(base)
         if ARM64 or ARM64E
             storepaird reg1, reg2, NumberOfWasmArgumentGPRs * MachineRegisterSize + index * FPRRegisterSize[base]
         elsif LOONGARCH64
-            storev reg1, NumberOfWasmArgumentGPRs * MachineRegisterSize + (index + 0) * VectorRegisterSize[base]
-            storev reg2, NumberOfWasmArgumentGPRs * MachineRegisterSize + (index + 1) * VectorRegisterSize[base]
+            stored reg1, NumberOfWasmArgumentGPRs * MachineRegisterSize + (index + 0) * FPRRegisterSize[base]
+            stored reg2, NumberOfWasmArgumentGPRs * MachineRegisterSize + (index + 1) * FPRRegisterSize[base]
         else
             stored reg1, NumberOfWasmArgumentGPRs * MachineRegisterSize + (index + 0) * FPRRegisterSize[base]
             stored reg2, NumberOfWasmArgumentGPRs * MachineRegisterSize + (index + 1) * FPRRegisterSize[base]
@@ -1849,8 +1849,8 @@ macro loadAllArgumentRegisters(base)
         if ARM64 or ARM64E
             loadpaird NumberOfWasmArgumentGPRs * MachineRegisterSize + index * FPRRegisterSize[base], fpr1, fpr2
         elsif LOONGARCH64
-            loadv NumberOfWasmArgumentGPRs * MachineRegisterSize + (index + 0) * VectorRegisterSize[base], fpr1
-            loadv NumberOfWasmArgumentGPRs * MachineRegisterSize + (index + 1) * VectorRegisterSize[base], fpr2
+            loadd NumberOfWasmArgumentGPRs * MachineRegisterSize + (index + 0) * FPRRegisterSize[base], fpr1
+            loadd NumberOfWasmArgumentGPRs * MachineRegisterSize + (index + 1) * FPRRegisterSize[base], fpr2
         else
             loadd NumberOfWasmArgumentGPRs * MachineRegisterSize + (index + 0) * FPRRegisterSize[base], fpr1
             loadd NumberOfWasmArgumentGPRs * MachineRegisterSize + (index + 1) * FPRRegisterSize[base], fpr2

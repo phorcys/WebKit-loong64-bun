@@ -562,7 +562,9 @@ void BBQJIT::emitAtomicOpGeneric(ExtAtomicOpType op, Address address, GPRReg old
     //     Move oldValue, result
 
     // Prepare
+#if CPU(X86_64) || CPU(ARM64)
     auto reloopLabel = m_jit.label();
+#endif
     switch (accessWidth) {
     case Width8:
 #if CPU(ARM64)
@@ -652,7 +654,7 @@ void BBQJIT::emitAtomicOpGeneric(ExtAtomicOpType op, Address address, GPRReg old
     Value result = topValue(valueType.kind);
     Location resultLocation = allocate(result);
 
-    if (!(isARM64_LSE() || isX86_64())) {
+    if (!(isARM64_LSE() || isLOONGARCH64() || isX86_64())) {
         ScratchScope<1, 0> scratches(*this);
         emitAtomicOpGeneric(loadOp, address, resultLocation.asGPR(), scratches.gpr(0), [&](GPRReg oldGPR, GPRReg newGPR) {
             emitSanitizeAtomicResult(loadOp, canonicalWidth(accessWidth(loadOp)) == Width64 ? TypeKind::I64 : TypeKind::I32, oldGPR, newGPR);
@@ -664,7 +666,7 @@ void BBQJIT::emitAtomicOpGeneric(ExtAtomicOpType op, Address address, GPRReg old
     m_jit.move(TrustedImm32(0), resultLocation.asGPR());
     switch (loadOp) {
     case ExtAtomicOpType::I32AtomicLoad: {
-#if CPU(ARM64)
+#if CPU(ARM64) || CPU(LOONGARCH64)
         m_jit.atomicXchgAdd32(resultLocation.asGPR(), address, resultLocation.asGPR());
 #else
         m_jit.atomicXchgAdd32(resultLocation.asGPR(), address);
@@ -672,7 +674,7 @@ void BBQJIT::emitAtomicOpGeneric(ExtAtomicOpType op, Address address, GPRReg old
         break;
     }
     case ExtAtomicOpType::I64AtomicLoad: {
-#if CPU(ARM64)
+#if CPU(ARM64) || CPU(LOONGARCH64)
         m_jit.atomicXchgAdd64(resultLocation.asGPR(), address, resultLocation.asGPR());
 #else
         m_jit.atomicXchgAdd64(resultLocation.asGPR(), address);
@@ -680,7 +682,7 @@ void BBQJIT::emitAtomicOpGeneric(ExtAtomicOpType op, Address address, GPRReg old
         break;
     }
     case ExtAtomicOpType::I32AtomicLoad8U: {
-#if CPU(ARM64)
+#if CPU(ARM64) || CPU(LOONGARCH64)
         m_jit.atomicXchgAdd8(resultLocation.asGPR(), address, resultLocation.asGPR());
 #else
         m_jit.atomicXchgAdd8(resultLocation.asGPR(), address);
@@ -688,7 +690,7 @@ void BBQJIT::emitAtomicOpGeneric(ExtAtomicOpType op, Address address, GPRReg old
         break;
     }
     case ExtAtomicOpType::I32AtomicLoad16U: {
-#if CPU(ARM64)
+#if CPU(ARM64) || CPU(LOONGARCH64)
         m_jit.atomicXchgAdd16(resultLocation.asGPR(), address, resultLocation.asGPR());
 #else
         m_jit.atomicXchgAdd16(resultLocation.asGPR(), address);
@@ -696,7 +698,7 @@ void BBQJIT::emitAtomicOpGeneric(ExtAtomicOpType op, Address address, GPRReg old
         break;
     }
     case ExtAtomicOpType::I64AtomicLoad8U: {
-#if CPU(ARM64)
+#if CPU(ARM64) || CPU(LOONGARCH64)
         m_jit.atomicXchgAdd8(resultLocation.asGPR(), address, resultLocation.asGPR());
 #else
         m_jit.atomicXchgAdd8(resultLocation.asGPR(), address);
@@ -704,7 +706,7 @@ void BBQJIT::emitAtomicOpGeneric(ExtAtomicOpType op, Address address, GPRReg old
         break;
     }
     case ExtAtomicOpType::I64AtomicLoad16U: {
-#if CPU(ARM64)
+#if CPU(ARM64) || CPU(LOONGARCH64)
         m_jit.atomicXchgAdd16(resultLocation.asGPR(), address, resultLocation.asGPR());
 #else
         m_jit.atomicXchgAdd16(resultLocation.asGPR(), address);
@@ -712,7 +714,7 @@ void BBQJIT::emitAtomicOpGeneric(ExtAtomicOpType op, Address address, GPRReg old
         break;
     }
     case ExtAtomicOpType::I64AtomicLoad32U: {
-#if CPU(ARM64)
+#if CPU(ARM64) || CPU(LOONGARCH64)
         m_jit.atomicXchgAdd32(resultLocation.asGPR(), address, resultLocation.asGPR());
 #else
         m_jit.atomicXchgAdd32(resultLocation.asGPR(), address);
@@ -760,7 +762,7 @@ void BBQJIT::emitAtomicStoreOp(ExtAtomicOpType storeOp, Type, Location pointer, 
 
     consume(value);
 
-    if (!(isARM64_LSE() || isX86_64())) {
+    if (!(isARM64_LSE() || isLOONGARCH64() || isX86_64())) {
         emitAtomicOpGeneric(storeOp, address, scratch1GPR, scratch2GPR, [&](GPRReg, GPRReg newGPR) {
             m_jit.move(valueLocation.asGPR(), newGPR);
         });
@@ -769,7 +771,7 @@ void BBQJIT::emitAtomicStoreOp(ExtAtomicOpType storeOp, Type, Location pointer, 
 
     switch (storeOp) {
     case ExtAtomicOpType::I32AtomicStore: {
-#if CPU(ARM64)
+#if CPU(ARM64) || CPU(LOONGARCH64)
         m_jit.atomicXchg32(valueLocation.asGPR(), address, scratch1GPR);
 #else
         m_jit.store32(valueLocation.asGPR(), address);
@@ -777,7 +779,7 @@ void BBQJIT::emitAtomicStoreOp(ExtAtomicOpType storeOp, Type, Location pointer, 
         break;
     }
     case ExtAtomicOpType::I64AtomicStore: {
-#if CPU(ARM64)
+#if CPU(ARM64) || CPU(LOONGARCH64)
         m_jit.atomicXchg64(valueLocation.asGPR(), address, scratch1GPR);
 #else
         m_jit.store64(valueLocation.asGPR(), address);
@@ -785,7 +787,7 @@ void BBQJIT::emitAtomicStoreOp(ExtAtomicOpType storeOp, Type, Location pointer, 
         break;
     }
     case ExtAtomicOpType::I32AtomicStore8U: {
-#if CPU(ARM64)
+#if CPU(ARM64) || CPU(LOONGARCH64)
         m_jit.atomicXchg8(valueLocation.asGPR(), address, scratch1GPR);
 #else
         m_jit.store8(valueLocation.asGPR(), address);
@@ -793,7 +795,7 @@ void BBQJIT::emitAtomicStoreOp(ExtAtomicOpType storeOp, Type, Location pointer, 
         break;
     }
     case ExtAtomicOpType::I32AtomicStore16U: {
-#if CPU(ARM64)
+#if CPU(ARM64) || CPU(LOONGARCH64)
         m_jit.atomicXchg16(valueLocation.asGPR(), address, scratch1GPR);
 #else
         m_jit.store16(valueLocation.asGPR(), address);
@@ -801,7 +803,7 @@ void BBQJIT::emitAtomicStoreOp(ExtAtomicOpType storeOp, Type, Location pointer, 
         break;
     }
     case ExtAtomicOpType::I64AtomicStore8U: {
-#if CPU(ARM64)
+#if CPU(ARM64) || CPU(LOONGARCH64)
         m_jit.atomicXchg8(valueLocation.asGPR(), address, scratch1GPR);
 #else
         m_jit.store8(valueLocation.asGPR(), address);
@@ -809,7 +811,7 @@ void BBQJIT::emitAtomicStoreOp(ExtAtomicOpType storeOp, Type, Location pointer, 
         break;
     }
     case ExtAtomicOpType::I64AtomicStore16U: {
-#if CPU(ARM64)
+#if CPU(ARM64) || CPU(LOONGARCH64)
         m_jit.atomicXchg16(valueLocation.asGPR(), address, scratch1GPR);
 #else
         m_jit.store16(valueLocation.asGPR(), address);
@@ -817,7 +819,7 @@ void BBQJIT::emitAtomicStoreOp(ExtAtomicOpType storeOp, Type, Location pointer, 
         break;
     }
     case ExtAtomicOpType::I64AtomicStore32U: {
-#if CPU(ARM64)
+#if CPU(ARM64) || CPU(LOONGARCH64)
         m_jit.atomicXchg32(valueLocation.asGPR(), address, scratch1GPR);
 #else
         m_jit.store32(valueLocation.asGPR(), address);
@@ -868,10 +870,10 @@ Value BBQJIT::emitAtomicBinaryRMWOp(ExtAtomicOpType op, Type valueType, Location
     case ExtAtomicOpType::I64AtomicRmw16AddU:
     case ExtAtomicOpType::I64AtomicRmw32AddU:
     case ExtAtomicOpType::I64AtomicRmwAdd:
-        if (isX86() || isARM64_LSE()) {
+        if (isX86() || isARM64_LSE() || isLOONGARCH64()) {
             switch (accessWidth(op)) {
             case Width8:
-#if CPU(ARM64)
+#if CPU(ARM64) || CPU(LOONGARCH64)
                 m_jit.atomicXchgAdd8(valueLocation.asGPR(), address, resultLocation.asGPR());
 #else
                 m_jit.move(valueLocation.asGPR(), resultLocation.asGPR());
@@ -879,7 +881,7 @@ Value BBQJIT::emitAtomicBinaryRMWOp(ExtAtomicOpType op, Type valueType, Location
 #endif
                 break;
             case Width16:
-#if CPU(ARM64)
+#if CPU(ARM64) || CPU(LOONGARCH64)
                 m_jit.atomicXchgAdd16(valueLocation.asGPR(), address, resultLocation.asGPR());
 #else
                 m_jit.move(valueLocation.asGPR(), resultLocation.asGPR());
@@ -887,7 +889,7 @@ Value BBQJIT::emitAtomicBinaryRMWOp(ExtAtomicOpType op, Type valueType, Location
 #endif
                 break;
             case Width32:
-#if CPU(ARM64)
+#if CPU(ARM64) || CPU(LOONGARCH64)
                 m_jit.atomicXchgAdd32(valueLocation.asGPR(), address, resultLocation.asGPR());
 #else
                 m_jit.move(valueLocation.asGPR(), resultLocation.asGPR());
@@ -895,7 +897,7 @@ Value BBQJIT::emitAtomicBinaryRMWOp(ExtAtomicOpType op, Type valueType, Location
 #endif
                 break;
             case Width64:
-#if CPU(ARM64)
+#if CPU(ARM64) || CPU(LOONGARCH64)
                 m_jit.atomicXchgAdd64(valueLocation.asGPR(), address, resultLocation.asGPR());
 #else
                 m_jit.move(valueLocation.asGPR(), resultLocation.asGPR());
@@ -917,7 +919,7 @@ Value BBQJIT::emitAtomicBinaryRMWOp(ExtAtomicOpType op, Type valueType, Location
     case ExtAtomicOpType::I64AtomicRmw16SubU:
     case ExtAtomicOpType::I64AtomicRmw32SubU:
     case ExtAtomicOpType::I64AtomicRmwSub:
-        if (isX86() || isARM64_LSE()) {
+        if (isX86() || isARM64_LSE() || isLOONGARCH64()) {
             m_jit.move(valueLocation.asGPR(), scratchGPR);
             if (valueType.isI64())
                 m_jit.neg64(scratchGPR);
@@ -926,7 +928,7 @@ Value BBQJIT::emitAtomicBinaryRMWOp(ExtAtomicOpType op, Type valueType, Location
 
             switch (accessWidth(op)) {
             case Width8:
-#if CPU(ARM64)
+#if CPU(ARM64) || CPU(LOONGARCH64)
                 m_jit.atomicXchgAdd8(scratchGPR, address, resultLocation.asGPR());
 #else
                 m_jit.move(scratchGPR, resultLocation.asGPR());
@@ -934,7 +936,7 @@ Value BBQJIT::emitAtomicBinaryRMWOp(ExtAtomicOpType op, Type valueType, Location
 #endif
                 break;
             case Width16:
-#if CPU(ARM64)
+#if CPU(ARM64) || CPU(LOONGARCH64)
                 m_jit.atomicXchgAdd16(scratchGPR, address, resultLocation.asGPR());
 #else
                 m_jit.move(scratchGPR, resultLocation.asGPR());
@@ -942,7 +944,7 @@ Value BBQJIT::emitAtomicBinaryRMWOp(ExtAtomicOpType op, Type valueType, Location
 #endif
                 break;
             case Width32:
-#if CPU(ARM64)
+#if CPU(ARM64) || CPU(LOONGARCH64)
                 m_jit.atomicXchgAdd32(scratchGPR, address, resultLocation.asGPR());
 #else
                 m_jit.move(scratchGPR, resultLocation.asGPR());
@@ -950,7 +952,7 @@ Value BBQJIT::emitAtomicBinaryRMWOp(ExtAtomicOpType op, Type valueType, Location
 #endif
                 break;
             case Width64:
-#if CPU(ARM64)
+#if CPU(ARM64) || CPU(LOONGARCH64)
                 m_jit.atomicXchgAdd64(scratchGPR, address, resultLocation.asGPR());
 #else
                 m_jit.move(scratchGPR, resultLocation.asGPR());
@@ -972,8 +974,8 @@ Value BBQJIT::emitAtomicBinaryRMWOp(ExtAtomicOpType op, Type valueType, Location
     case ExtAtomicOpType::I64AtomicRmw16AndU:
     case ExtAtomicOpType::I64AtomicRmw32AndU:
     case ExtAtomicOpType::I64AtomicRmwAnd:
-#if CPU(ARM64)
-        if (isARM64_LSE()) {
+#if CPU(ARM64) || CPU(LOONGARCH64)
+        if (isARM64_LSE() || isLOONGARCH64()) {
             m_jit.move(valueLocation.asGPR(), scratchGPR);
             if (valueType.isI64())
                 m_jit.not64(scratchGPR);
@@ -1009,8 +1011,8 @@ Value BBQJIT::emitAtomicBinaryRMWOp(ExtAtomicOpType op, Type valueType, Location
     case ExtAtomicOpType::I64AtomicRmw16OrU:
     case ExtAtomicOpType::I64AtomicRmw32OrU:
     case ExtAtomicOpType::I64AtomicRmwOr:
-#if CPU(ARM64)
-        if (isARM64_LSE()) {
+#if CPU(ARM64) || CPU(LOONGARCH64)
+        if (isARM64_LSE() || isLOONGARCH64()) {
             switch (accessWidth(op)) {
             case Width8:
                 m_jit.atomicXchgOr8(valueLocation.asGPR(), address, resultLocation.asGPR());
@@ -1040,8 +1042,8 @@ Value BBQJIT::emitAtomicBinaryRMWOp(ExtAtomicOpType op, Type valueType, Location
     case ExtAtomicOpType::I64AtomicRmw16XorU:
     case ExtAtomicOpType::I64AtomicRmw32XorU:
     case ExtAtomicOpType::I64AtomicRmwXor:
-#if CPU(ARM64)
-        if (isARM64_LSE()) {
+#if CPU(ARM64) || CPU(LOONGARCH64)
+        if (isARM64_LSE() || isLOONGARCH64()) {
             switch (accessWidth(op)) {
             case Width8:
                 m_jit.atomicXchgXor8(valueLocation.asGPR(), address, resultLocation.asGPR());
@@ -1071,10 +1073,10 @@ Value BBQJIT::emitAtomicBinaryRMWOp(ExtAtomicOpType op, Type valueType, Location
     case ExtAtomicOpType::I64AtomicRmw16XchgU:
     case ExtAtomicOpType::I64AtomicRmw32XchgU:
     case ExtAtomicOpType::I64AtomicRmwXchg:
-        if (isX86() || isARM64_LSE()) {
+        if (isX86() || isARM64_LSE() || isLOONGARCH64()) {
             switch (accessWidth(op)) {
             case Width8:
-#if CPU(ARM64)
+#if CPU(ARM64) || CPU(LOONGARCH64)
                 m_jit.atomicXchg8(valueLocation.asGPR(), address, resultLocation.asGPR());
 #else
                 m_jit.move(valueLocation.asGPR(), resultLocation.asGPR());
@@ -1082,7 +1084,7 @@ Value BBQJIT::emitAtomicBinaryRMWOp(ExtAtomicOpType op, Type valueType, Location
 #endif
                 break;
             case Width16:
-#if CPU(ARM64)
+#if CPU(ARM64) || CPU(LOONGARCH64)
                 m_jit.atomicXchg16(valueLocation.asGPR(), address, resultLocation.asGPR());
 #else
                 m_jit.move(valueLocation.asGPR(), resultLocation.asGPR());
@@ -1090,7 +1092,7 @@ Value BBQJIT::emitAtomicBinaryRMWOp(ExtAtomicOpType op, Type valueType, Location
 #endif
                 break;
             case Width32:
-#if CPU(ARM64)
+#if CPU(ARM64) || CPU(LOONGARCH64)
                 m_jit.atomicXchg32(valueLocation.asGPR(), address, resultLocation.asGPR());
 #else
                 m_jit.move(valueLocation.asGPR(), resultLocation.asGPR());
@@ -1098,7 +1100,7 @@ Value BBQJIT::emitAtomicBinaryRMWOp(ExtAtomicOpType op, Type valueType, Location
 #endif
                 break;
             case Width64:
-#if CPU(ARM64)
+#if CPU(ARM64) || CPU(LOONGARCH64)
                 m_jit.atomicXchg64(valueLocation.asGPR(), address, resultLocation.asGPR());
 #else
                 m_jit.move(valueLocation.asGPR(), resultLocation.asGPR());
@@ -1245,7 +1247,7 @@ Value BBQJIT::emitAtomicBinaryRMWOp(ExtAtomicOpType op, Type valueType, Location
     consume(expected);
 
     auto emitStrongCAS = [&](GPRReg expectedGPR, GPRReg valueGPR, GPRReg resultGPR) {
-        if (isX86_64() || isARM64_LSE()) {
+        if (isX86_64() || isARM64_LSE() || isLOONGARCH64()) {
             m_jit.move(expectedGPR, resultGPR);
             switch (accessWidth) {
             case Width8:
@@ -2481,6 +2483,7 @@ void BBQJIT::emitRefTestOrCast(CastKind castKind, const TypedExpression& typedVa
 
     LOG_INSTRUCTION("I64Add128", lhsLo, lhsLoLocation, lhsHi, lhsHiLocation, rhsLo, rhsLoLocation, rhsHi, rhsHiLocation, RESULT(resultLo), RESULT(resultHi));
 
+#if !CPU(LOONGARCH64)
     if (resultLoLocation.asGPR() == lhsHiLocation.asGPR()) {
         m_jit.move(lhsHiLocation.asGPR(), wasmScratchGPR);
         lhsHiLocation = Location::fromGPR(wasmScratchGPR);
@@ -2488,6 +2491,7 @@ void BBQJIT::emitRefTestOrCast(CastKind castKind, const TypedExpression& typedVa
         m_jit.move(rhsHiLocation.asGPR(), wasmScratchGPR);
         rhsHiLocation = Location::fromGPR(wasmScratchGPR);
     }
+#endif
 
 #if CPU(X86_64)
     if (resultLoLocation.asGPR() == rhsLoLocation.asGPR())
@@ -2505,6 +2509,35 @@ void BBQJIT::emitRefTestOrCast(CastKind castKind, const TypedExpression& typedVa
 #elif CPU(ARM64)
     m_jit.add64AndSetFlags(lhsLoLocation.asGPR(), rhsLoLocation.asGPR(), resultLoLocation.asGPR());
     m_jit.addCarry64(lhsHiLocation.asGPR(), rhsHiLocation.asGPR(), resultHiLocation.asGPR());
+#elif CPU(LOONGARCH64)
+    ScratchScope<2, 0> scratches(*this, lhsLoLocation, lhsHiLocation, rhsLoLocation, rhsHiLocation, resultLoLocation, resultHiLocation);
+    GPRReg lhsLoReg = lhsLoLocation.asGPR();
+    GPRReg rhsLoReg = rhsLoLocation.asGPR();
+    GPRReg lhsHiReg = lhsHiLocation.asGPR();
+    GPRReg rhsHiReg = rhsHiLocation.asGPR();
+    GPRReg carryReg = scratches.gpr(1);
+
+    if (resultLoLocation.asGPR() == lhsHiReg) {
+        m_jit.move(lhsHiReg, scratches.gpr(0));
+        lhsHiReg = scratches.gpr(0);
+    } else if (resultLoLocation.asGPR() == rhsHiReg) {
+        m_jit.move(rhsHiReg, scratches.gpr(0));
+        rhsHiReg = scratches.gpr(0);
+    }
+
+    GPRReg carryCompareReg = lhsLoReg;
+    if (resultLoLocation.asGPR() == lhsLoReg) {
+        m_jit.move(lhsLoReg, carryReg);
+        carryCompareReg = carryReg;
+    } else if (resultLoLocation.asGPR() == rhsLoReg) {
+        m_jit.move(rhsLoReg, carryReg);
+        carryCompareReg = carryReg;
+    }
+
+    m_jit.add64(lhsLoReg, rhsLoReg, resultLoLocation.asGPR());
+    m_jit.compare64(CCallHelpers::Below, resultLoLocation.asGPR(), carryCompareReg, carryReg);
+    m_jit.add64(lhsHiReg, rhsHiReg, resultHiLocation.asGPR());
+    m_jit.add64(carryReg, resultHiLocation.asGPR());
 #endif
 
     return { };
@@ -2529,6 +2562,7 @@ void BBQJIT::emitRefTestOrCast(CastKind castKind, const TypedExpression& typedVa
 
     LOG_INSTRUCTION("I64Sub128", lhsLo, lhsLoLocation, lhsHi, lhsHiLocation, rhsLo, rhsLoLocation, rhsHi, rhsHiLocation, RESULT(resultLo), RESULT(resultHi));
 
+#if !CPU(LOONGARCH64)
     if (resultLoLocation.asGPR() == lhsHiLocation.asGPR()) {
         m_jit.move(lhsHiLocation.asGPR(), wasmScratchGPR);
         lhsHiLocation = Location::fromGPR(wasmScratchGPR);
@@ -2536,6 +2570,7 @@ void BBQJIT::emitRefTestOrCast(CastKind castKind, const TypedExpression& typedVa
         m_jit.move(rhsHiLocation.asGPR(), wasmScratchGPR);
         rhsHiLocation = Location::fromGPR(wasmScratchGPR);
     }
+#endif
 
 #if CPU(X86_64)
     if (resultLoLocation.asGPR() == rhsLoLocation.asGPR()) {
@@ -2557,6 +2592,24 @@ void BBQJIT::emitRefTestOrCast(CastKind castKind, const TypedExpression& typedVa
 #elif CPU(ARM64)
     m_jit.sub64AndSetFlags(lhsLoLocation.asGPR(), rhsLoLocation.asGPR(), resultLoLocation.asGPR());
     m_jit.subBorrow64(lhsHiLocation.asGPR(), rhsHiLocation.asGPR(), resultHiLocation.asGPR());
+#elif CPU(LOONGARCH64)
+    ScratchScope<2, 0> scratches(*this, lhsLoLocation, lhsHiLocation, rhsLoLocation, rhsHiLocation, resultLoLocation, resultHiLocation);
+    GPRReg lhsHiReg = lhsHiLocation.asGPR();
+    GPRReg rhsHiReg = rhsHiLocation.asGPR();
+    GPRReg borrowReg = scratches.gpr(1);
+
+    if (resultLoLocation.asGPR() == lhsHiReg) {
+        m_jit.move(lhsHiReg, scratches.gpr(0));
+        lhsHiReg = scratches.gpr(0);
+    } else if (resultLoLocation.asGPR() == rhsHiReg) {
+        m_jit.move(rhsHiReg, scratches.gpr(0));
+        rhsHiReg = scratches.gpr(0);
+    }
+
+    m_jit.compare64(CCallHelpers::Below, lhsLoLocation.asGPR(), rhsLoLocation.asGPR(), borrowReg);
+    m_jit.sub64(lhsLoLocation.asGPR(), rhsLoLocation.asGPR(), resultLoLocation.asGPR());
+    m_jit.sub64(lhsHiReg, rhsHiReg, resultHiLocation.asGPR());
+    m_jit.sub64(borrowReg, resultHiLocation.asGPR());
 #endif
 
     return { };
@@ -2608,6 +2661,19 @@ void BBQJIT::emitRefTestOrCast(CastKind castKind, const TypedExpression& typedVa
         m_jit.uMulHigh64(lhsLocation.asGPR(), rhsLocation.asGPR(), resultHiLocation.asGPR());
         m_jit.mul64(lhsLocation.asGPR(), rhsLocation.asGPR(), resultLoLocation.asGPR());
     }
+#elif CPU(LOONGARCH64)
+    if (resultHiLocation.asGPR() == lhsLocation.asGPR()) {
+        m_jit.move(lhsLocation.asGPR(), wasmScratchGPR);
+        m_jit.uMulHigh64(wasmScratchGPR, rhsLocation.asGPR(), resultHiLocation.asGPR());
+        m_jit.mul64(wasmScratchGPR, rhsLocation.asGPR(), resultLoLocation.asGPR());
+    } else if (resultHiLocation.asGPR() == rhsLocation.asGPR()) {
+        m_jit.move(rhsLocation.asGPR(), wasmScratchGPR);
+        m_jit.uMulHigh64(lhsLocation.asGPR(), wasmScratchGPR, resultHiLocation.asGPR());
+        m_jit.mul64(lhsLocation.asGPR(), wasmScratchGPR, resultLoLocation.asGPR());
+    } else {
+        m_jit.uMulHigh64(lhsLocation.asGPR(), rhsLocation.asGPR(), resultHiLocation.asGPR());
+        m_jit.mul64(lhsLocation.asGPR(), rhsLocation.asGPR(), resultLoLocation.asGPR());
+    }
 #endif
 
     return { };
@@ -2647,6 +2713,19 @@ void BBQJIT::emitRefTestOrCast(CastKind castKind, const TypedExpression& typedVa
         m_jit.move(X86Registers::eax, resultLoLocation.asGPR());
     }
 #elif CPU(ARM64)
+    if (resultHiLocation.asGPR() == lhsLocation.asGPR()) {
+        m_jit.move(lhsLocation.asGPR(), wasmScratchGPR);
+        m_jit.mulHigh64(wasmScratchGPR, rhsLocation.asGPR(), resultHiLocation.asGPR());
+        m_jit.mul64(wasmScratchGPR, rhsLocation.asGPR(), resultLoLocation.asGPR());
+    } else if (resultHiLocation.asGPR() == rhsLocation.asGPR()) {
+        m_jit.move(rhsLocation.asGPR(), wasmScratchGPR);
+        m_jit.mulHigh64(lhsLocation.asGPR(), wasmScratchGPR, resultHiLocation.asGPR());
+        m_jit.mul64(lhsLocation.asGPR(), wasmScratchGPR, resultLoLocation.asGPR());
+    } else {
+        m_jit.mulHigh64(lhsLocation.asGPR(), rhsLocation.asGPR(), resultHiLocation.asGPR());
+        m_jit.mul64(lhsLocation.asGPR(), rhsLocation.asGPR(), resultLoLocation.asGPR());
+    }
+#elif CPU(LOONGARCH64)
     if (resultHiLocation.asGPR() == lhsLocation.asGPR()) {
         m_jit.move(lhsLocation.asGPR(), wasmScratchGPR);
         m_jit.mulHigh64(wasmScratchGPR, rhsLocation.asGPR(), resultHiLocation.asGPR());
@@ -5065,6 +5144,12 @@ void BBQJIT::emitMoveRegister(TypeKind type, Location src, Location dst)
         m_jit.move(src.asGPR(), dst.asGPR());
         break;
     case TypeKind::F32:
+#if CPU(LOONGARCH64)
+        m_jit.MacroAssemblerLOONGARCH64::moveFloat(src.asFPR(), dst.asFPR());
+#else
+        m_jit.moveDouble(src.asFPR(), dst.asFPR());
+#endif
+        break;
     case TypeKind::F64:
         m_jit.moveDouble(src.asFPR(), dst.asFPR());
         break;

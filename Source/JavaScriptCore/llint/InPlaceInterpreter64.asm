@@ -4038,6 +4038,11 @@ ipintOp(_i64_add128, macro()
     elsif X86_64
         addq t2, t0        # resultLo = lhsLo + rhsLo, sets carry flag
         adcq t3, t1        # resultHi = lhsHi + rhsHi + carry flag
+    elsif LOONGARCH64
+        addq t2, t0        # resultLo = lhsLo + rhsLo
+        sltu t0, t2, t5    # carry = resultLo < rhsLo
+        addq t3, t1
+        addq t5, t1
     end
     pushQuad(t0)
     pushQuad(t1)
@@ -4058,6 +4063,11 @@ ipintOp(_i64_sub128, macro()
     elsif X86_64
         subq t2, t0        # resultLo = lhsLo - rhsLo, sets carry flag (borrow)
         sbcq t3, t1        # resultHi = lhsHi - rhsHi - carry flag
+    elsif LOONGARCH64
+        sltu t0, t2, t5    # borrow = lhsLo < rhsLo
+        subq t2, t0        # resultLo = lhsLo - rhsLo
+        subq t3, t1
+        subq t5, t1
     end
     pushQuad(t0)
     pushQuad(t1)
@@ -4077,6 +4087,9 @@ ipintOp(_i64_mul_wide_s, macro()
         # t0 = rax
         # t2 = rdx
         smulhq t1          # imulq %rsi: rdx:rax = rax * rsi -> t0=resultLo, t2=resultHi
+    elsif LOONGARCH64
+        smulhq t0, t1, t2
+        mulq t1, t0
     end
     pushQuad(t0)
     pushQuad(t2)
@@ -4096,6 +4109,9 @@ ipintOp(_i64_mul_wide_u, macro()
         # t0 = rax
         # t2 = rdx
         umulhq t1          # mulq %rsi: rdx:rax = rax * rsi -> t0=resultLo, t2=resultHi
+    elsif LOONGARCH64
+        umulhq t0, t1, t2
+        mulq t1, t0
     end
     pushQuad(t0)
     pushQuad(t2)
@@ -4578,7 +4594,7 @@ ipintOp(_simd_f32x4_splat, macro()
         # ft0 is xmm0 on X86_64, broadcast to all 4 float lanes
         emit "vshufps $0x00, %xmm0, %xmm0, %xmm0"
     elsif LOONGARCH64
-        emit "vreplvei.w $vr16, $vr8, 0"
+        emit "vreplvei.w $vr16, $vr0, 0"
     else
         break # Not implemented
     end
@@ -4598,7 +4614,7 @@ ipintOp(_simd_f64x2_splat, macro()
         # ft0 is xmm0 on X86_64, duplicate lower 64-bit to both lanes
         emit "vmovddup %xmm0, %xmm0"
     elsif LOONGARCH64
-        emit "vreplvei.d $vr16, $vr8, 0"
+        emit "vreplvei.d $vr16, $vr0, 0"
     else
         break # Not implemented
     end

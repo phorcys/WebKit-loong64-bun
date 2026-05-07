@@ -60,6 +60,16 @@ static constexpr int32_t webkitFirstVersionWithConcurrentGlobalContexts = 0x2100
 
 using namespace JSC;
 
+static void releaseVMRefWithAPILock(VM& vm)
+{
+    // JSLockHolder keeps a RefPtr<VM>, which can make it the last VM reference
+    // and defer destruction until after the API lock has been released.
+    Ref apiLock = vm.apiLock();
+    apiLock->lock();
+    vm.derefSuppressingSaferCPPChecking();
+    apiLock->unlock();
+}
+
 // From the API's perspective, a context group remains alive iff
 //     (a) it has been JSContextGroupRetained
 //     OR
@@ -81,8 +91,7 @@ void JSContextGroupRelease(JSContextGroupRef group)
 {
     VM& vm = *toJS(group);
 
-    JSLockHolder locker(&vm);
-    vm.derefSuppressingSaferCPPChecking();
+    releaseVMRefWithAPILock(vm);
 }
 
 static bool internalScriptTimeoutCallback(JSGlobalObject* globalObject, void* callbackPtr, void* callbackData)
@@ -178,11 +187,13 @@ void JSGlobalContextRelease(JSGlobalContextRef ctx)
     JSGlobalObject* globalObject = toJS(ctx);
     VM& vm = globalObject->vm();
 
-
+    Ref apiLock = vm.apiLock();
+    apiLock->lock();
     bool protectCountIsZero = vm.heap.unprotect(globalObject);
     if (protectCountIsZero)
         vm.heap.reportAbandonedObjectGraph();
     vm.derefSuppressingSaferCPPChecking();
+    apiLock->unlock();
 }
 
 JSObjectRef JSContextGetGlobalObject(JSContextRef ctx)
@@ -515,4 +526,3 @@ JSStringRef JSContextGroupTakeSamplesFromSamplingProfiler(JSContextGroupRef grou
     return nullptr;
 #endif
 }
-

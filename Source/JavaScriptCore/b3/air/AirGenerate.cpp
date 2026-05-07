@@ -48,6 +48,7 @@
 #include "AirReportUsedRegisters.h"
 #include "AirSimplifyCFG.h"
 #include "AirValidate.h"
+#include "AllowMacroScratchRegisterUsageIf.h"
 #include "B3Common.h"
 #include "B3Procedure.h"
 #include "CCallHelpers.h"
@@ -56,6 +57,17 @@
 #include <wtf/IndexMap.h>
 
 namespace JSC { namespace B3 { namespace Air {
+
+static void prepareReturn(Inst& inst, CCallHelpers& jit)
+{
+#if CPU(LOONGARCH64)
+    if (inst.kind.opcode == Ret32)
+        jit.signExtend32ToPtr(inst.args[0].gpr(), inst.args[0].gpr());
+#else
+    UNUSED_PARAM(inst);
+    UNUSED_PARAM(jit);
+#endif
+}
 
 void prepareForGeneration(Code& code)
 {
@@ -250,6 +262,7 @@ static void generateWithAlreadyAllocatedRegisters(Code& code, CCallHelpers& jit)
             Inst& inst = block->at(i);
             addItem(inst);
             auto start = jit.labelIgnoringWatchpoints();
+            AllowMacroScratchRegisterUsageIf allowScratch(jit, isLOONGARCH64());
             CCallHelpers::Jump jump = inst.generate(jit, context);
             ASSERT_UNUSED(jump, !jump.isSet());
             auto end = jit.labelIgnoringWatchpoints();
@@ -268,6 +281,7 @@ static void generateWithAlreadyAllocatedRegisters(Code& code, CCallHelpers& jit)
             // have this override.
             addItem(block->last());
             auto start = jit.labelIgnoringWatchpoints();
+            prepareReturn(block->last(), jit);
             code.emitEpilogue(jit);
             auto end = jit.labelIgnoringWatchpoints();
             if (disassembler)
@@ -277,6 +291,7 @@ static void generateWithAlreadyAllocatedRegisters(Code& code, CCallHelpers& jit)
 
         addItem(block->last());
         auto start = jit.labelIgnoringWatchpoints();
+        AllowMacroScratchRegisterUsageIf allowScratch(jit, isLOONGARCH64());
         CCallHelpers::Jump jump = block->last().generate(jit, context);
         auto end = jit.labelIgnoringWatchpoints();
         if (disassembler)

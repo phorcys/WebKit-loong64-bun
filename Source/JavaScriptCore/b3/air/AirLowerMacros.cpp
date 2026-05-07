@@ -59,25 +59,48 @@ void lowerMacros(Code& code)
                 unsigned resultCount = cCallResultCount(code, value);
                 
                 Vector<ShufflePair, 16> shufflePairs;
+                struct BitwiseTransfer {
+                    Arg src;
+                    Arg dst;
+                    Type type;
+                    Width width;
+                    StackSlot* spillSlot { nullptr };
+                };
+                Vector<BitwiseTransfer, 4> bitwiseTransfers;
                 bool hasRegisterSource = false;
                 unsigned offset = 1;
-                auto addNextPair = [&](Width width) {
+                auto addNextPair = [&](Type type, Width width) {
                     // Skip the special Arg in CCall
-                    ShufflePair pair(inst.args[offset + resultCount + 1], destinations[offset], width);
-                    shufflePairs.append(pair);
-                    hasRegisterSource |= pair.src().isReg();
+                    Arg src = inst.args[offset + resultCount + 1];
+                    Arg dst = destinations[offset];
+                    if (cCallArgumentRequiresBitwiseTransfer(type, dst))
+                        bitwiseTransfers.append({ src, dst, type, width });
+                    else
+                        shufflePairs.append(ShufflePair(src, dst, width));
+                    hasRegisterSource |= src.isReg();
                     ++offset;
                 };
                 for (unsigned i = 1; i < value->numChildren(); ++i) {
                     Value* child = value->child(i);
                     for (unsigned j = 0; j < cCallArgumentRegisterCount(child->type()); j++)
-                        addNextPair(cCallArgumentRegisterWidth(child->type()));
+                        addNextPair(child->type(), cCallArgumentRegisterWidth(child->type()));
                 }
-                ASSERT(offset = inst.args.size());
+                ASSERT(offset + resultCount + 1 == inst.args.size());
                 
-                if (hasRegisterSource) [[unlikely]]
-                    insertionSet.insertInst(instIndex, createShuffle(inst.origin, Vector<ShufflePair>(shufflePairs)));
-                else {
+                auto insertBitwiseTransfer = [&] (const BitwiseTransfer& transfer) {
+                    insertionSet.insert(instIndex, cCallArgumentBitwiseTransferOpcode(transfer.type), inst.origin, transfer.src, transfer.dst);
+                };
+
+                if (hasRegisterSource) [[unlikely]] {
+                    for (BitwiseTransfer& transfer : bitwiseTransfers) {
+                        transfer.spillSlot = code.addStackSlot(bytesForWidth(transfer.width), StackSlotKind::Spill);
+                        insertionSet.insertInsts(instIndex, ShufflePair(transfer.src, Arg::stack(transfer.spillSlot), transfer.width).insts(code, inst.origin));
+                    }
+                    if (!shufflePairs.isEmpty())
+                        insertionSet.insertInst(instIndex, createShuffle(inst.origin, Vector<ShufflePair>(shufflePairs)));
+                    for (const BitwiseTransfer& transfer : bitwiseTransfers)
+                        insertionSet.insert(instIndex, cCallArgumentBitwiseTransferOpcode(transfer.type), inst.origin, Arg::stack(transfer.spillSlot), transfer.dst);
+                } else {
                     // If none of the inputs are registers, then we can efficiently lower this
                     // shuffle before register allocation. First we lower all of the moves to
                     // memory, in the hopes that this is the last use of the operands. This
@@ -97,6 +120,9 @@ void lowerMacros(Code& code)
                         if (!pair.dst().isMemory())
                             insertionSet.insertInsts(instIndex, pair.insts(code, inst.origin));
                     }
+
+                    for (const BitwiseTransfer& transfer : bitwiseTransfers)
+                        insertBitwiseTransfer(transfer);
                 }
 
                 // Indicate that we're using our original callee argument.
@@ -212,7 +238,10 @@ void lowerMacros(Code& code)
                 Tmp tmp = code.newTmp(GP);
 
                 insertionSet.insert(instIndex, MoveFloatTo32, origin, vtmp, tmp);
-                insertionSet.insert(instIndex, Compare32, origin, Arg::relCond(MacroAssembler::NotEqual), tmp, Arg::imm(0), dst);
+                if (isLOONGARCH64())
+                    insertionSet.insert(instIndex, Compare32, origin, Arg::relCond(MacroAssembler::NotEqual), tmp, Arg::imm(0), dst, code.newTmp(GP), code.newTmp(GP));
+                else
+                    insertionSet.insert(instIndex, Compare32, origin, Arg::relCond(MacroAssembler::NotEqual), tmp, Arg::imm(0), dst);
 
                 inst = Inst();
             };
@@ -305,7 +334,10 @@ void lowerMacros(Code& code)
 
                 insertionSet.insert(instIndex, VectorUnsignedMax, origin, Arg::simdInfo({ SIMDLane::i32x4, SIMDSignMode::None }), vec, vtmp);
                 insertionSet.insert(instIndex, MoveFloatTo32, origin, vtmp, tmp);
-                insertionSet.insert(instIndex, Compare32, origin, Arg::relCond(MacroAssembler::NotEqual), tmp, Arg::imm(0), dst);
+                if (isLOONGARCH64())
+                    insertionSet.insert(instIndex, Compare32, origin, Arg::relCond(MacroAssembler::NotEqual), tmp, Arg::imm(0), dst, code.newTmp(GP), code.newTmp(GP));
+                else
+                    insertionSet.insert(instIndex, Compare32, origin, Arg::relCond(MacroAssembler::NotEqual), tmp, Arg::imm(0), dst);
 
                 inst = Inst();
             };

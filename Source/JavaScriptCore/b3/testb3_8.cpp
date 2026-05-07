@@ -45,6 +45,8 @@ void testAtomicWeakCAS()
         } else if (isARM_THUMB2()) {
             checkUsesInstruction(compilation, "ldrex");
             checkUsesInstruction(compilation, "strex");
+        } else if (isLOONGARCH64()) {
+            checkUsesInstruction(compilation, "amcas_db");
         } else {
             if (isARM64_LSE())
                 checkUsesInstruction(compilation, "casal");
@@ -306,6 +308,8 @@ void testAtomicStrongCAS()
         } else if (isARM_THUMB2()) {
             checkUsesInstruction(compilation, "ldrex");
             checkUsesInstruction(compilation, "strex");
+        } else if (isLOONGARCH64()) {
+            checkUsesInstruction(compilation, "amcas_db");
         } else {
             if (isARM64_LSE())
                 checkUsesInstruction(compilation, "casal");
@@ -677,6 +681,36 @@ void testAtomicXchg(B3::Opcode opcode)
                     break;
                 case AtomicXchg:
                     checkUsesInstruction(compilation, "swpal");
+                    break;
+                default:
+                    RELEASE_ASSERT_NOT_REACHED();
+                }
+            } else if (isLOONGARCH64()) {
+                switch (opcode) {
+                case AtomicXchgAdd:
+                case AtomicXchgSub:
+                    checkUsesInstruction(compilation, "amadd_db");
+                    break;
+                case AtomicXchgAnd:
+                    if (width == Width8 || width == Width16)
+                        checkUsesInstruction(compilation, "amcas_db");
+                    else
+                        checkUsesInstruction(compilation, "amand_db");
+                    break;
+                case AtomicXchgOr:
+                    if (width == Width8 || width == Width16)
+                        checkUsesInstruction(compilation, "amcas_db");
+                    else
+                        checkUsesInstruction(compilation, "amor_db");
+                    break;
+                case AtomicXchgXor:
+                    if (width == Width8 || width == Width16)
+                        checkUsesInstruction(compilation, "amcas_db");
+                    else
+                        checkUsesInstruction(compilation, "amxor_db");
+                    break;
+                case AtomicXchg:
+                    checkUsesInstruction(compilation, "amswap_db");
                     break;
                 default:
                     RELEASE_ASSERT_NOT_REACHED();

@@ -6,8 +6,20 @@
 
 static void emit32(lagoon_assembler_t* assembler, uint32_t instruction)
 {
-    *((uint32_t*)(assembler->cursor)) = instruction;
+    memcpy(assembler->cursor, &instruction, sizeof(instruction));
     assembler->cursor += 4;
+}
+
+static uint32_t load32(const uint8_t* cursor)
+{
+    uint32_t instruction;
+    memcpy(&instruction, cursor, sizeof(instruction));
+    return instruction;
+}
+
+static void store32(uint8_t* cursor, uint32_t instruction)
+{
+    memcpy(cursor, &instruction, sizeof(instruction));
 }
 
 void la_init_assembler(lagoon_assembler_t* assembler, uint8_t* buffer, size_t capacity)
@@ -32,7 +44,7 @@ void la_bind(lagoon_assembler_t* assembler, lagoon_label_t* label)
         uint8_t* patch_location = assembler->buffer + label->offsets[i];
 
         ptrdiff_t offset = (label->location - (label->offsets[i])) >> 2;
-        uint32_t instruction = *((uint32_t*)patch_location);
+        uint32_t instruction = load32(patch_location);
         /* B */
         if ((instruction & 0b11111100000000000000000000000000) == 0x50000000)
             instruction = (instruction & ~(0x3ffu | (0xffff << 10))) | ((offset >> 16) & 0x3ff) | ((offset & 0xffff) << 10);
@@ -79,7 +91,7 @@ void la_bind(lagoon_assembler_t* assembler, lagoon_label_t* label)
         else if ((instruction & 0b11111100000000000000001111100000) == 0x48000300)
             instruction = (instruction & ~(0x1fu | (0xffffu << 10))) | ((offset >> 16) & 0x1f) | ((offset & 0xffff) << 10);
 
-        *((uint32_t*)patch_location) = instruction;
+        store32(patch_location, instruction);
     }
 }
 
@@ -107,6 +119,7 @@ ptrdiff_t la_label(lagoon_assembler_t* assembler, lagoon_label_t* label)
 
 void la_label_free(lagoon_assembler_t* assembler, lagoon_label_t* label)
 {
+    (void)assembler;
     if (label->offsets != NULL) {
         free(label->offsets);
         label->offsets = NULL;

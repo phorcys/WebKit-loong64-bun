@@ -2570,7 +2570,7 @@ void testModArgFloat(float a)
     root->appendNewControlValue(proc, Return, Origin(), result32);
 
 
-    CHECK(isIdentical(compileAndRun<int32_t>(proc, std::bit_cast<int32_t>(a)), std::bit_cast<int32_t>(static_cast<float>(fmodl(a, a)))));
+    CHECK(isIdentical(compileAndRun<int32_t>(proc, std::bit_cast<int32_t>(a)), std::bit_cast<int32_t>(static_cast<float>(fmod(static_cast<double>(a), static_cast<double>(a))))));
 }
 
 void testModArgsFloat(float a, float b)
@@ -2587,7 +2587,7 @@ void testModArgsFloat(float a, float b)
     Value* result32 = root->appendNew<Value>(proc, BitwiseCast, Origin(), result);
     root->appendNewControlValue(proc, Return, Origin(), result32);
 
-    CHECK(isIdentical(compileAndRun<int32_t>(proc, std::bit_cast<int32_t>(a), std::bit_cast<int32_t>(b)), std::bit_cast<int32_t>(static_cast<float>(fmodl(a, b)))));
+    CHECK(isIdentical(compileAndRun<int32_t>(proc, std::bit_cast<int32_t>(a), std::bit_cast<int32_t>(b)), std::bit_cast<int32_t>(static_cast<float>(fmod(static_cast<double>(a), static_cast<double>(b))))));
 }
 
 void testModArgImmFloat(float a, float b)
@@ -2603,7 +2603,7 @@ void testModArgImmFloat(float a, float b)
     Value* result32 = root->appendNew<Value>(proc, BitwiseCast, Origin(), result);
     root->appendNewControlValue(proc, Return, Origin(), result32);
 
-    CHECK(isIdentical(compileAndRun<int32_t>(proc, std::bit_cast<int32_t>(a)), std::bit_cast<int32_t>(static_cast<float>(fmodl(a, b)))));
+    CHECK(isIdentical(compileAndRun<int32_t>(proc, std::bit_cast<int32_t>(a)), std::bit_cast<int32_t>(static_cast<float>(fmod(static_cast<double>(a), static_cast<double>(b))))));
 }
 
 void testModImmArgFloat(float a, float b)
@@ -2619,7 +2619,7 @@ void testModImmArgFloat(float a, float b)
     Value* result32 = root->appendNew<Value>(proc, BitwiseCast, Origin(), result);
     root->appendNewControlValue(proc, Return, Origin(), result32);
 
-    CHECK(isIdentical(compileAndRun<int32_t>(proc, std::bit_cast<int32_t>(b)), std::bit_cast<int32_t>(static_cast<float>(fmodl(a, b)))));
+    CHECK(isIdentical(compileAndRun<int32_t>(proc, std::bit_cast<int32_t>(b)), std::bit_cast<int32_t>(static_cast<float>(fmod(static_cast<double>(a), static_cast<double>(b))))));
 }
 
 void testModImmsFloat(float a, float b)
@@ -2632,7 +2632,7 @@ void testModImmsFloat(float a, float b)
     Value* result32 = root->appendNew<Value>(proc, BitwiseCast, Origin(), result);
     root->appendNewControlValue(proc, Return, Origin(), result32);
 
-    CHECK(isIdentical(compileAndRun<int32_t>(proc), std::bit_cast<int32_t>(static_cast<float>(fmodl(a, b)))));
+    CHECK(isIdentical(compileAndRun<int32_t>(proc), std::bit_cast<int32_t>(static_cast<float>(fmod(static_cast<double>(a), static_cast<double>(b))))));
 }
 
 void testDivArgFloatWithUselessDoubleConversion(float a)

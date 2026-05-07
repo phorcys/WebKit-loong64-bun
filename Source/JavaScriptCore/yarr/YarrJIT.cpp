@@ -89,6 +89,10 @@ static constexpr GPRReg areCanonicallyEquivalentCanonicalModeArgReg = X86Registe
 
 // The thunk code assumes that we return the result to areCanonicallyEquivalentCharArgReg.
 static_assert(areCanonicallyEquivalentCharArgReg == GPRInfo::returnValueGPR);
+#elif CPU(LOONGARCH64)
+static constexpr GPRReg areCanonicallyEquivalentCharArgReg = LOONGARCH64Registers::r10;
+static constexpr GPRReg areCanonicallyEquivalentPattCharArgReg = LOONGARCH64Registers::r11;
+static constexpr GPRReg areCanonicallyEquivalentCanonicalModeArgReg = LOONGARCH64Registers::r14;
 #endif
 #endif
 
@@ -3788,7 +3792,7 @@ class YarrGenerator final : public YarrJITInfo {
                     m_jit.move(MacroAssembler::TrustedImm32(0), m_regs.firstCharacterAdditionalReadSize);
 #endif
 
-#if CPU(ARM64) || CPU(X86_64)
+#if CPU(ARM64) || CPU(X86_64) || CPU(LOONGARCH64)
                 // Try multi-pattern SIMD search first if available (more selective for alternation patterns)
                 if (op.m_maskedAltInfo) {
                     MacroAssembler::JumpList matched;
@@ -3846,7 +3850,7 @@ class YarrGenerator final : public YarrJITInfo {
                             break;
 
                         unsigned strideLength = endIndex - beginIndex;
-#if CPU(ARM64) || CPU(X86_64)
+#if CPU(ARM64) || CPU(X86_64) || CPU(LOONGARCH64)
                         // Try SIMD nibble table optimization first for any number of candidates.
                         // This includes the scalar loop internally for tail processing,
                         // following the same pattern as generateMultiPatternSIMDSearch.
@@ -5698,7 +5702,7 @@ class YarrGenerator final : public YarrJITInfo {
                 } else
                     dataLogLnIf(YarrJITInternal::verbose, "BM collection failed");
 
-#if CPU(ARM64) || CPU(X86_64)
+#if CPU(ARM64) || CPU(X86_64) || CPU(LOONGARCH64)
                 // Try multi-pattern SIMD search for alternations with 2 fixed alternatives
                 // This is more effective than bitmap lookahead for patterns like /agggtaaa|tttaccct/i
                 if (m_charSize == CharSize::Char8 && alternatives.size() >= 2) {
@@ -6068,7 +6072,7 @@ class YarrGenerator final : public YarrJITInfo {
         jumpIfAvailableInput(strideLength).linkTo(loopHead, &m_jit);
     }
 
-#if CPU(ARM64) || CPU(X86_64)
+#if CPU(ARM64) || CPU(X86_64) || CPU(LOONGARCH64)
     // Generate SIMD-accelerated multi-pattern search for alternation patterns like /agggtaaa|tttaccct/i:
     // The idea comes from the SkipUntilOneOfMasked optimization from V8.
     //
@@ -6261,9 +6265,13 @@ class YarrGenerator final : public YarrJITInfo {
             // Check if pattern matched anywhere - if so, fall through to scalar loop to find exact position
             // SIMD only tells us there's a match SOMEWHERE in the 16-char window, not WHERE
             scalarLoop.append(m_jit.branchTest64(MacroAssembler::NonZero, m_regs.regT0));
-#else
+#elif CPU(X86_64)
             m_jit.vectorOr(SIMDInfo { SIMDLane::v128, SIMDSignMode::None }, m_regs.vectorScratch0, m_regs.vectorScratch1, m_regs.vectorScratch0);
             scalarLoop.append(m_jit.branchTest128(MacroAssembler::NonZero, m_regs.vectorScratch0));
+#elif CPU(LOONGARCH64)
+            m_jit.vectorOr(SIMDInfo { SIMDLane::v128, SIMDSignMode::None }, m_regs.vectorScratch0, m_regs.vectorScratch1, m_regs.vectorScratch0);
+            m_jit.vectorBitmask(SIMDInfo { SIMDLane::i8x16, SIMDSignMode::None }, m_regs.vectorScratch0, m_regs.regT0, m_regs.vectorScratch2);
+            scalarLoop.append(m_jit.branchTest32(MacroAssembler::NonZero, m_regs.regT0));
 #endif
         };
 
@@ -6405,7 +6413,7 @@ class YarrGenerator final : public YarrJITInfo {
             return std::nullopt;
 #endif
 
-#if CPU(ARM64) || CPU(X86_64)
+#if CPU(ARM64) || CPU(X86_64) || CPU(LOONGARCH64)
         JIT_COMMENT(m_jit, "BitInTable SIMD search");
 
         // ==================== SETUP CONSTANTS (OUTSIDE LOOP) ====================
@@ -6484,7 +6492,7 @@ class YarrGenerator final : public YarrJITInfo {
 #if CPU(ARM64)
         // Use byte-wise shift (USHR)
         m_jit.vectorUshrInt8(m_regs.vectorInput0, 4, m_regs.vectorScratch1);
-#elif CPU(X86_64)
+#elif CPU(X86_64) || CPU(LOONGARCH64)
         // Use word-wise shift (VPSRLW). This shifts 16-bit lanes, but since we
         // immediately AND with 0x0F, the cross-byte contamination is masked out.
         m_jit.vectorUshr8(SIMDInfo { SIMDLane::i16x8, SIMDSignMode::Unsigned }, m_regs.vectorInput0, MacroAssembler::TrustedImm32(4), m_regs.vectorScratch1);
@@ -6514,13 +6522,13 @@ class YarrGenerator final : public YarrJITInfo {
 
         // Check if any match found
         auto matchInVector = m_jit.branchTest64(MacroAssembler::NonZero, m_regs.regT0);
-#elif CPU(X86_64)
+#elif CPU(X86_64) || CPU(LOONGARCH64)
         // Compute (row & mask) and compare with mask to test if (row & mask) == mask
         // This is equivalent to testing (row & mask) != 0 because mask has exactly one bit set.
         m_jit.vectorAnd(SIMDInfo { SIMDLane::v128, SIMDSignMode::None }, m_regs.vectorScratch2, m_regs.vectorScratch3, m_regs.vectorScratch0);
         m_jit.compareIntegerVector(MacroAssembler::Equal, SIMDInfo { SIMDLane::i8x16, SIMDSignMode::None }, m_regs.vectorScratch0, m_regs.vectorScratch3, m_regs.vectorScratch0);
 
-        // PMOVMSKB extracts the high bit of each byte into a 16-bit mask directly
+        // Extract the high bit of each byte into a 16-bit mask directly.
         m_jit.vectorBitmask(SIMDInfo { SIMDLane::i8x16, SIMDSignMode::None }, m_regs.vectorScratch0, m_regs.regT0, m_regs.vectorScratch1);
 
         // Check if any match found
@@ -6548,8 +6556,8 @@ class YarrGenerator final : public YarrJITInfo {
 
         // Character index = bit position / 4 (since SHRN compressed by 4)
         m_jit.urshift64(MacroAssembler::TrustedImm32(2), m_regs.regT0);
-#elif CPU(X86_64)
-        // BSF/TZCNT directly gives the byte index (no division needed since PMOVMSKB gives one bit per byte)
+#elif CPU(X86_64) || CPU(LOONGARCH64)
+        // TZCNT directly gives the byte index because vectorBitmask gives one bit per byte.
         m_jit.countTrailingZeros32(m_regs.regT0, m_regs.regT0);
 #endif
 
@@ -7533,6 +7541,38 @@ static MacroAssemblerCodeRef<JITThunkPtrTag> areCanonicallyEquivalentThunkGenera
         pushCount--;
         jit.pop(callerSaves[pushCount]);
     };
+#elif CPU(LOONGARCH64)
+    constexpr unsigned registersToSave = 18;
+    constexpr GPRReg callerSaves[registersToSave] = {
+        LOONGARCH64Registers::r4,
+        LOONGARCH64Registers::r5,
+        LOONGARCH64Registers::r6,
+        LOONGARCH64Registers::r7,
+        LOONGARCH64Registers::r8,
+        LOONGARCH64Registers::r9,
+        LOONGARCH64Registers::r10,
+        LOONGARCH64Registers::r11,
+        LOONGARCH64Registers::r12,
+        LOONGARCH64Registers::r13,
+        LOONGARCH64Registers::r14,
+        LOONGARCH64Registers::r15,
+        LOONGARCH64Registers::r16,
+        LOONGARCH64Registers::r17,
+        LOONGARCH64Registers::r18,
+        LOONGARCH64Registers::r19,
+        LOONGARCH64Registers::r20,
+        LOONGARCH64Registers::r21,
+    };
+
+    auto pushCallerSave = [&]() {
+        jit.push(callerSaves[pushCount]);
+        pushCount++;
+    };
+
+    auto popCallerSave = [&]() {
+        pushCount--;
+        jit.pop(callerSaves[pushCount]);
+    };
 #endif
 
     jit.emitFunctionPrologue();
@@ -7540,7 +7580,7 @@ static MacroAssemblerCodeRef<JITThunkPtrTag> areCanonicallyEquivalentThunkGenera
 #if CPU(ARM64)
     while (pushCount < registersToSave)
         pushCallerSavePair();
-#elif CPU(X86_64)
+#elif CPU(X86_64) || CPU(LOONGARCH64)
     while (pushCount < registersToSave)
         pushCallerSave();
 #endif
@@ -7559,6 +7599,16 @@ static MacroAssemblerCodeRef<JITThunkPtrTag> areCanonicallyEquivalentThunkGenera
 #elif CPU(X86_64)
     // Convert 8-bit bool result into 32 bit value.
     jit.zeroExtend8To32(GPRInfo::returnValueGPR, GPRInfo::returnValueGPR);
+
+    while (pushCount)
+        popCallerSave();
+#elif CPU(LOONGARCH64)
+    // Convert 8-bit bool result and restore it into the Yarr character
+    // register by overwriting its saved stack slot before popping.
+    static_assert(areCanonicallyEquivalentCharArgReg == LOONGARCH64Registers::r10);
+    constexpr ptrdiff_t savedCharacterArgOffset = (LOONGARCH64Registers::r21 - areCanonicallyEquivalentCharArgReg) * sizeof(void*);
+    jit.zeroExtend8To32(GPRInfo::returnValueGPR, GPRInfo::returnValueGPR);
+    jit.storePtr(GPRInfo::returnValueGPR, CCallHelpers::Address(LOONGARCH64Registers::sp, savedCharacterArgOffset));
 
     while (pushCount)
         popCallerSave();

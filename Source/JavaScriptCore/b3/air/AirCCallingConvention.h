@@ -43,6 +43,9 @@ class Code;
 
 Vector<Arg> computeCCallingConvention(Code&, CCallValue*);
 
+bool NODELETE cCallArgumentRequiresBitwiseTransfer(Type, const Arg& destination);
+Opcode NODELETE cCallArgumentBitwiseTransferOpcode(Type);
+
 size_t NODELETE cCallResultCount(Code&, CCallValue*);
 bool NODELETE cCallArgumentEvenRegisterAlignment(Type);
 

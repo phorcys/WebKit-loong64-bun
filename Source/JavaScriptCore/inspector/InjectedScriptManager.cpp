@@ -189,7 +189,9 @@ InjectedScript InjectedScriptManager::injectedScriptFor(JSGlobalObject* globalOb
         auto& stack = error->stack();
         if (stack.size() > 0)
             lineColumn = stack[0].computeLineAndColumn();
+        IGNORE_WARNINGS_BEGIN("unsafe-buffer-usage-in-format-attr-call")
         WTFLogAlways("Error when creating injected script: %s (%d:%d)\n", error->value().toWTFString(globalObject).utf8().data(), lineColumn.line, lineColumn.column);
+        IGNORE_WARNINGS_END
         RELEASE_ASSERT_NOT_REACHED();
     }
     if (!createResult.value()) {
@@ -209,4 +211,3 @@ void InjectedScriptManager::didCreateInjectedScript(const InjectedScript&)
 }
 
 } // namespace Inspector
-

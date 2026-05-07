@@ -99,6 +99,7 @@ bool JSCheckScriptSyntax(JSContextRef ctx, JSStringRef script, JSStringRef sourc
     }
     JSGlobalObject* globalObject = toJS(ctx);
     VM& vm = globalObject->vm();
+    JSLockHolder locker(vm);
 
     startingLineNumber = std::max(1, startingLineNumber);
 
@@ -134,6 +135,7 @@ void JSGarbageCollect(JSContextRef ctx)
     JSGlobalObject* globalObject = toJS(ctx);
     VM& vm = globalObject->vm();
 
+    JSLockHolder locker(vm);
 
     vm.heap.reportAbandonedObjectGraph();
 }
@@ -147,6 +149,7 @@ void JSReportExtraMemoryCost(JSContextRef ctx, size_t size)
     JSGlobalObject* globalObject = toJS(ctx);
     VM& vm = globalObject->vm();
 
+    JSLockHolder locker(vm);
 
     vm.heap.deprecatedReportExtraMemory(size);
 }
@@ -162,6 +165,7 @@ void JSSynchronousGarbageCollectForDebugging(JSContextRef ctx)
     JSGlobalObject* globalObject = toJS(ctx);
     VM& vm = globalObject->vm();
 
+    JSLockHolder locker(vm);
     vm.heap.collectNow(Sync, CollectionScope::Full);
 }
 
@@ -173,6 +177,7 @@ void JSSynchronousEdenCollectForDebugging(JSContextRef ctx)
     JSGlobalObject* globalObject = toJS(ctx);
     VM& vm = globalObject->vm();
 
+    JSLockHolder locker(vm);
     vm.heap.collectSync(CollectionScope::Eden);
 }
 

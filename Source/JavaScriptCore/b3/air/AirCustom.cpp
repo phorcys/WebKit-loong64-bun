@@ -226,12 +226,13 @@ bool WasmBoundsCheckCustom::isValidForm(Inst& inst)
 MacroAssembler::Jump WasmBoundsCheckCustom::generate(Inst& inst, CCallHelpers& jit, GenerationContext& context)
 {
     WasmBoundsCheckValue* value = inst.origin->as<WasmBoundsCheckValue>();
+    Air::Opcode boundsBranchOpcode = value->child(0)->type() == B3::Int32 ? Air::Branch32 : Air::Branch64;
 
     MacroAssembler::Jump overflowOOB { };
     if (inst.args.size() > 2)
-        overflowOOB = Inst((is32Bit() ? Air::Branch32 : Air::Branch64), value, Arg::relCond(MacroAssembler::Below), inst.args[0], inst.args[2]).generate(jit, context);
+        overflowOOB = Inst(boundsBranchOpcode, value, Arg::relCond(MacroAssembler::Below), inst.args[0], inst.args[2]).generate(jit, context);
 
-    MacroAssembler::Jump outOfBounds = Inst((is32Bit() ? Air::Branch32 : Air::Branch64), value, Arg::relCond(MacroAssembler::AboveOrEqual), inst.args[0], inst.args[1]).generate(jit, context);
+    MacroAssembler::Jump outOfBounds = Inst(boundsBranchOpcode, value, Arg::relCond(MacroAssembler::AboveOrEqual), inst.args[0], inst.args[1]).generate(jit, context);
 
     context.latePaths.append(std::tuple {
         value->origin(),
@@ -259,4 +260,3 @@ MacroAssembler::Jump WasmBoundsCheckCustom::generate(Inst& inst, CCallHelpers& j
 } } } // namespace JSC::B3::Air
 
 #endif // ENABLE(B3_JIT)
-

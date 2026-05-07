@@ -35,6 +35,7 @@
 #include "AirLowerStackArgs.h"
 #include "AirStackAllocation.h"
 #include "AirTmpMap.h"
+#include "AllowMacroScratchRegisterUsageIf.h"
 #include "CCallHelpers.h"
 #include "DisallowMacroScratchRegisterUsage.h"
 #include "Reg.h"
@@ -50,6 +51,17 @@ static constexpr bool verbose = false;
 }
 
 WTF_MAKE_SEQUESTERED_ARENA_ALLOCATED_IMPL(GenerateAndAllocateRegisters);
+
+static void prepareReturn(Inst& inst, CCallHelpers& jit)
+{
+#if CPU(LOONGARCH64)
+    if (inst.kind.opcode == Ret32)
+        jit.signExtend32ToPtr(inst.args[0].gpr(), inst.args[0].gpr());
+#else
+    UNUSED_PARAM(inst);
+    UNUSED_PARAM(jit);
+#endif
+}
 
 GenerateAndAllocateRegisters::GenerateAndAllocateRegisters(Code& code)
     : m_code(code)
@@ -148,7 +160,7 @@ void GenerateAndAllocateRegisters::insertBlocksForFlushAfterTerminalPatchpoints(
     blockInsertionSet.execute();
 }
 
-static ALWAYS_INLINE Air::Arg callFrameAddr(Air::Opcode opcode, CCallHelpers& jit, int32_t offsetFromFP, int32_t frameSize, Width width)
+static ALWAYS_INLINE Air::Arg callFrameAddr(Air::Opcode opcode, CCallHelpers& jit, int32_t offsetFromFP, int32_t frameSize, Width width, GPRReg scratch)
 {
     if (isX86()) {
         ASSERT(Arg::addr(Air::Tmp(GPRInfo::callFrameRegister), offsetFromFP).isValidForm(opcode, width));
@@ -167,7 +179,7 @@ static ALWAYS_INLINE Air::Arg callFrameAddr(Air::Opcode opcode, CCallHelpers& ji
     // Try finding a valid indexing of extendedOffsetAddrRegister
     // into the frame pointer register.
     // (Have to materialze the offset into extendedOffsetAddrRegister.)
-    GPRReg reg = extendedOffsetAddrRegister();
+    GPRReg reg = scratch;
     jit.move(CCallHelpers::TrustedImmPtr(offsetFromFP), reg);
     auto index = Arg::index(Air::Tmp(GPRInfo::callFrameRegister), Air::Tmp(reg), 1, 0);
     if (index.isValidForm(opcode, width))
@@ -176,6 +188,11 @@ static ALWAYS_INLINE Air::Arg callFrameAddr(Air::Opcode opcode, CCallHelpers& ji
     // Resort to computing the absolute address in extendedOffsetAddrRegister.
     jit.addPtr(GPRInfo::callFrameRegister, reg);
     return Arg::addr(Air::Tmp(reg));
+}
+
+static ALWAYS_INLINE Air::Arg callFrameAddr(Air::Opcode opcode, CCallHelpers& jit, int32_t offsetFromFP, int32_t frameSize, Width width)
+{
+    return callFrameAddr(opcode, jit, offsetFromFP, frameSize, width, extendedOffsetAddrRegister());
 }
 
 ALWAYS_INLINE void GenerateAndAllocateRegisters::release(Tmp tmp, Reg reg)
@@ -189,6 +206,33 @@ ALWAYS_INLINE void GenerateAndAllocateRegisters::release(Tmp tmp, Reg reg)
     m_map[tmp].reg = Reg();
 }
 
+ALWAYS_INLINE GPRReg GenerateAndAllocateRegisters::addressScratchRegister()
+{
+    GPRReg reg = extendedOffsetAddrRegister();
+#if CPU(LOONGARCH64)
+    if (!m_currentInst)
+        return reg;
+
+    auto instUsesGPR = [&] (GPRReg candidate) {
+        bool result = false;
+        m_currentInst->forEachArg([&] (Arg& arg, Arg::Role, Bank, Width) {
+            arg.forEachTmpFast([&] (Tmp tmp) {
+                if (tmp.isGPR() && tmp.gpr() == candidate)
+                    result = true;
+            });
+        });
+        return result;
+    };
+
+    if (!instUsesGPR(reg))
+        return reg;
+    if (!instUsesGPR(MacroAssembler::memoryTempRegister))
+        return MacroAssembler::memoryTempRegister;
+    if (!instUsesGPR(MacroAssembler::dataTempRegister2))
+        return MacroAssembler::dataTempRegister2;
+#endif
+    return reg;
+}
 
 ALWAYS_INLINE void GenerateAndAllocateRegisters::flush(Tmp tmp, Reg reg)
 {
@@ -196,21 +240,21 @@ ALWAYS_INLINE void GenerateAndAllocateRegisters::flush(Tmp tmp, Reg reg)
     int32_t offset = safeCast<int32_t>(m_map[tmp].spillSlot->offsetFromFP());
     JIT_COMMENT(*m_jit, "Flush(", tmp, ", ", reg, ", offset=", offset, ")");
     if (tmp.isGP()) {
-        auto dest = callFrameAddr(Air::Move, *m_jit, offset, m_code.frameSize(), registerWidth());
+        auto dest = callFrameAddr(Air::Move, *m_jit, offset, m_code.frameSize(), registerWidth(), addressScratchRegister());
         if (dest.isAddr())
             m_jit->storeRegWord(reg.gpr(), dest.asAddress());
         else
             m_jit->storeRegWord(reg.gpr(), dest.asBaseIndex());
     } else if (B3::conservativeRegisterBytes(B3::FP) == sizeof(double) || !m_code.usesSIMD()) {
         ASSERT(m_map[tmp].spillSlot->byteSize() == bytesForWidth(Width64));
-        auto dest = callFrameAddr(Air::MoveDouble, *m_jit, offset, m_code.frameSize(), Width64);
+        auto dest = callFrameAddr(Air::MoveDouble, *m_jit, offset, m_code.frameSize(), Width64, addressScratchRegister());
         if (dest.isAddr())
             m_jit->storeDouble(reg.fpr(), dest.asAddress());
         else
             m_jit->storeDouble(reg.fpr(), dest.asBaseIndex());
     } else {
         ASSERT(m_map[tmp].spillSlot->byteSize() == bytesForWidth(Width128));
-        auto dest = callFrameAddr(Air::MoveVector, *m_jit, offset, m_code.frameSize(), Width128);
+        auto dest = callFrameAddr(Air::MoveVector, *m_jit, offset, m_code.frameSize(), Width128, addressScratchRegister());
         if (dest.isAddr())
             m_jit->storeVector(reg.fpr(), dest.asAddress());
         else
@@ -245,21 +289,21 @@ ALWAYS_INLINE void GenerateAndAllocateRegisters::alloc(Tmp tmp, Reg reg, Arg::Ro
         int32_t offset = safeCast<int32_t>(m_map[tmp].spillSlot->offsetFromFP());
         int32_t frameSize = safeCast<int32_t>(m_code.frameSize());
         if (tmp.bank() == GP) {
-            auto src = callFrameAddr(Air::Move, *m_jit, offset, frameSize, registerWidth());
+            auto src = callFrameAddr(Air::Move, *m_jit, offset, frameSize, registerWidth(), addressScratchRegister());
             if (src.isAddr())
                 m_jit->loadRegWord(src.asAddress(), reg.gpr());
             else
                 m_jit->loadRegWord(src.asBaseIndex(), reg.gpr());
         } else if (B3::conservativeRegisterBytes(B3::FP) == sizeof(double) || !m_code.usesSIMD()) {
             ASSERT(m_map[tmp].spillSlot->byteSize() == bytesForWidth(Width64));
-            auto src = callFrameAddr(Air::MoveDouble, *m_jit, offset, frameSize, Width64);
+            auto src = callFrameAddr(Air::MoveDouble, *m_jit, offset, frameSize, Width64, addressScratchRegister());
             if (src.isAddr())
                 m_jit->loadDouble(src.asAddress(), reg.fpr());
             else
                 m_jit->loadDouble(src.asBaseIndex(), reg.fpr());
         } else {
             ASSERT(m_map[tmp].spillSlot->byteSize() == bytesForWidth(Width128));
-            auto src = callFrameAddr(Air::MoveVector, *m_jit, offset, frameSize, Width128);
+            auto src = callFrameAddr(Air::MoveVector, *m_jit, offset, frameSize, Width128, addressScratchRegister());
             if (src.isAddr())
                 m_jit->loadVector(src.asAddress(), reg.fpr());
             else
@@ -670,6 +714,7 @@ void GenerateAndAllocateRegisters::generate(CCallHelpers& jit)
             context.indexInBlock = instIndex;
 
             Inst& inst = block->at(instIndex);
+            m_currentInst = &inst;
             Inst instCopy = inst;
 
             m_namedUsedRegs = { };
@@ -886,7 +931,7 @@ void GenerateAndAllocateRegisters::generate(CCallHelpers& jit)
                     int pinnedRegisterUses = 0;
                     inst.forEachArg([&] (Arg& arg, Arg::Role role, Bank, Width) {
                         if (arg.isAddr() && arg.isAnyUse(role) && !arg.isValidForm(inst.kind.opcode)) {
-                            GPRReg reg = extendedOffsetAddrRegister();
+                            GPRReg reg = addressScratchRegister();
                             m_jit->move(CCallHelpers::TrustedImmPtr(arg.offset()), reg);
                             m_jit->addPtr(arg.base().gpr(), reg);
                             arg = Arg::addr(Tmp(reg));
@@ -924,6 +969,7 @@ void GenerateAndAllocateRegisters::generate(CCallHelpers& jit)
                 if (needsToGenerate) {
                     // Register allocation is done, emit PC label to origin map before emitting bytes.
                     addItem(inst);
+                    AllowMacroScratchRegisterUsageIf allowScratch(*m_jit, isLOONGARCH64());
                     jump = inst.generate(*m_jit, context);
                 }
                 ASSERT_UNUSED(jump, !jump.isSet());
@@ -969,11 +1015,13 @@ void GenerateAndAllocateRegisters::generate(CCallHelpers& jit)
                     // We currently don't represent the full epilogue in Air, so we need to
                     // have this override.
                     addItem(inst);
+                    prepareReturn(inst, *m_jit);
                     m_code.emitEpilogue(*m_jit);
                 }
                 
                 if (needsToGenerate) {
                     addItem(inst);
+                    AllowMacroScratchRegisterUsageIf allowScratch(*m_jit, isLOONGARCH64());
                     CCallHelpers::Jump jump = inst.generate(*m_jit, context);
 
                     // The jump won't be set for patchpoints. It won't be set for Oops because then it won't have

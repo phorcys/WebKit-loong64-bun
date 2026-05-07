@@ -27,17 +27,20 @@
 #include "JSHeapFinalizerPrivate.h"
 
 #include "APICast.h"
+#include "JSLock.h"
 
 void JSContextGroupAddHeapFinalizer(JSContextGroupRef group, JSHeapFinalizer finalizer, void *userData)
 {
-    JSC::VM* vm = toJS(group);
+    JSC::VM& vm = *toJS(group);
 
-    vm->heap.addHeapFinalizerCallback(JSC::HeapFinalizerCallback(finalizer, userData));
+    JSC::JSLockHolder locker(vm);
+    vm.heap.addHeapFinalizerCallback(JSC::HeapFinalizerCallback(finalizer, userData));
 }
 
 void JSContextGroupRemoveHeapFinalizer(JSContextGroupRef group, JSHeapFinalizer finalizer, void *userData)
 {
-    JSC::VM* vm = toJS(group);
+    JSC::VM& vm = *toJS(group);
 
-    vm->heap.removeHeapFinalizerCallback(JSC::HeapFinalizerCallback(finalizer, userData));
+    JSC::JSLockHolder locker(vm);
+    vm.heap.removeHeapFinalizerCallback(JSC::HeapFinalizerCallback(finalizer, userData));
 }

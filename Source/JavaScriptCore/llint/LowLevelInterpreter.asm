@@ -365,7 +365,7 @@ elsif X86_64
     const wfa7 = ft7
 
     const fr = fa0
-elsif RISCV64 or LOONGARCH64
+elsif RISCV64
     const a0 = t0
     const a1 = t1
     const a2 = t2
@@ -400,6 +400,52 @@ elsif RISCV64 or LOONGARCH64
     const fa5 = fa5
     const fa6 = fa6
     const fa7 = fa7
+
+    const wfa0 = fa0
+    const wfa1 = fa1
+    const wfa2 = fa2
+    const wfa3 = fa3
+    const wfa4 = fa4
+    const wfa5 = fa5
+    const wfa6 = fa6
+    const wfa7 = fa7
+
+    const fr = fa0
+elsif LOONGARCH64
+    const a0 = t0
+    const a1 = t1
+    const a2 = t2
+    const a3 = t3
+    const a4 = t4
+    const a5 = t5
+    const a6 = t6
+    const a7 = t7
+
+    const wa0 = a0
+    const wa1 = a1
+    const wa2 = a2
+    const wa3 = a3
+    const wa4 = a4
+    const wa5 = a5
+    const wa6 = a6
+    const wa7 = a7
+
+    const ws0 = t9 # ws0 must be a non-argument/non-return GPR
+    const ws1 = t10
+    const ws2 = t11
+    const ws3 = t12
+
+    const r0 = a0
+    const r1 = a1
+
+    const fa0 = ft0
+    const fa1 = ft1
+    const fa2 = ft2
+    const fa3 = ft3
+    const fa4 = ft4
+    const fa5 = ft5
+    const fa6 = ft6
+    const fa7 = ft7
 
     const wfa0 = fa0
     const wfa1 = fa1
