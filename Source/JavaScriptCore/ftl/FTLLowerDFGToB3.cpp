@@ -25399,6 +25399,25 @@ IGNORE_CLANG_WARNINGS_END
         return type;
     }
 
+    template<typename OperationType, size_t argumentIndex>
+    LValue extendVMCallArgumentForABI(LValue value)
+    {
+        if constexpr (isLOONGARCH64()) {
+            using ArgumentType = std::remove_cvref_t<typename FunctionTraits<OperationType>::template ArgumentType<argumentIndex>>;
+            if constexpr (std::is_integral_v<ArgumentType> && sizeof(ArgumentType) == sizeof(int32_t)) {
+                value = m_out.castToInt32(value);
+                return m_out.signExt32To64(value);
+            }
+        }
+        return value;
+    }
+
+    template<typename OperationType, typename... Args, size_t... indices>
+    LValue vmCallWithABIExtendedArguments(LType type, LValue function, std::index_sequence<indices...>, Args&&... args)
+    {
+        return m_out.call(type, function, extendVMCallArgumentForABI<OperationType, indices>(std::forward<Args>(args))...);
+    }
+
     template<typename OperationType, typename... Args>
     requires (!std::is_same_v<OperationType, LValue> && !std::is_same_v<CodePtr<OperationPtrTag>, OperationType>) && (std::is_convertible_v<Args, LValue> && ...)
     LValue vmCall(LType type, OperationType function, Args&&... args)
@@ -25406,7 +25425,7 @@ IGNORE_CLANG_WARNINGS_END
         static_assert(FunctionTraits<OperationType>::cCallArity() == sizeof...(Args), "Sanity check");
         callPreflight();
         using ResultType = typename FunctionTraits<OperationType>::ResultType;
-        LValue result = m_out.call(resultTypeForOperation<ResultType>(type), m_out.operation(function), std::forward<Args>(args)...);
+        LValue result = vmCallWithABIExtendedArguments<OperationType>(resultTypeForOperation<ResultType>(type), m_out.operation(function), std::make_index_sequence<sizeof...(Args)>(), std::forward<Args>(args)...);
         return operationExceptionCheckAndExtractResultIfNeeded<ResultType>(result);
     }
 
@@ -25417,7 +25436,7 @@ IGNORE_CLANG_WARNINGS_END
         static_assert(FunctionTraits<OperationType>::cCallArity() == sizeof...(Args), "Sanity check");
         callPreflight();
         using ResultType = typename FunctionTraits<OperationType>::ResultType;
-        LValue result = m_out.call(resultTypeForOperation<ResultType>(type), m_out.operation(function), std::forward<Args>(args)...);
+        LValue result = vmCallWithABIExtendedArguments<OperationType>(resultTypeForOperation<ResultType>(type), m_out.operation(function), std::make_index_sequence<sizeof...(Args)>(), std::forward<Args>(args)...);
         return operationExceptionCheckAndExtractResultIfNeeded<ResultType>(result);
     }
 

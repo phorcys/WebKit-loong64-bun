@@ -38,9 +38,9 @@
 
 namespace JSC { namespace FTL {
 
-template<typename ResultType, typename... ArgumentTypes>
+template<typename OperationType, typename ResultType, typename... ArgumentTypes>
 Ref<LazySlowPath::Generator> createLazyCallGenerator(
-    VM& vm, CodePtr<CFunctionPtrTag> function, ResultType result, ArgumentTypes... arguments)
+    VM& vm, OperationType function, ResultType result, ArgumentTypes... arguments)
 {
     return LazySlowPath::createGenerator(
         [=, &vm] (CCallHelpers& jit, LazySlowPath::GenerationParams& params) {
