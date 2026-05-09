@@ -93,10 +93,39 @@ SlowPathCall callOperation(
     return call;
 }
 
+template<typename OperationType, typename... ArgumentTypes>
+    requires (!std::is_same_v<std::remove_cvref_t<OperationType>, CodePtr<CFunctionPtrTag>>
+        && !std::is_same_v<std::remove_cvref_t<OperationType>, CCallHelpers::Address>)
+SlowPathCall callOperation(
+    VM& vm, const ScalarRegisterSet& usedRegisters, CCallHelpers& jit, CCallHelpers::JumpList* exceptionTarget,
+    OperationType function, GPRReg resultGPR, ArgumentTypes... arguments)
+{
+    SlowPathCall call;
+    {
+        SlowPathCallContext context(usedRegisters, jit, sizeof...(ArgumentTypes) + 1, resultGPR, InvalidGPRReg);
+        jit.setupArguments<OperationType>(arguments...);
+        call = context.makeCall(vm, CodePtr<CFunctionPtrTag>(function));
+    }
+    if (exceptionTarget)
+        exceptionTarget->append(jit.emitExceptionCheck(vm));
+    return call;
+}
+
 template<typename... ArgumentTypes>
 SlowPathCall callOperation(
     VM& vm, const RegisterSet& usedRegisters, CCallHelpers& jit, CCallHelpers::JumpList* exceptionTarget,
     CodePtr<CFunctionPtrTag> function, GPRReg resultGPR, ArgumentTypes... arguments)
+{
+    auto regs = usedRegisters.toScalarRegisterSet();
+    return callOperation(vm, regs, jit, exceptionTarget, function, resultGPR, arguments...);
+}
+
+template<typename OperationType, typename... ArgumentTypes>
+    requires (!std::is_same_v<std::remove_cvref_t<OperationType>, CodePtr<CFunctionPtrTag>>
+        && !std::is_same_v<std::remove_cvref_t<OperationType>, CCallHelpers::Address>)
+SlowPathCall callOperation(
+    VM& vm, const RegisterSet& usedRegisters, CCallHelpers& jit, CCallHelpers::JumpList* exceptionTarget,
+    OperationType function, GPRReg resultGPR, ArgumentTypes... arguments)
 {
     auto regs = usedRegisters.toScalarRegisterSet();
     return callOperation(vm, regs, jit, exceptionTarget, function, resultGPR, arguments...);
@@ -116,12 +145,40 @@ SlowPathCall callOperation(
     return callOperation(vm, usedRegisters, jit, exceptionTarget, function, resultGPR, arguments...);
 }
 
+template<typename RS, typename OperationType, typename... ArgumentTypes>
+    requires (!std::is_same_v<std::remove_cvref_t<OperationType>, CodePtr<CFunctionPtrTag>>
+        && !std::is_same_v<std::remove_cvref_t<OperationType>, CCallHelpers::Address>)
+SlowPathCall callOperation(
+    VM& vm, const RS& usedRegisters, CCallHelpers& jit, CallSiteIndex callSiteIndex,
+    CCallHelpers::JumpList* exceptionTarget, OperationType function, GPRReg resultGPR,
+    ArgumentTypes... arguments)
+{
+    if (callSiteIndex) {
+        jit.store32(
+            CCallHelpers::TrustedImm32(callSiteIndex.bits()),
+            CCallHelpers::tagFor(CallFrameSlot::argumentCountIncludingThis));
+    }
+    return callOperation(vm, usedRegisters, jit, exceptionTarget, function, resultGPR, arguments...);
+}
+
 CallSiteIndex callSiteIndexForCodeOrigin(State&, CodeOrigin);
 
 template<typename RS, typename... ArgumentTypes>
 SlowPathCall callOperation(
     State& state, const RS& usedRegisters, CCallHelpers& jit, CodeOrigin codeOrigin,
     CCallHelpers::JumpList* exceptionTarget, CodePtr<CFunctionPtrTag> function, GPRReg result, ArgumentTypes... arguments)
+{
+    return callOperation(
+        state.vm(), usedRegisters, jit, callSiteIndexForCodeOrigin(state, codeOrigin), exceptionTarget, function,
+        result, arguments...);
+}
+
+template<typename RS, typename OperationType, typename... ArgumentTypes>
+    requires (!std::is_same_v<std::remove_cvref_t<OperationType>, CodePtr<CFunctionPtrTag>>
+        && !std::is_same_v<std::remove_cvref_t<OperationType>, CCallHelpers::Address>)
+SlowPathCall callOperation(
+    State& state, const RS& usedRegisters, CCallHelpers& jit, CodeOrigin codeOrigin,
+    CCallHelpers::JumpList* exceptionTarget, OperationType function, GPRReg result, ArgumentTypes... arguments)
 {
     return callOperation(
         state.vm(), usedRegisters, jit, callSiteIndexForCodeOrigin(state, codeOrigin), exceptionTarget, function,
