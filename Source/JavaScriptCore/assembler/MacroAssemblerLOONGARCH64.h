@@ -1449,6 +1449,20 @@ public:
             store64(TrustedImm32(int32_t(value)), address);
     }
 
+    void store64(TrustedImm32 imm, BaseIndex address)
+    {
+        auto temp = temps<Data, Memory>();
+        RegisterID immRegister = LOONGARCH64Registers::zero;
+        if (!!imm.m_value) {
+            loadImmediate(imm, temp.data());
+            m_assembler.maskRegister<32>(temp.data());
+            immRegister = temp.data();
+        }
+
+        auto resolution = resolveAddress(address, temp.memory());
+        m_assembler.st_dInsn(immRegister, resolution.base, Imm::I12(resolution.offset));
+    }
+
     void store64(TrustedImm64 imm, BaseIndex address)
     {
         auto temp = temps<Data, Memory>();
